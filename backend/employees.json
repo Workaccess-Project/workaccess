@@ -1,0 +1,80 @@
+[
+  {
+    "id": "1770221255039",
+    "firstName": "Jan",
+    "lastName": "Novák",
+    "workerType": "employee",
+    "roleKey": "external",
+    "focus": "Svářeč",
+    "active": true,
+    "createdAt": "2026-02-04T16:07:35.040Z",
+    "trainings": [
+      {
+        "name": "bozp",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "bozp",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "BOZP",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "Nové školení - TEST 1",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "BOZP",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "POžární ochrana",
+        "validFrom": "2026-02-05",
+        "validTo": "2029-02-05"
+      },
+      {
+        "name": "Interní Armina",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      },
+      {
+        "name": "TEST ARMINA",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05"
+      }
+    ],
+    "updatedAt": "2026-02-05T13:53:41.444Z",
+    "company": "Armina",
+    "email": "armina@armina.cz",
+    "position": "Prodavač"
+  },
+  {
+    "id": "emp_ml8az52n_zsq8bg",
+    "firstName": "Tomáš",
+    "lastName": "Mikulka",
+    "company": "Vapeo",
+    "createdAt": "2026-02-04T17:30:04.270Z",
+    "updatedAt": "2026-02-05T11:03:01.741Z",
+    "trainings": [
+      {
+        "name": "Požární ochrana (PO)",
+        "validFrom": "2026-02-04",
+        "validTo": "2028-02-04"
+      },
+      {
+        "name": "Práce ve výškách",
+        "validFrom": "2026-02-04",
+        "validTo": "2028-02-04"
+      }
+    ],
+    "email": "workaccess@seznam.cz",
+    "position": "Sales Manager"
+  }
+]

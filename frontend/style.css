@@ -1,0 +1,150 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f4f6f8;
+  margin: 0;
+  padding: 40px;
+  color: #222;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+.card {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  max-width: 700px;
+}
+
+.row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+input[type="text"] {
+  flex: 1;
+  padding: 8px;
+  font-size: 14px;
+}
+
+button {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  border: none;
+  border-radius: 4px;
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+#add-item-btn {
+  background: #1976d2;
+  color: white;
+}
+
+#add-item-btn:hover {
+  background: #125aa0;
+}
+
+ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* --- items list --- */
+li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 10px;
+  border-bottom: 1px solid #eee;
+  border-radius: 8px;
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+/* hover pro lepší UX */
+li:hover {
+  background: rgba(25, 118, 210, 0.06);
+}
+
+/* ✅ vybraný řádek */
+li.selected {
+  background: rgba(25, 118, 210, 0.14);
+  box-shadow: inset 0 0 0 2px rgba(25, 118, 210, 0.35);
+}
+
+li:last-child {
+  border-bottom: none;
+}
+
+li button {
+  background: #e53935;
+  color: white;
+  font-weight: bold;
+}
+
+li button:hover {
+  background: #b71c1c;
+}
+
+.item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.actions {
+  display: flex;
+  gap: 10px;
+}
+
+.btn-edit {
+  padding: 8px 12px;
+  border: 1px solid #ccc;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.filters {
+  display: flex;
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.filter-btn {
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.filter-btn.active {
+  border-color: #1976d2;
+  color: #1976d2;
+  font-weight: 600;
+}
+
+.left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.item-row.done span {
+  text-decoration: line-through;
+  opacity: 0.6;
+}

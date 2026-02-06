@@ -1,0 +1,1004 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess TODO</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --muted: #8aa0c6;
+      --text: #e8eeff;
+      --accent: #6ea8fe;
+      --danger: #ff6b6b;
+      --border: rgba(255,255,255,.08);
+      --shadow: 0 10px 25px rgba(0,0,0,.35);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(110,168,254,.25), transparent 60%),
+                  radial-gradient(1200px 600px at 80% 20%, rgba(99,230,190,.18), transparent 60%),
+                  var(--bg);
+      color: var(--text);
+      padding: 24px;
+    }
+    .wrap { max-width: 900px; margin: 0 auto; }
+    .card {
+      background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      position: relative;
+    }
+    header {
+      padding: 18px 18px 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      justify-content: space-between;
+    }
+    h1 { font-size: 18px; margin: 0; letter-spacing: .2px; }
+    .hint { font-size: 12px; color: var(--muted); margin: 6px 0 0; line-height: 1.35; }
+
+    .topRight {
+      display:flex; gap:10px; align-items:flex-end; flex-wrap:wrap; justify-content:flex-end;
+    }
+
+    .roleBar{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+      width: 100%;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .rolePill{
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.14);
+      color: var(--text);
+    }
+
+    .toolbar {
+      padding: 14px 18px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .add { display: flex; gap: 10px; align-items: center; }
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.18);
+      color: var(--text);
+      outline: none;
+    }
+    input[type="text"]::placeholder { color: rgba(232,238,255,.45); }
+
+    button {
+      padding: 10px 12px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      cursor: pointer;
+      user-select: none;
+      white-space: nowrap;
+    }
+    button:hover { border-color: rgba(255,255,255,.18); }
+    button.primary { background: rgba(110,168,254,.18); border-color: rgba(110,168,254,.25); }
+    button.danger { background: rgba(255,107,107,.14); border-color: rgba(255,107,107,.22); }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .meta {
+      padding: 10px 18px 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+    }
+    .counts {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.14);
+      color: var(--muted);
+    }
+    .filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .filters button[aria-pressed="true"] {
+      border-color: rgba(110,168,254,.35);
+      background: rgba(110,168,254,.16);
+      color: var(--text);
+    }
+
+    ul { list-style: none; margin: 0; padding: 0; }
+
+    .row {
+      display: grid;
+      grid-template-columns: 28px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+      cursor: default;
+      outline: none;
+    }
+    .row:last-child { border-bottom: 0; }
+
+    .row.selected {
+      background: rgba(110,168,254,.18);
+      box-shadow: inset 0 0 0 2px rgba(110,168,254,.35);
+    }
+
+    .row.done .title {
+      color: rgba(232,238,255,.55);
+      text-decoration: line-through;
+    }
+
+    .row .title { font-size: 14px; line-height: 1.25; white-space: pre-wrap; word-break: break-word; }
+    .row .actions { display: flex; gap: 8px; align-items: center; }
+
+    .iconbtn {
+      width: 36px;
+      height: 34px;
+      display: inline-grid;
+      place-items: center;
+      padding: 0;
+    }
+
+    .editInput {
+      width: 100%;
+      padding: 10px 10px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+      outline: none;
+      font-size: 14px;
+    }
+
+    .footer {
+      padding: 14px 18px 18px;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+      border-top: 1px solid var(--border);
+    }
+    .kbd {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      padding: 2px 6px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,.16);
+      color: var(--muted);
+    }
+
+    .empty { padding: 22px 18px; color: var(--muted); font-size: 13px; text-align: center; }
+
+    /* Modal (reuse i pro Role) */
+    .modalBack {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,.55);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 9999;
+    }
+    .modal {
+      width: min(820px, 100%);
+      background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05));
+      border: 1px solid rgba(255,255,255,.12);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(0,0,0,.55);
+      overflow: hidden;
+    }
+    .modalHead {
+      padding: 14px 16px;
+      border-bottom: 1px solid rgba(255,255,255,.10);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+    .modalHead strong { font-size: 14px; }
+    .modalBody { padding: 14px 16px; }
+    .modalBody p { margin: 0 0 10px; color: var(--muted); font-size: 12px; }
+    .modalBody textarea {
+      width: 100%;
+      min-height: 220px;
+      resize: vertical;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+      outline: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.35;
+    }
+    .modalBody select{
+      width: 100%;
+      padding: 12px 12px;
+      border-radius: 12px;
+      border: 1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.22);
+      color: var(--text);
+      outline: none;
+      font-size: 14px;
+    }
+    .modalFoot {
+      padding: 12px 16px 16px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      border-top: 1px solid rgba(255,255,255,.10);
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="app">
+      <header>
+        <div>
+          <h1>Workaccess – TODO</h1>
+          <div class="hint" id="hintText">
+            Klikni na řádek = vybere se. Checkbox = hotovo (a zároveň vybere řádek). Hotové se řadí dolů.
+            (Pozn.: Delete/Backspace mazání zatím nefunguje – používáme „Smazat vybranou“.)
+          </div>
+        </div>
+
+        <div class="topRight">
+          <div class="roleBar">
+            <span>Role:</span>
+            <span class="rolePill" id="roleLabel">—</span>
+            <button id="btnChangeRole">Změnit roli</button>
+          </div>
+
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; justify-content:flex-end;">
+            <button id="btnCopyData">Kopírovat data</button>
+            <button id="btnPasteData">Vložit data</button>
+            <button class="danger" id="btnDeleteSelected" disabled>Smazat vybranou</button>
+            <button class="danger" id="btnClearDone" title="Ctrl+Enter / Cmd+Enter">Smazat hotové</button>
+          </div>
+        </div>
+      </header>
+
+      <div class="toolbar">
+        <div class="add">
+          <input id="newText" type="text" placeholder="Nový úkol… (Enter přidá)" autocomplete="off" />
+          <button class="primary" id="btnAdd">Přidat</button>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; justify-content:flex-end;">
+          <button id="btnReload" title="Načíst z backendu">Načíst</button>
+        </div>
+      </div>
+
+      <div class="meta">
+        <div class="counts">
+          <span class="pill" id="countAll">Celkem: 0</span>
+          <span class="pill" id="countDone">Hotovo: 0</span>
+          <span class="pill" id="countLeft">Zbývá: 0</span>
+        </div>
+        <div class="filters" aria-label="Filtry">
+          <button data-filter="all" aria-pressed="true">Vše</button>
+          <button data-filter="active" aria-pressed="false">Aktivní</button>
+          <button data-filter="done" aria-pressed="false">Hotové</button>
+        </div>
+      </div>
+
+      <ul id="list" aria-label="Seznam úkolů"></ul>
+      <div class="empty" id="empty" style="display:none;">Zatím tu nic není. Přidej první úkol 🙂</div>
+
+      <div class="footer">
+        <div>Tip: <span class="kbd">dvojklik</span> = editace, <span class="kbd">Enter</span> uloží, <span class="kbd">Esc</span>/<span class="kbd">blur</span> zruší.</div>
+        <div>Zkratka: <span class="kbd">Ctrl</span>+<span class="kbd">Enter</span> / <span class="kbd">Cmd</span>+<span class="kbd">Enter</span> = Smazat hotové</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Paste JSON -->
+  <div class="modalBack" id="modalBack" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHead">
+        <strong>Vložit data (JSON)</strong>
+        <button class="iconbtn" id="btnModalClose" title="Zavřít">✕</button>
+      </div>
+      <div class="modalBody">
+        <p>Vlož sem JSON (pole položek). Po potvrzení se aktuální seznam přepíše.</p>
+        <textarea id="pasteArea" placeholder='Např. [{"id":1,"text":"Úkol","done":false}]'></textarea>
+      </div>
+      <div class="modalFoot">
+        <button id="btnModalCancel">Zrušit</button>
+        <button class="primary" id="btnModalApply">Vložit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Role -->
+  <div class="modalBack" id="roleBack" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHead">
+        <strong>Vyber roli (DEMO)</strong>
+        <button class="iconbtn" id="btnRoleClose" title="Zavřít">✕</button>
+      </div>
+      <div class="modalBody">
+        <p>Tohle je demo přihlášení. Později sem dáme skutečný login (email/heslo) a RBAC z databáze.</p>
+        <select id="roleSelect">
+          <option value="hr">HR</option>
+          <option value="security">Bezpečnost</option>
+          <option value="manager">Manažer</option>
+          <option value="external">Externista</option>
+        </select>
+      </div>
+      <div class="modalFoot">
+        <button id="btnRoleCancel">Zrušit</button>
+        <button class="primary" id="btnRoleApply">Použít roli</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const API_BASE = "http://localhost:3000/api/items";
+    const API_ME = "http://localhost:3000/api/me";
+let ME = null;
+
+async function loadMe() {
+  const res = await fetch(API_ME, {
+    headers: {
+      // DEMO role – zatím natvrdo, později login
+      "x-role": localStorage.getItem("workaccess.role") || "hr",
+    },
+  });
+  if (!res.ok) throw new Error("Nelze načíst /api/me");
+  ME = await res.json();
+}
+    const LS_SELECTED = "workaccess.todo.selectedId";
+
+    // ✅ BOX 1: role v localStorage
+    const LS_ROLE = "workaccess.portal.role";
+
+    const ROLE_LABELS = {
+      hr: "HR",
+      security: "Bezpečnost",
+      manager: "Manažer",
+      external: "Externista",
+    };
+
+    // DEMO oprávnění (RBAC)
+    const ROLE_PERMS = {
+      hr:      { canAdd:true,  canDelete:true,  canEdit:true,  canCopy:true,  canPaste:true,  canClearDone:true, canToggle:true },
+      manager: { canAdd:true,  canDelete:true,  canEdit:true,  canCopy:true,  canPaste:true,  canClearDone:true, canToggle:true },
+      security:{ canAdd:false, canDelete:false, canEdit:false, canCopy:false, canPaste:false, canClearDone:false, canToggle:true },
+      external:{ canAdd:false, canDelete:false, canEdit:false, canCopy:false, canPaste:false, canClearDone:false, canToggle:true },
+    };
+
+    let role = localStorage.getItem(LS_ROLE) || "hr";
+
+    let items = [];
+    let filter = "all";
+    let selectedId = localStorage.getItem(LS_SELECTED);
+    let editingId = null;
+
+    const elRoleLabel = document.getElementById("roleLabel");
+    const elBtnChangeRole = document.getElementById("btnChangeRole");
+
+    const elList = document.getElementById("list");
+    const elEmpty = document.getElementById("empty");
+    const elNewText = document.getElementById("newText");
+    const elBtnAdd = document.getElementById("btnAdd");
+    const elBtnReload = document.getElementById("btnReload");
+    const elBtnClearDone = document.getElementById("btnClearDone");
+    const elBtnDeleteSelected = document.getElementById("btnDeleteSelected");
+    const elBtnCopyData = document.getElementById("btnCopyData");
+    const elBtnPasteData = document.getElementById("btnPasteData");
+    const elCountAll = document.getElementById("countAll");
+    const elCountDone = document.getElementById("countDone");
+    const elCountLeft = document.getElementById("countLeft");
+    const elFilters = document.querySelector(".filters");
+
+    // Modal paste
+    const modalBack = document.getElementById("modalBack");
+    const btnModalClose = document.getElementById("btnModalClose");
+    const btnModalCancel = document.getElementById("btnModalCancel");
+    const btnModalApply = document.getElementById("btnModalApply");
+    const pasteArea = document.getElementById("pasteArea");
+
+    // Modal role
+    const roleBack = document.getElementById("roleBack");
+    const btnRoleClose = document.getElementById("btnRoleClose");
+    const btnRoleCancel = document.getElementById("btnRoleCancel");
+    const btnRoleApply = document.getElementById("btnRoleApply");
+    const roleSelect = document.getElementById("roleSelect");
+
+    function isEditingNow() { return editingId !== null; }
+    function normalizeText(s) { return (s ?? "").toString().trim(); }
+    function getItemText(item) { return item?.text ?? item?.title ?? item?.name ?? ""; }
+
+    function getPerms() {
+      return ROLE_PERMS[role] || ROLE_PERMS.hr;
+    }
+
+    function applyRBAC() {
+      const p = getPerms();
+      elRoleLabel.textContent = ROLE_LABELS[role] || role;
+
+      // Add
+      elNewText.disabled = !p.canAdd;
+      elBtnAdd.disabled = !p.canAdd;
+
+      // Copy/Paste
+      elBtnCopyData.disabled = !p.canCopy;
+      elBtnPasteData.disabled = !p.canPaste;
+
+      // Clear done
+      // (disabled také podle počtu done v updateCounts)
+      if (!p.canClearDone) elBtnClearDone.disabled = true;
+
+      // Delete selected (disabled také podle selectedId v updateCounts)
+      if (!p.canDelete) elBtnDeleteSelected.disabled = true;
+    }
+
+    function sortItems(arr) {
+      return [...arr].sort((a, b) => {
+        const ad = !!a.done, bd = !!b.done;
+        if (ad !== bd) return ad ? 1 : -1;
+        return String(a.id).localeCompare(String(b.id));
+      });
+    }
+    function applyFilter(arr) {
+      if (filter === "active") return arr.filter(x => !x.done);
+      if (filter === "done") return arr.filter(x => x.done);
+      return arr;
+    }
+
+    function persistSelected() {
+      if (selectedId == null) localStorage.removeItem(LS_SELECTED);
+      else localStorage.setItem(LS_SELECTED, String(selectedId));
+    }
+    function clearSelection() {
+      selectedId = null;
+      persistSelected();
+    }
+
+    function ensureSelectedFromStorage() {
+      if (selectedId != null) return;
+      const stored = localStorage.getItem(LS_SELECTED);
+      if (stored != null && stored !== "") {
+        selectedId = String(stored);
+      }
+    }
+
+    function updateCounts() {
+      ensureSelectedFromStorage();
+
+      const all = items.length;
+      const done = items.filter(x => x.done).length;
+      const left = all - done;
+      elCountAll.textContent = `Celkem: ${all}`;
+      elCountDone.textContent = `Hotovo: ${done}`;
+      elCountLeft.textContent = `Zbývá: ${left}`;
+
+      const p = getPerms();
+
+      // clear done: musí mít oprávnění a musí existovat done
+      elBtnClearDone.disabled = (!p.canClearDone) || (done === 0);
+
+      // delete selected: musí mít oprávnění a musí být selected
+      elBtnDeleteSelected.disabled = (!p.canDelete) || (selectedId == null);
+        // ✅ RBAC (oprávnění z backendu)
+  if (ME?.perms) {
+    elBtnAdd.disabled = !ME.perms.canAdd;
+
+    // Smazat vybranou: musí mít právo mazat + musí být něco vybrané
+    elBtnDeleteSelected.disabled = !ME.perms.canDelete || selectedId == null;
+
+    // Smazat hotové: musí mít právo + musí existovat hotová položka
+    const doneCount = items.filter(x => x.done).length;
+    elBtnClearDone.disabled = !ME.perms.canClearDone || doneCount === 0;
+
+    elBtnCopyData.disabled = !ME.perms.canCopy;
+    elBtnPasteData.disabled = !ME.perms.canPaste;
+  }
+
+    }
+
+
+    function clearSelectedClass() {
+      for (const other of elList.querySelectorAll(".row.selected")) other.classList.remove("selected");
+    }
+
+    function applySelectionFromSelectedId() {
+      ensureSelectedFromStorage();
+
+      clearSelectedClass();
+      if (selectedId == null) { updateCounts(); return; }
+      const el = elList.querySelector(`.row[data-id="${CSS.escape(String(selectedId))}"]`);
+      if (el) el.classList.add("selected");
+      updateCounts();
+    }
+
+    function setSelectedById(idStr) {
+      selectedId = (idStr == null) ? null : String(idStr);
+      persistSelected();
+      applySelectionFromSelectedId();
+    }
+
+    async function readJsonIfAny(res) {
+      if (res.status === 204) return null;
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (!ct.includes("application/json")) return null;
+      try { return await res.json(); } catch { return null; }
+    }
+
+    async function apiGetItems() {
+      const res = await fetch(API_BASE);
+      if (!res.ok) throw new Error(`GET failed (${res.status})`);
+      const data = await readJsonIfAny(res);
+      if (!Array.isArray(data)) throw new Error("GET returned non-array");
+      return data;
+    }
+
+    async function apiAddItem(text) {
+      const res = await fetch(API_BASE, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) throw new Error(`POST failed (${res.status})`);
+      return await readJsonIfAny(res);
+    }
+
+    async function apiToggleDone(id) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { method: "PATCH" });
+      if (!res.ok) throw new Error(`PATCH toggle failed (${res.status})`);
+      return await readJsonIfAny(res);
+    }
+
+    async function apiDeleteItem(id) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`DELETE item failed (${res.status})`);
+      return await readJsonIfAny(res);
+    }
+
+    async function apiDeleteDone() {
+      const res = await fetch(API_BASE, { method: "DELETE" });
+      if (!res.ok) throw new Error(`DELETE done failed (${res.status})`);
+      return await readJsonIfAny(res);
+    }
+
+    async function apiUpdateText(id, text) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}/text`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text })
+      });
+      if (!res.ok) throw new Error(`PATCH text failed (${res.status})`);
+      return await readJsonIfAny(res);
+    }
+
+    function render() {
+      applyRBAC();
+      updateCounts();
+
+      const sorted = sortItems(items);
+      const visible = applyFilter(sorted);
+
+      elList.innerHTML = "";
+      elEmpty.style.display = (items.length === 0) ? "block" : "none";
+
+      for (const item of visible) {
+        const idStr = String(item.id);
+
+        const li = document.createElement("li");
+        li.className = "row" + (item.done ? " done" : "");
+        li.dataset.id = idStr;
+
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!item.done;
+        cb.title = "Hotovo";
+
+        cb.addEventListener("click", (e) => {
+          e.stopPropagation();
+          if (isEditingNow()) return;
+          setSelectedById(idStr);
+        });
+
+        cb.addEventListener("change", async () => {
+          if (isEditingNow()) return;
+
+          // RBAC: toggle pouze pokud role může
+          const p = getPerms();
+          if (!p.canToggle) {
+            alert("Tato role nemůže měnit stav hotovo.");
+            cb.checked = !cb.checked;
+            return;
+          }
+
+          setSelectedById(idStr);
+
+          cb.disabled = true;
+          try {
+            await apiToggleDone(item.id);
+            await reload(false, idStr);
+          } catch (err) {
+            alert("Chyba při přepnutí hotovo: " + (err?.message || err));
+            console.error(err);
+            cb.disabled = false;
+            cb.checked = !!item.done;
+          }
+        });
+
+        const titleWrap = document.createElement("div");
+        titleWrap.style.minWidth = "0";
+
+        const p = getPerms();
+
+        if (editingId === idStr) {
+          const inp = document.createElement("input");
+          inp.className = "editInput";
+          inp.value = getItemText(item);
+
+          setTimeout(() => {
+            inp.focus();
+            inp.setSelectionRange(inp.value.length, inp.value.length);
+          }, 0);
+
+          const original = getItemText(item);
+          const cancel = () => { editingId = null; render(); };
+
+          const save = async () => {
+            const next = normalizeText(inp.value);
+            if (!next) { cancel(); return; }
+            if (next === normalizeText(original)) { cancel(); return; }
+            try {
+              await apiUpdateText(item.id, next);
+              editingId = null;
+              await reload(true);
+            } catch (err) {
+              alert("Chyba při uložení textu: " + (err?.message || err));
+              console.error(err);
+            }
+          };
+
+          inp.addEventListener("keydown", (e) => {
+            if (e.key === "Enter") { e.preventDefault(); save(); }
+            if (e.key === "Escape") { e.preventDefault(); cancel(); }
+            e.stopPropagation();
+          });
+          inp.addEventListener("blur", () => cancel());
+
+          titleWrap.appendChild(inp);
+        } else {
+          const title = document.createElement("div");
+          title.className = "title";
+          title.textContent = getItemText(item);
+          titleWrap.appendChild(title);
+
+          titleWrap.addEventListener("dblclick", (e) => {
+            e.stopPropagation();
+            if (isEditingNow()) return;
+            if (!p.canEdit) return; // RBAC
+            setSelectedById(idStr);
+            editingId = idStr;
+            render();
+          });
+        }
+
+        const actions = document.createElement("div");
+        actions.className = "actions";
+
+        const btnDel = document.createElement("button");
+        btnDel.className = "iconbtn danger";
+        btnDel.textContent = "✕";
+        btnDel.title = p.canDelete ? "Smazat" : "Nemáš oprávnění mazat";
+        btnDel.disabled = !p.canDelete;
+
+        btnDel.addEventListener("click", async (e) => {
+          e.stopPropagation();
+          if (!p.canDelete) return;
+
+          if (!confirm("Smazat tuto položku?")) return;
+          try {
+            await apiDeleteItem(item.id);
+            if (String(selectedId) === idStr) clearSelection();
+            await reload(true);
+          } catch (err) {
+            alert("Chyba při mazání položky: " + (err?.message || err));
+            console.error(err);
+          }
+        });
+
+        actions.appendChild(btnDel);
+
+        li.addEventListener("click", () => {
+          if (isEditingNow()) return;
+          setSelectedById(idStr);
+        });
+
+        li.appendChild(cb);
+        li.appendChild(titleWrap);
+        li.appendChild(actions);
+        elList.appendChild(li);
+      }
+
+      requestAnimationFrame(() => applySelectionFromSelectedId());
+    }
+
+    async function reload(keepSelection, forceSelectedId) {
+      const force = (forceSelectedId != null) ? String(forceSelectedId) : null;
+      const prev = force ?? (keepSelection ? (selectedId ?? localStorage.getItem(LS_SELECTED)) : null);
+
+      selectedId = (prev != null) ? String(prev) : null;
+      persistSelected();
+
+      items = await apiGetItems();
+      render();
+    }
+
+    async function addFromInput() {
+      const p = getPerms();
+      if (!p.canAdd) {
+        alert("Tato role nemůže přidávat položky.");
+        return;
+      }
+
+      const text = normalizeText(elNewText.value);
+      if (!text) return;
+      try {
+        await apiAddItem(text);
+        elNewText.value = "";
+        await reload(true);
+      } catch (err) {
+        alert("Chyba při přidání úkolu: " + (err?.message || err));
+        console.error(err);
+      }
+    }
+
+    async function clearDone() {
+      const p = getPerms();
+      if (!p.canClearDone) {
+        alert("Tato role nemůže mazat hotové položky.");
+        return;
+      }
+
+      if (items.filter(x => x.done).length === 0) return;
+      if (!confirm("Smazat všechny hotové položky?")) return;
+      try {
+        await apiDeleteDone();
+        clearSelection();
+        await reload(false);
+      } catch (err) {
+        alert("Chyba při mazání hotových: " + (err?.message || err));
+        console.error(err);
+      }
+    }
+
+    async function deleteSelected() {
+      const p = getPerms();
+      if (!p.canDelete) {
+        alert("Tato role nemůže mazat položky.");
+        return;
+      }
+
+      ensureSelectedFromStorage();
+      if (selectedId == null) return;
+
+      const item = items.find(x => String(x.id) === String(selectedId));
+      if (!item) { clearSelection(); render(); return; }
+
+      const label = normalizeText(getItemText(item));
+      const msg = label ? `Smazat položku:\n„${label}“ ?` : "Smazat tuto položku?";
+      if (!confirm(msg)) return;
+
+      try {
+        await apiDeleteItem(item.id);
+        clearSelection();
+        await reload(false);
+      } catch (err) {
+        alert("Chyba při mazání položky: " + (err?.message || err));
+        console.error(err);
+      }
+    }
+
+    async function copyData() {
+      const p = getPerms();
+      if (!p.canCopy) {
+        alert("Tato role nemůže kopírovat data.");
+        return;
+      }
+      try {
+        const json = JSON.stringify(items, null, 2);
+        await navigator.clipboard.writeText(json);
+        alert("Zkopírováno do schránky ✅");
+      } catch (err) {
+        alert("Nepodařilo se zkopírovat do schránky.");
+        console.error(err);
+      }
+    }
+
+    function openModal() {
+      const p = getPerms();
+      if (!p.canPaste) {
+        alert("Tato role nemůže vkládat data.");
+        return;
+      }
+
+      modalBack.style.display = "flex";
+      modalBack.setAttribute("aria-hidden", "false");
+      pasteArea.value = "";
+      setTimeout(() => pasteArea.focus(), 0);
+    }
+    function closeModal() {
+      modalBack.style.display = "none";
+      modalBack.setAttribute("aria-hidden", "true");
+      pasteArea.value = "";
+    }
+
+    function openRoleModal() {
+      roleSelect.value = role;
+      roleBack.style.display = "flex";
+      roleBack.setAttribute("aria-hidden", "false");
+      setTimeout(() => roleSelect.focus(), 0);
+    }
+    function closeRoleModal() {
+      roleBack.style.display = "none";
+      roleBack.setAttribute("aria-hidden", "true");
+    }
+    function applyRole() {
+      role = roleSelect.value || "hr";
+      localStorage.setItem(LS_ROLE, role);
+      closeRoleModal();
+      applyRBAC();
+      updateCounts();
+      render();
+    }
+
+    async function applyPastedData() {
+      const p = getPerms();
+      if (!p.canPaste) {
+        alert("Tato role nemůže vkládat data.");
+        return;
+      }
+
+      const raw = pasteArea.value;
+      let parsed;
+      try {
+        parsed = JSON.parse(raw);
+      } catch {
+        alert("Tohle není platný JSON.");
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        alert("JSON musí být pole položek (array).");
+        return;
+      }
+      if (!confirm("Opravdu přepsat aktuální seznam těmito daty?")) return;
+
+      try {
+        const current = await apiGetItems();
+        for (const it of current) {
+          await apiDeleteItem(it.id);
+        }
+
+        for (const it of parsed) {
+          const text = normalizeText(getItemText(it));
+          if (!text) continue;
+          const created = await apiAddItem(text);
+          if (it && it.done) {
+            const idToToggle = created?.id ?? created?.data?.id ?? created?.item?.id;
+            if (idToToggle != null) {
+              await apiToggleDone(idToToggle);
+            }
+          }
+        }
+
+        clearSelection();
+        closeModal();
+        await reload(false);
+        alert("Data vložena ✅");
+      } catch (err) {
+        alert("Nepodařilo se vložit data: " + (err?.message || err));
+        console.error(err);
+      }
+    }
+
+    // --- eventy ---
+    elBtnAdd.addEventListener("click", addFromInput);
+    elNewText.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") addFromInput();
+    });
+
+    elBtnReload.addEventListener("click", () => reload(true));
+    elBtnClearDone.addEventListener("click", clearDone);
+    elBtnDeleteSelected.addEventListener("click", deleteSelected);
+    elBtnCopyData.addEventListener("click", copyData);
+    elBtnPasteData.addEventListener("click", openModal);
+
+    btnModalClose.addEventListener("click", closeModal);
+    btnModalCancel.addEventListener("click", closeModal);
+    btnModalApply.addEventListener("click", applyPastedData);
+
+    modalBack.addEventListener("click", (e) => {
+      if (e.target === modalBack) closeModal();
+    });
+
+    // role modal
+    elBtnChangeRole.addEventListener("click", openRoleModal);
+    btnRoleClose.addEventListener("click", closeRoleModal);
+    btnRoleCancel.addEventListener("click", closeRoleModal);
+    btnRoleApply.addEventListener("click", applyRole);
+    roleBack.addEventListener("click", (e) => {
+      if (e.target === roleBack) closeRoleModal();
+    });
+
+    document.addEventListener("keydown", (e) => {
+      if (modalBack.style.display === "flex" && e.key === "Escape") {
+        e.preventDefault();
+        closeModal();
+        return;
+      }
+      if (roleBack.style.display === "flex" && e.key === "Escape") {
+        e.preventDefault();
+        closeRoleModal();
+        return;
+      }
+    });
+
+    elFilters.addEventListener("click", (e) => {
+      const btn = e.target.closest("button[data-filter]");
+      if (!btn) return;
+      filter = btn.dataset.filter;
+      for (const b of elFilters.querySelectorAll("button[data-filter]")) {
+        b.setAttribute("aria-pressed", (b === btn) ? "true" : "false");
+      }
+      render();
+    });
+
+    document.addEventListener("keydown", async (e) => {
+      if (isEditingNow()) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
+        await clearDone();
+      }
+    });
+
+   // === START APLIKACE ===
+(async () => {
+  try {
+    await loadMe();
+    await reload(false);
+  } catch (err) {
+    console.error(err);
+    alert("Nepodařilo se inicializovat aplikaci. Je backend spuštěný na http://localhost:3000 ?");
+  }
+})();
+
+  </script>
+</body>
+</html>

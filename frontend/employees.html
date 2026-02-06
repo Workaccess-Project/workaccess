@@ -1,0 +1,1123 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Evidence pracovníků – WORKACCESS</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:16px; background:#f6f7f9; color:#0f172a; }
+    .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 12px; }
+    .pill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; background:#fff; }
+    .muted { color:#6b7280; font-size: 14px; }
+    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-top: 12px; max-width: 1200px; }
+    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
+    th, td { padding:10px 12px; border-bottom:1px solid #eef2f7; text-align:left; vertical-align: middle; }
+    th { background:#fafafa; font-size: 13px; color:#6b7280; }
+    tr:hover td { background:#fbfdff; }
+    a { color:#0b57d0; text-decoration:none; }
+    a:hover { text-decoration:underline; }
+
+    button, select, input {
+      font-family: inherit;
+      padding:10px 12px;
+      border:1px solid #e5e7eb;
+      border-radius:10px;
+      background:#fff;
+      font-size:14px;
+    }
+    button:hover { background:#f1f5f9; cursor:pointer; }
+    button:disabled { opacity:.55; cursor:not-allowed; }
+    .btnTiny { padding:6px 10px; font-size:13px; border-radius:10px; }
+    .btnPrimary { background:#0b5d7d; color:#fff; border-color:#0b5d7d; }
+    .btnPrimary:hover { background:#094e68; }
+
+    .error { background:#fff; border:1px solid #fecaca; color:#991b1b; border-radius:12px; padding:16px; margin-top: 12px; max-width: 1200px; }
+
+    /* Riziko pill */
+    .riskPill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; font-size: 13px; }
+    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; background:#94a3b8; }
+    .dot.ok { background:#22c55e; }
+    .dot.warn { background:#f59e0b; }
+    .dot.bad { background:#ef4444; }
+    .dot.na { background:#94a3b8; }
+
+    /* Filtry */
+    .filterRow { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top: 10px; }
+    .filterRow button.active { background:#0b5d7d; color:#fff; border-color:#0b5d7d; }
+
+    /* Layout pro bulk */
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .w240 { width:240px; }
+    .w180 { width:180px; }
+
+    .tableWrap { max-width: 1200px; }
+
+    /* Templates mini-table */
+    .miniTable { width:100%; border-collapse: collapse; margin-top: 8px; }
+    .miniTable th, .miniTable td { border-bottom:1px solid #eef2f7; padding:8px 10px; }
+    .miniTable th { background:#fafafa; color:#6b7280; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <div class="bar">
+    <span class="pill">
+      <span class="muted">Role (DEMO):</span>
+      <select id="roleSelect">
+        <option value="HR">HR</option>
+        <option value="MANAGER">Manažer</option>
+        <option value="SAFETY">Bezpečnost</option>
+        <option value="EXTERN">Externista</option>
+      </select>
+    </span>
+
+    <span class="pill">
+      <span class="muted">Aktuálně:</span>
+      <strong id="roleLabel">…</strong>
+    </span>
+
+    <span class="pill">
+      <span class="muted">Práva:</span>
+      <span id="perms">…</span>
+    </span>
+  </div>
+
+  <div id="errorBox" class="error" style="display:none;"></div>
+<div id="navInfo" class="card" style="display:none; border-left: 6px solid #0b5d7d;">
+  <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
+    <div>
+      <strong id="navInfoTitle">Otevřeno z dashboardu</strong>
+      <div id="navInfoText" class="muted" style="margin-top:6px;"></div>
+    </div>
+    <button id="navInfoClose" type="button" class="btnTiny">Zavřít</button>
+  </div>
+</div>
+
+  <!-- BOX: Přehled rizik školení -->
+  <div id="riskBox" class="card" style="display:none;">
+    <h2 style="margin:0 0 10px 0; font-size: 18px;">Přehled školení (rychle)</h2>
+
+    <div class="row" style="margin-bottom:10px;">
+      <span class="pill">Celkem: <strong id="sumAll">0</strong></span>
+      <span class="pill">Expirované: <strong id="sumBad">0</strong></span>
+      <span class="pill">Brzy expiruje: <strong id="sumWarn">0</strong></span>
+      <span class="pill">Bez problému: <strong id="sumOk">0</strong></span>
+      <span class="pill">Bez školení: <strong id="sumNone">0</strong></span>
+      <span class="pill">Bez dat: <strong id="sumNoData">0</strong></span>
+
+      <button id="btnLoadAllTrainings" type="button" class="btnTiny btnPrimary" style="display:none;">
+        Načíst školení všem
+      </button>
+    </div>
+
+    <div class="filterRow">
+      <button type="button" class="active" data-filter="all">Všichni</button>
+      <button type="button" data-filter="problem">Problémové</button>
+      <button type="button" data-filter="bad">Expirované</button>
+      <button type="button" data-filter="warn">Brzy expiruje</button>
+      <button type="button" data-filter="none">Bez školení</button>
+      <button type="button" data-filter="nodata">Bez dat</button>
+
+      <span class="pill">
+        <span class="muted">Hledat:</span>
+        <input id="search" placeholder="Jméno / firma / ID" style="width:320px; max-width:100%;">
+      </span>
+    </div>
+
+    <div id="bulkMsgLoad" class="muted" style="margin-top:10px;"></div>
+    <div class="muted" style="margin-top:6px;">
+      Tip: „Bez dat“ znamená, že seznam z API neposlal pole <code>trainings</code>. Lze doplnit tlačítkem „Načíst školení“ nebo „Načíst školení všem“.
+    </div>
+  </div>
+
+  <!-- BOX: Hromadné školení + šablony firmy (jen HR/Manažer) -->
+  <div id="bulkBox" class="card" style="display:none;">
+    <h2 style="margin:0 0 10px 0; font-size: 18px;">Hromadné školení (HR / Manažer)</h2>
+
+    <div class="row" style="margin-bottom:10px;">
+      Vybráno: <strong id="bulkCount">0</strong> zaměstnanců
+      <button id="btnSelectAll" type="button" class="btnTiny">Vybrat vše (viditelné)</button>
+      <button id="btnClearSel" type="button" class="btnTiny">Zrušit výběr</button>
+
+      <span class="pill" id="tplCompanyPill" style="display:none;">
+        <span class="muted">Firma pro šablony:</span>
+        <select id="tplCompanySelect"></select>
+      </span>
+
+      <span class="pill">
+        <span class="muted">Aktivní firma:</span>
+        <strong id="tplCompanyLabel">—</strong>
+      </span>
+    </div>
+
+    <div class="grid2">
+      <div class="row">
+        <select id="bulkTemplate" class="w240">
+          <option value="">— vyber šablonu —</option>
+        </select>
+
+        <input id="bulkName" class="w240" placeholder="Nebo napiš název školení">
+      </div>
+
+      <div class="row">
+        <input id="bulkFrom" class="w180" type="date">
+        <input id="bulkTo" class="w180" type="date">
+        <button id="bulkAddBtn" class="btnPrimary">Přidat vybraným</button>
+      </div>
+    </div>
+
+    <div class="muted" style="margin-top:10px;">
+      Tip: Šablony jsou <strong>per firma</strong> a ukládají se do <code>localStorage</code>. Pokud školení už existuje, automaticky se <strong>prodlouží</strong> (nevytvoří duplicitu).
+    </div>
+
+    <div id="bulkMsg" class="muted" style="margin-top:10px;"></div>
+
+    <!-- Správa šablon firmy -->
+    <div class="card" style="margin-top:12px;">
+      <h3 style="margin:0 0 8px 0; font-size: 16px;">Šablony firmy</h3>
+      <div class="muted">Tady si HR/Manažer upraví šablony pro vybranou firmu. (Zatím v localStorage.)</div>
+
+      <div class="row" style="margin-top:10px;">
+        <input id="tplName" class="w240" placeholder="Název (např. BOZP)">
+        <input id="tplMonths" class="w180" type="number" min="1" step="1" placeholder="Měsíce (např. 12)">
+        <button id="tplAddBtn" type="button">Přidat šablonu</button>
+        <button id="tplResetBtn" type="button" class="btnTiny">Reset na výchozí</button>
+      </div>
+
+      <div id="tplMsg" class="muted" style="margin-top:8px;"></div>
+
+      <table class="miniTable" id="tplTable">
+        <thead>
+          <tr>
+            <th>Název</th>
+            <th>Platnost (měsíce)</th>
+            <th style="width:120px;">Akce</th>
+          </tr>
+        </thead>
+        <tbody id="tplTbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- BOX: Přidat pracovníka -->
+  <div id="addCard" class="card" style="display:none;">
+    <h2 style="margin:0 0 10px 0; font-size: 18px;">Přidat pracovníka</h2>
+    <div class="row" style="margin:0;">
+      <input id="firstName" class="w240" placeholder="Jméno" />
+      <input id="lastName" class="w240" placeholder="Příjmení" />
+      <input id="company" class="w240" placeholder="Společnost" />
+      <button id="btnAdd">Přidat</button>
+    </div>
+    <div class="muted" style="margin-top:10px;">
+      Tip: po kliknutí na jméno se otevře detail <code>employee.html?id=...</code>
+    </div>
+  </div>
+
+  <div class="tableWrap">
+    <table>
+      <thead>
+        <tr>
+          <th style="width:44px;"><input type="checkbox" id="checkAll"></th>
+          <th>Jméno</th>
+          <th>Společnost</th>
+          <th>Riziko</th>
+          <th>ID</th>
+          <th>Akce</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+<script>
+  // ===== DOM =====
+  const roleSelect = document.getElementById("roleSelect");
+  const roleLabelEl = document.getElementById("roleLabel");
+  const permsEl = document.getElementById("perms");
+  const errorBox = document.getElementById("errorBox");
+  const navInfo = document.getElementById("navInfo");
+  const navInfoTitle = document.getElementById("navInfoTitle");
+  const navInfoText = document.getElementById("navInfoText");
+  const navInfoClose = document.getElementById("navInfoClose");
+
+  const riskBox = document.getElementById("riskBox");
+  const sumAll = document.getElementById("sumAll");
+  const sumBad = document.getElementById("sumBad");
+  const sumWarn = document.getElementById("sumWarn");
+  const sumOk = document.getElementById("sumOk");
+  const sumNone = document.getElementById("sumNone");
+  const sumNoData = document.getElementById("sumNoData");
+  const searchInput = document.getElementById("search");
+  const btnLoadAllTrainings = document.getElementById("btnLoadAllTrainings");
+  const bulkMsgLoad = document.getElementById("bulkMsgLoad");
+
+  const bulkBox = document.getElementById("bulkBox");
+  const bulkCount = document.getElementById("bulkCount");
+  const bulkTemplate = document.getElementById("bulkTemplate");
+  const bulkName = document.getElementById("bulkName");
+  const bulkFrom = document.getElementById("bulkFrom");
+  const bulkTo = document.getElementById("bulkTo");
+  const bulkAddBtn = document.getElementById("bulkAddBtn");
+  const bulkMsg = document.getElementById("bulkMsg");
+  const btnSelectAll = document.getElementById("btnSelectAll");
+  const btnClearSel = document.getElementById("btnClearSel");
+
+  const tplCompanyPill = document.getElementById("tplCompanyPill");
+  const tplCompanySelect = document.getElementById("tplCompanySelect");
+  const tplCompanyLabel = document.getElementById("tplCompanyLabel");
+
+  const tplName = document.getElementById("tplName");
+  const tplMonths = document.getElementById("tplMonths");
+  const tplAddBtn = document.getElementById("tplAddBtn");
+  const tplResetBtn = document.getElementById("tplResetBtn");
+  const tplMsg = document.getElementById("tplMsg");
+  const tplTbody = document.getElementById("tplTbody");
+
+  const addCard = document.getElementById("addCard");
+  const btnAdd = document.getElementById("btnAdd");
+  const firstName = document.getElementById("firstName");
+  const lastName = document.getElementById("lastName");
+  const company = document.getElementById("company");
+
+  const tbody = document.getElementById("tbody");
+  const checkAll = document.getElementById("checkAll");
+
+  // ===== state =====
+  let currentFilter = "all";
+  let currentSearch = "";
+  let lastItems = [];
+  let lastMe = null;
+
+  const detailsCache = new Map(); // id -> empDetail
+  const selectedIds = new Set();  // bulk selection
+
+  // aktivní firma pro šablony
+  let activeTplCompany = "";
+  let activeTplCompanyKey = "";
+  let lastTplCompanyKey = ""; // <=== DŮLEŽITÉ: pro detekci změny firmy (UX reset)
+
+  // ===== templates (per company / localStorage) =====
+  const DEFAULT_TEMPLATES = [
+    { name: "BOZP", months: 12 },
+    { name: "Požární ochrana", months: 24 },
+    { name: "První pomoc", months: 24 },
+    { name: "VZV – řidič", months: 36 },
+    { name: "Práce ve výškách", months: 24 },
+    { name: "Obsluha jeřábu", months: 36 },
+    { name: "Školení řidičů (referenti)", months: 24 }
+  ];
+
+  function normalizeCompanyKey(s) {
+    const v = String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+    return v || "_nezadano";
+  }
+
+  function templatesStorageKey(companyKey) {
+    return "trainingTemplates:" + companyKey;
+  }
+
+  function loadTemplates(companyKey) {
+    const key = templatesStorageKey(companyKey);
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    try {
+      const parsed = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return null;
+      return parsed
+        .map(x => ({ name: String(x.name || "").trim(), months: Number(x.months) }))
+        .filter(x => x.name && Number.isFinite(x.months) && x.months > 0);
+    } catch {
+      return null;
+    }
+  }
+
+  function saveTemplates(companyKey, list) {
+    const clean = (Array.isArray(list) ? list : [])
+      .map(x => ({ name: String(x.name || "").trim(), months: Number(x.months) }))
+      .filter(x => x.name && Number.isFinite(x.months) && x.months > 0);
+
+    localStorage.setItem(templatesStorageKey(companyKey), JSON.stringify(clean));
+  }
+
+  function ensureTemplates(companyKey) {
+    const existing = loadTemplates(companyKey);
+    if (existing && existing.length) return existing;
+    saveTemplates(companyKey, DEFAULT_TEMPLATES);
+    return DEFAULT_TEMPLATES.slice();
+  }
+
+  function setTplMsg(text) {
+    tplMsg.textContent = text || "";
+  }
+
+  function renderTemplatesUI(companyDisplay, companyKey) {
+    const list = ensureTemplates(companyKey);
+    tplTbody.innerHTML = "";
+
+    list.forEach((t, idx) => {
+      const tr = document.createElement("tr");
+
+      const td1 = document.createElement("td");
+      td1.textContent = t.name;
+
+      const td2 = document.createElement("td");
+      td2.textContent = String(t.months);
+
+      const td3 = document.createElement("td");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btnTiny";
+      btn.textContent = "Smazat";
+      btn.addEventListener("click", () => {
+        const next = list.filter((_, i) => i !== idx);
+        saveTemplates(companyKey, next);
+        setTplMsg("Šablona smazána.");
+        syncTemplateDropdown();
+      });
+      td3.appendChild(btn);
+
+      tr.appendChild(td1);
+      tr.appendChild(td2);
+      tr.appendChild(td3);
+      tplTbody.appendChild(tr);
+    });
+
+    tplCompanyLabel.textContent = companyDisplay || "—";
+  }
+
+  function fillTemplateDropdown(list) {
+    bulkTemplate.innerHTML = "";
+    const opt0 = document.createElement("option");
+    opt0.value = "";
+    opt0.textContent = "— vyber šablonu —";
+    bulkTemplate.appendChild(opt0);
+
+    (list || []).forEach(t => {
+      const o = document.createElement("option");
+      o.value = t.name + "|" + t.months;
+      o.textContent = t.name + " (" + t.months + " měsíců)";
+      bulkTemplate.appendChild(o);
+    });
+  }
+
+  function getSelectedCompanies() {
+    const map = new Map(); // key -> display
+    selectedIds.forEach(id => {
+      const emp = lastItems.find(x => String(x.id) === String(id));
+      const display = String((emp && emp.company) || "").trim() || "— nezadáno —";
+      const key = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
+      map.set(key, display);
+    });
+    return map;
+  }
+
+  function chooseActiveCompanyFromSelection() {
+    const companies = getSelectedCompanies();
+
+    if (companies.size === 0) {
+      const first = lastItems && lastItems[0];
+      const display = String((first && first.company) || "").trim() || "— nezadáno —";
+      const key = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
+      activeTplCompany = display;
+      activeTplCompanyKey = key;
+      return;
+    }
+
+    const keys = Array.from(companies.keys());
+    if (keys.includes(activeTplCompanyKey)) return;
+
+    const firstKey = keys[0];
+    activeTplCompanyKey = firstKey;
+    activeTplCompany = companies.get(firstKey) || "— nezadáno —";
+  }
+
+  function syncCompanyPickerUI() {
+    const companies = getSelectedCompanies();
+
+    if (companies.size > 1) {
+      tplCompanyPill.style.display = "inline-flex";
+      tplCompanySelect.innerHTML = "";
+      Array.from(companies.entries()).forEach(([key, display]) => {
+        const o = document.createElement("option");
+        o.value = key;
+        o.textContent = display;
+        tplCompanySelect.appendChild(o);
+      });
+      tplCompanySelect.value = activeTplCompanyKey;
+    } else {
+      tplCompanyPill.style.display = "none";
+      tplCompanySelect.innerHTML = "";
+    }
+  }
+
+  // ✅ TADY JE OPRAVA: když se změní firma, vyčistíme formulář
+  function syncTemplateDropdown() {
+    const beforeKey = activeTplCompanyKey;
+
+    chooseActiveCompanyFromSelection();
+
+    // pokud se změnila firma (podle výběru nebo podle selectu), vyčisti formulář
+    if (activeTplCompanyKey && activeTplCompanyKey !== lastTplCompanyKey) {
+      bulkTemplate.value = "";
+      bulkName.value = "";
+      bulkTo.value = "";
+      bulkFrom.value = "";
+
+      lastTplCompanyKey = activeTplCompanyKey;
+    } else if (beforeKey !== activeTplCompanyKey) {
+      // bezpečnostní pojistka
+      bulkTemplate.value = "";
+      bulkName.value = "";
+      bulkTo.value = "";
+      bulkFrom.value = "";
+
+      lastTplCompanyKey = activeTplCompanyKey;
+    }
+
+    const list = ensureTemplates(activeTplCompanyKey);
+    fillTemplateDropdown(list);
+    renderTemplatesUI(activeTplCompany, activeTplCompanyKey);
+    syncCompanyPickerUI();
+  }
+
+  // ===== general helpers =====
+  function setError(msg) {
+    errorBox.style.display = "block";
+    errorBox.textContent = msg || "Chyba.";
+  }
+  function clearError() {
+    errorBox.style.display = "none";
+    errorBox.textContent = "";
+  }
+
+  function getRole() { return localStorage.getItem("demoRole") || "HR"; }
+  function setRole(role) { localStorage.setItem("demoRole", role); }
+
+  function isHrManager(me) {
+    const r = String((me && me.role) || "").toUpperCase();
+    return r === "HR" || r === "MANAGER";
+  }
+
+  function normalizeName(s) {
+    return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
+  }
+
+  // ===== API =====
+  async function apiText(url, opts) {
+    const r = await fetch(url, opts);
+    const text = await r.text();
+    if (!r.ok) throw new Error(url + " → HTTP " + r.status + " → " + text);
+    return text;
+  }
+
+  async function apiMe(role) {
+    const text = await apiText("/api/me", { headers: { "x-role": role } });
+    try { return JSON.parse(text); } catch { return {}; }
+  }
+
+  async function apiList(role) {
+    const text = await apiText("/api/employees", { headers: { "x-role": role } });
+    try { return JSON.parse(text); } catch { return []; }
+  }
+
+  async function apiGetEmployee(role, id) {
+    const text = await apiText("/api/employees/" + encodeURIComponent(id), { headers: { "x-role": role } });
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
+  async function apiPutEmployee(role, id, empObj) {
+    const text = await apiText("/api/employees/" + encodeURIComponent(id), {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "x-role": role },
+      body: JSON.stringify(empObj)
+    });
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
+  async function apiCreate(role, payload) {
+    const text = await apiText("/api/employees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-role": role },
+      body: JSON.stringify(payload)
+    });
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
+  async function apiDelete(role, id) {
+    const text = await apiText("/api/employees/" + encodeURIComponent(id), {
+      method: "DELETE",
+      headers: { "x-role": role }
+    });
+    try { return JSON.parse(text); } catch { return null; }
+  }
+
+  function canWrite(perms, role) {
+    if (Array.isArray(perms)) {
+      if (perms.includes("employees:write") || perms.includes("write") || perms.includes("add") || perms.includes("delete")) return true;
+    }
+    return (role === "HR" || role === "MANAGER");
+  }
+
+  // ===== risk logic =====
+  function daysUntil(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const today = new Date(); today.setHours(0,0,0,0);
+    d.setHours(0,0,0,0);
+    return Math.round((d - today) / 86400000);
+  }
+
+  function trainingTypeByValidTo(validTo) {
+    const d = daysUntil(validTo);
+    if (d === null) return "ok";
+    if (d < 0) return "bad";
+    if (d <= 30) return "warn";
+    return "ok";
+  }
+
+  function riskForEmployee(emp) {
+    if (!emp || typeof emp !== "object") return { key:"nodata", label:"Bez dat", dot:"na" };
+    if (!("trainings" in emp)) return { key:"nodata", label:"Bez dat", dot:"na" };
+
+    const tr = Array.isArray(emp.trainings) ? emp.trainings : [];
+    if (!tr.length) return { key:"none", label:"Bez školení", dot:"na" };
+
+    let hasBad = false, hasWarn = false;
+    tr.forEach(t => {
+      const type = trainingTypeByValidTo(t && t.validTo);
+      if (type === "bad") hasBad = true;
+      if (type === "warn") hasWarn = true;
+    });
+
+    if (hasBad) return { key:"bad", label:"Expirované", dot:"bad" };
+    if (hasWarn) return { key:"warn", label:"Brzy expiruje", dot:"warn" };
+    return { key:"ok", label:"Bez problému", dot:"ok" };
+  }
+
+  function setRiskPill(td, risk) {
+    td.innerHTML = "";
+    const pill = document.createElement("span");
+    pill.className = "riskPill";
+
+    const dot = document.createElement("span");
+    dot.className = "dot " + (risk.dot || "na");
+
+    const lab = document.createElement("span");
+    lab.textContent = risk.label;
+
+    pill.appendChild(dot);
+    pill.appendChild(lab);
+    td.appendChild(pill);
+  }
+
+  function matchSearch(emp, text) {
+    if (!text) return true;
+    const q = text.trim().toLowerCase();
+    if (!q) return true;
+
+    const fullName = (((emp.firstName || emp.firstname || "") + " " + (emp.lastName || emp.lastname || "")).trim() || (emp.name || "")).toLowerCase();
+    const comp = String(emp.company || "").toLowerCase();
+    const id = String(emp.id || "").toLowerCase();
+
+    return fullName.includes(q) || comp.includes(q) || id.includes(q);
+  }
+
+  function matchFilter(riskKey) {
+    if (currentFilter === "all") return true;
+    if (currentFilter === "problem") return (riskKey === "bad" || riskKey === "warn");
+    return riskKey === currentFilter;
+  }
+
+  function recomputeSummary(items) {
+    const counts = { all: items.length, ok: 0, warn: 0, bad: 0, none: 0, nodata: 0 };
+    items.forEach(emp => {
+      const r = riskForEmployee(emp);
+      counts[r.key] = (counts[r.key] || 0) + 1;
+    });
+
+    sumAll.textContent = counts.all;
+    sumBad.textContent = counts.bad || 0;
+    sumWarn.textContent = counts.warn || 0;
+    sumOk.textContent = counts.ok || 0;
+    sumNone.textContent = counts.none || 0;
+    sumNoData.textContent = counts.nodata || 0;
+
+    return counts;
+  }
+
+  function updateBulkCount() {
+    bulkCount.textContent = String(selectedIds.size);
+  }
+
+  function clearSelectionUI() {
+    selectedIds.clear();
+    updateBulkCount();
+    checkAll.checked = false;
+    tbody.querySelectorAll("input[data-emp-check]").forEach(cb => { cb.checked = false; });
+    syncTemplateDropdown();
+  }
+
+  // ===== render =====
+  function renderRows(items, me) {
+    tbody.innerHTML = "";
+    const counts = recomputeSummary(items);
+    riskBox.style.display = "block";
+
+    const hrm = isHrManager(me);
+    btnLoadAllTrainings.style.display = hrm ? "inline-block" : "none";
+    if (hrm) {
+      btnLoadAllTrainings.disabled = (counts.nodata === 0);
+      btnLoadAllTrainings.textContent = (counts.nodata === 0) ? "Vše doplněno" : "Načíst školení všem";
+    }
+
+    bulkBox.style.display = hrm ? "block" : "none";
+
+    const enriched = items.map(emp => ({ emp, risk: riskForEmployee(emp) }));
+    const filtered = enriched.filter(x => matchFilter(x.risk.key) && matchSearch(x.emp, currentSearch));
+
+    filtered.forEach(({ emp, risk }) => {
+      const tr = document.createElement("tr");
+
+      // checkbox
+      const tdCb = document.createElement("td");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.dataset.empCheck = "1";
+      cb.dataset.empId = emp.id;
+      cb.checked = selectedIds.has(emp.id);
+
+      cb.addEventListener("change", () => {
+        if (cb.checked) selectedIds.add(emp.id);
+        else selectedIds.delete(emp.id);
+
+        updateBulkCount();
+        syncTemplateDropdown();
+      });
+
+      tdCb.appendChild(cb);
+
+      // name
+      const tdName = document.createElement("td");
+      const fullName =
+        ((emp.firstName || emp.firstname || "") + " " + (emp.lastName || emp.lastname || "")).trim()
+        || (emp.name || "Pracovník");
+      const a = document.createElement("a");
+      a.href = "/employee.html?id=" + encodeURIComponent(emp.id);
+      a.textContent = fullName;
+      tdName.appendChild(a);
+
+      // company
+      const tdCompany = document.createElement("td");
+      tdCompany.textContent = emp.company || "—";
+
+      // risk
+      const tdRisk = document.createElement("td");
+      setRiskPill(tdRisk, risk);
+
+      // id
+      const tdId = document.createElement("td");
+      tdId.textContent = emp.id;
+
+      // actions
+      const tdActions = document.createElement("td");
+      if (me._canWrite) {
+        const btnDel = document.createElement("button");
+        btnDel.textContent = "Smazat";
+        btnDel.addEventListener("click", async () => {
+          if (!confirm("Opravdu smazat pracovníka?")) return;
+          try {
+            clearError();
+            await apiDelete(me.role, emp.id);
+            await reload();
+          } catch (e) {
+            setError(e && e.message ? e.message : "Chyba při mazání.");
+          }
+        });
+        tdActions.appendChild(btnDel);
+      } else {
+        tdActions.textContent = "—";
+      }
+
+      tr.appendChild(tdCb);
+      tr.appendChild(tdName);
+      tr.appendChild(tdCompany);
+      tr.appendChild(tdRisk);
+      tr.appendChild(tdId);
+      tr.appendChild(tdActions);
+
+      tbody.appendChild(tr);
+    });
+
+    updateBulkCount();
+    syncTemplateDropdown();
+  }
+
+  // ===== bulk add training (WITH DEDUPE) =====
+  function addMonthsToDateStr(dateStr, months) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return null;
+    const day = d.getDate();
+    d.setMonth(d.getMonth() + months);
+    if (d.getDate() !== day) d.setDate(0);
+    return d.toISOString().slice(0,10);
+  }
+
+  function parseTemplateValue(v) {
+    const parts = String(v || "").split("|");
+    if (parts.length < 2) return null;
+    const name = parts[0].trim();
+    const months = Number(parts[1]);
+    if (!name || !Number.isFinite(months)) return null;
+    return { name, months };
+  }
+
+  function dateStrToTime(s) {
+    if (!s) return null;
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return null;
+    return d.getTime();
+  }
+
+  function mergeTraining(trainings, newItem) {
+    const list = Array.isArray(trainings) ? trainings : [];
+    const nn = normalizeName(newItem && newItem.name);
+    if (!nn) return list;
+
+    const idx = list.findIndex(t => normalizeName(t && t.name) === nn);
+
+    if (idx < 0) {
+      list.push(newItem);
+      return list;
+    }
+
+    const existing = list[idx] || {};
+    const oldToT = dateStrToTime(existing.validTo);
+    const newToT = dateStrToTime(newItem.validTo);
+
+    const merged = {
+      ...existing,
+      name: existing.name || newItem.name,
+      validFrom: newItem.validFrom || existing.validFrom || null,
+      validTo: (oldToT === null && newToT === null)
+        ? (newItem.validTo || existing.validTo || null)
+        : (oldToT === null ? newItem.validTo : (newToT === null ? existing.validTo : (newToT > oldToT ? newItem.validTo : existing.validTo)))
+    };
+
+    list[idx] = merged;
+    return list;
+  }
+
+  async function bulkAddTraining() {
+    if (!lastMe || !isHrManager(lastMe)) return;
+
+    clearError();
+    bulkMsg.textContent = "";
+
+    if (selectedIds.size === 0) { bulkMsg.textContent = "Vyber alespoň 1 zaměstnance."; return; }
+
+    const tpl = parseTemplateValue(bulkTemplate.value);
+    const name = (tpl && tpl.name) || bulkName.value.trim();
+    if (!name) { bulkMsg.textContent = "Vyplň název školení nebo vyber šablonu."; return; }
+
+    const from = bulkFrom.value || new Date().toISOString().slice(0,10);
+    let to = bulkTo.value || null;
+
+    if (!to && tpl && tpl.months) {
+      to = addMonthsToDateStr(from, tpl.months);
+    }
+
+    const newTraining = { name, validFrom: from, validTo: to };
+
+    bulkAddBtn.disabled = true;
+    bulkAddBtn.textContent = "Přidávám…";
+
+    try {
+      const ids = Array.from(selectedIds);
+      let ok = 0, fail = 0;
+
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        bulkMsg.textContent = `Zpracovávám ${i + 1} / ${ids.length}…`;
+
+        try {
+          let emp = await apiGetEmployee(lastMe.role, id);
+          if (!emp || typeof emp !== "object") throw new Error("Detail je prázdný.");
+
+          let list = Array.isArray(emp.trainings) ? emp.trainings : [];
+          list = mergeTraining(list, newTraining);
+
+          await apiPutEmployee(lastMe.role, (emp.id || id), { ...emp, trainings: list });
+
+          ok++;
+        } catch (e) {
+          console.error(e);
+          fail++;
+        }
+      }
+
+      bulkMsg.textContent = `Hotovo. OK: ${ok}, Chyby: ${fail}. (Školení se případně prodloužilo.)`;
+      clearSelectionUI();
+    } catch (e) {
+      setError(e && e.message ? e.message : "Chyba při hromadném přidání.");
+    } finally {
+      bulkAddBtn.disabled = false;
+      bulkAddBtn.textContent = "Přidat vybraným";
+      await reload();
+    }
+  }
+
+  // ===== templates events =====
+  tplCompanySelect.addEventListener("change", () => {
+    activeTplCompanyKey = tplCompanySelect.value;
+    const opt = tplCompanySelect.options[tplCompanySelect.selectedIndex];
+    activeTplCompany = opt ? opt.textContent : "—";
+    setTplMsg("");
+    // firma se změnila = vyčistíme bulk formulář
+    bulkTemplate.value = "";
+    bulkName.value = "";
+    bulkTo.value = "";
+    bulkFrom.value = "";
+
+    lastTplCompanyKey = activeTplCompanyKey;
+    syncTemplateDropdown();
+  });
+
+  tplAddBtn.addEventListener("click", () => {
+    const name = String(tplName.value || "").trim();
+    const months = Number(tplMonths.value);
+
+    if (!name) { setTplMsg("Vyplň název šablony."); return; }
+    if (!Number.isFinite(months) || months <= 0) { setTplMsg("Vyplň platnost v měsících (např. 12)."); return; }
+
+    const list = ensureTemplates(activeTplCompanyKey);
+    const nn = normalizeName(name);
+
+    const idx = list.findIndex(t => normalizeName(t && t.name) === nn);
+    if (idx >= 0) {
+      list[idx] = { name, months };
+      setTplMsg("Šablona upravena.");
+    } else {
+      list.push({ name, months });
+      setTplMsg("Šablona přidána.");
+    }
+
+    saveTemplates(activeTplCompanyKey, list);
+    tplName.value = "";
+    tplMonths.value = "";
+    syncTemplateDropdown();
+  });
+
+  tplResetBtn.addEventListener("click", () => {
+    if (!confirm("Resetovat šablony firmy na výchozí?")) return;
+    saveTemplates(activeTplCompanyKey, DEFAULT_TEMPLATES);
+    setTplMsg("Šablony resetovány.");
+    syncTemplateDropdown();
+  });
+
+  // ===== CRUD add employee =====
+  async function addEmployee() {
+    clearError();
+    const role = getRole();
+
+    const payload = {
+      firstName: firstName.value.trim(),
+      lastName: lastName.value.trim(),
+      company: company.value.trim()
+    };
+
+    try {
+      await apiCreate(role, payload);
+      firstName.value = "";
+      lastName.value = "";
+      company.value = "";
+      await reload();
+    } catch (e) {
+      setError(e && e.message ? e.message : "Chyba při přidání.");
+    }
+  }
+
+  // ===== reload =====
+  async function reload() {
+    clearError();
+    bulkMsgLoad.textContent = "";
+    bulkMsg.textContent = "";
+    setTplMsg("");
+
+    const role = getRole();
+
+    const me = await apiMe(role);
+    me.role = role;
+    me._canWrite = canWrite(me.perms, role);
+    lastMe = me;
+
+    roleLabelEl.textContent = me.roleLabel || me.role || role;
+    permsEl.textContent = Array.isArray(me.perms) ? me.perms.join(", ") : "—";
+
+    addCard.style.display = me._canWrite ? "block" : "none";
+
+    const items = await apiList(role);
+    lastItems = Array.isArray(items) ? items : [];
+
+    detailsCache.clear();
+
+    if (!activeTplCompanyKey) {
+      const first = lastItems && lastItems[0];
+      const display = String((first && first.company) || "").trim() || "— nezadáno —";
+      activeTplCompany = display;
+      activeTplCompanyKey = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
+      lastTplCompanyKey = activeTplCompanyKey;
+    }
+
+    selectedIds.clear();
+    checkAll.checked = false;
+
+    renderRows(lastItems, me);
+  }
+
+  // ===== events =====
+  roleSelect.value = getRole();
+  roleSelect.addEventListener("change", async () => {
+    setRole(roleSelect.value);
+    await reload();
+  });
+
+  document.querySelectorAll("#riskBox button[data-filter]").forEach(b => {
+    b.addEventListener("click", () => {
+      currentFilter = b.dataset.filter || "all";
+      document.querySelectorAll("#riskBox button[data-filter]").forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      if (lastMe) renderRows(lastItems, lastMe);
+    });
+  });
+
+  searchInput.addEventListener("input", () => {
+    currentSearch = searchInput.value || "";
+    if (lastMe) renderRows(lastItems, lastMe);
+  });
+
+  checkAll.addEventListener("change", () => {
+    const checked = !!checkAll.checked;
+    tbody.querySelectorAll('input[data-emp-check]').forEach(cb => {
+      cb.checked = checked;
+      const id = cb.dataset.empId;
+      if (checked) selectedIds.add(id);
+      else selectedIds.delete(id);
+    });
+    updateBulkCount();
+    syncTemplateDropdown();
+  });
+
+  btnSelectAll.addEventListener("click", () => {
+    tbody.querySelectorAll('input[data-emp-check]').forEach(cb => {
+      cb.checked = true;
+      selectedIds.add(cb.dataset.empId);
+    });
+    updateBulkCount();
+    syncTemplateDropdown();
+  });
+
+  btnClearSel.addEventListener("click", () => clearSelectionUI());
+
+  bulkTemplate.addEventListener("change", () => {
+    const tpl = parseTemplateValue(bulkTemplate.value);
+    if (!tpl) return;
+
+    bulkName.value = tpl.name;
+
+    const from = bulkFrom.value || new Date().toISOString().slice(0,10);
+    bulkFrom.value = from;
+
+    const to = addMonthsToDateStr(from, tpl.months);
+    if (to) bulkTo.value = to;
+  });
+
+  bulkFrom.addEventListener("change", () => {
+    const tpl = parseTemplateValue(bulkTemplate.value);
+    if (!tpl) return;
+    const from = bulkFrom.value;
+    if (!from) return;
+    const to = addMonthsToDateStr(from, tpl.months);
+    if (to) bulkTo.value = to;
+  });
+
+  bulkAddBtn.addEventListener("click", () => bulkAddTraining());
+  btnAdd.addEventListener("click", () => addEmployee());
+
+  // ===== NAV FOCUS z dashboardu =====
+  // Čte wa_nav_focus a nastaví filtr tak, aby uživatel hned viděl to důležité.
+  // Pak fokus smaže (jednorázové chování).
+
+  function showNavInfo(title, text) {
+    // Když by navInfo nebyl vložený v HTML, tak nic nerozbíjej
+    if (!navInfo || !navInfoTitle || !navInfoText) return;
+
+    navInfoTitle.textContent = title;
+    navInfoText.textContent = text;
+    navInfo.style.display = "block";
+
+    // auto-hide po 5 sekundách
+    window.setTimeout(() => {
+      navInfo.style.display = "none";
+    }, 5000);
+  }
+
+  if (navInfoClose && navInfo) {
+    navInfoClose.addEventListener("click", () => {
+      navInfo.style.display = "none";
+    });
+  }
+
+  function setActiveFilterButton(filterKey) {
+    document.querySelectorAll("#riskBox button[data-filter]").forEach(x => x.classList.remove("active"));
+    const btn = document.querySelector(`#riskBox button[data-filter="${filterKey}"]`);
+    if (btn) btn.classList.add("active");
+  }
+
+  function applyNavFocusIfAny() {
+    const focus = localStorage.getItem("wa_nav_focus"); // critical14 | exp30 | none | null
+    if (!focus) return;
+
+    // Jednorázově – smažeme hned, aby se to neopakovalo při refresh
+    localStorage.removeItem("wa_nav_focus");
+
+    if (focus === "critical14") {
+      currentFilter = "bad";
+      setActiveFilterButton("bad");
+      showNavInfo("Otevřeno z dashboardu: Kritické", "Zobrazuji expirované položky (nejvyšší priorita).");
+      return;
+    }
+
+    if (focus === "exp30") {
+      currentFilter = "warn";
+      setActiveFilterButton("warn");
+      showNavInfo("Otevřeno z dashboardu: Varování do 30 dnů", "Zobrazuji položky, které brzy expirují.");
+      return;
+    }
+
+    // cokoliv jiného ignorujeme
+  }
+
+  // ===== init (NOVÉ) =====
+  (async function init(){
+    try {
+      // 1) načti data (tohle ti naplní lastItems/lastMe a vykreslí tabulku)
+      await reload();
+
+      // 2) aplikuj případný fokus z dashboardu
+      applyNavFocusIfAny();
+
+      // 3) po změně filtru znovu překresli
+      if (lastMe) renderRows(lastItems, lastMe);
+
+    } catch (e) {
+      setError(e && e.message ? e.message : "Chyba při načítání.");
+    }
+  })();
+</script>
+
+</body>
+</html>
