@@ -403,7 +403,7 @@
             </div>
 
             <div style="margin-top:10px;" class="note">
-              Pozn.: Tento box je v TEST režimu plně funkční. Později ho jen napojíme na backend endpoint.
+              Pozn.: Tento box je plně funkční z dat zaměstnanců (/api/employees). Nepotřebuje /api/companies.
             </div>
           </div>
         </section>
@@ -413,7 +413,7 @@
           <div class="hd">
             <div>
               <h2>Nejbližší expirace školení</h2>
-              <div class="hint">Záměr: zákazník vidí „co vyprší“ a hned jde udělat akci (hromadné školení / otevřít pracovníka).</div>
+              <div class="hint">Záměr: zákazník vidí „co vyprší“ a hned jde udělat akci (otevřít pracovníka).</div>
             </div>
           </div>
           <div class="bd">
@@ -450,7 +450,7 @@
             </div>
 
             <div style="margin-top:10px;" class="note">
-              Pozn.: Řádek je klikací přes tlačítko „Otevřít“ (vede do employee.html s uloženým employeeId).
+              Pozn.: „Otevřít“ uloží employeeId a přejde na employee.html.
             </div>
           </div>
         </section>
@@ -477,7 +477,7 @@
           </div>
         </section>
 
-        <!-- BOX: Doporučené kroky (NOVÉ) -->
+        <!-- BOX: Doporučené kroky -->
         <section class="box" id="boxRecommendations">
           <div class="hd">
             <div>
@@ -509,7 +509,7 @@
           <div class="hd">
             <div>
               <h2>Test / Diagnostika</h2>
-              <div class="hint">Jednoduchý test bez backendu: přepnutí do TEST dat, aby šlo UI ověřit kdykoliv.</div>
+              <div class="hint">Přepnutí TEST/API. V API režimu se data berou z /api/employees.</div>
             </div>
           </div>
           <div class="bd">
@@ -518,7 +518,7 @@
               <button class="btn" id="btnForceApi">Použít API</button>
             </div>
             <div style="margin-top:10px;" class="note">
-              Když endpointy nesedí, uvidíš „TEST“ a stránka bude stále použitelná pro UX kontrolu.
+              Když API selže, přepne se to do TEST (aby šlo UI dál používat).
             </div>
             <div style="margin-top:10px;" id="diagBox" class="mutebox">—</div>
           </div>
@@ -528,33 +528,22 @@
     </div>
   </div>
 
+  <script src="js/wa_nav.js"></script>
+
   <script>
     /******************************************************************
-     * Workaccess Dashboard – čistý JS, žádné frameworky
-     * Zásady:
-     * - vždy jasný stav (loading/ok/error/test)
-     * - změna firmy = plné přenačtení dat a překreslení UI
-     * - jednoduchý test: přepnutí do TEST dat
+     * Workaccess Dashboard – 100% funkční i bez /api/companies
+     * API zdroj: /api/employees (z něj se odvodí firmy, souhrn i expirace)
      ******************************************************************/
 
-    // ====== KONFIGURACE – endpointy ======
-    const API = {
-      baseUrl: "",
-      companies: "/api/companies",
-      companySummary: (companyId) => `/api/companies/${encodeURIComponent(companyId)}/summary`,
-      companyExpirations: (companyId, days) => `/api/companies/${encodeURIComponent(companyId)}/expirations?days=${encodeURIComponent(days)}`
+    const LS = {
+      companyId: "wa_company_id",
+      role: "wa_role",
+      forceMode: "wa_dashboard_mode",
+      employeeId: "wa_employee_id",
+      navFocus: "wa_nav_focus"
     };
 
-    // ====== localStorage klíče ======
-  const LS = {
-  companyId: "wa_company_id",
-  role: "wa_role",
-  forceMode: "wa_dashboard_mode",
-  employeeId: "wa_employee_id",
-  navFocus: "wa_nav_focus"
-};
-
-    // ====== DOM ======
     const el = {
       companySelect: document.getElementById("companySelect"),
       statusDot: document.getElementById("statusDot"),
@@ -585,7 +574,6 @@
       btnForceApi: document.getElementById("btnForceApi"),
       diagBox: document.getElementById("diagBox"),
 
-      // Varovný BOX
       warnMain: document.getElementById("warnMain"),
       warnTitle: document.getElementById("warnTitle"),
       warnSub: document.getElementById("warnSub"),
@@ -601,12 +589,10 @@
       btnShowCritical: document.getElementById("btnShowCritical"),
       btnGoEmployees: document.getElementById("btnGoEmployees"),
 
-      // Rizika bez platného školení
       chkCriticalOnly: document.getElementById("chkCriticalOnly"),
       riskState: document.getElementById("riskState"),
       riskTbody: document.getElementById("riskTbody"),
 
-      // Doporučené kroky
       recMain: document.getElementById("recMain"),
       recTitle: document.getElementById("recTitle"),
       recSub: document.getElementById("recSub"),
@@ -617,22 +603,21 @@
       btnRecBulk: document.getElementById("btnRecBulk")
     };
 
-    // ====== Stav ======
-    let currentCompanyId = "";
+    let mode = (localStorage.getItem(LS.forceMode) || "API"); // API | TEST
+    let currentCompanyName = "";
     let currentRole = "READ";
-    let mode = (localStorage.getItem(LS.forceMode) || "API");
 
-    let lastSummary = null;
-    let lastExpirations = [];
-    let lastRiskIssues = [];
+    // cache dat
+    let allEmployees = [];          // z API/TEST
+    let companyEmployees = [];      // vyfiltrované pro firmu
+    let lastExpirations = [];       // flattened + filter by days
+    let lastRiskIssues = [];        // derived
 
-    // ====== UI helpery ======
     function setStatus(kind, text){
       el.statusText.textContent = text;
       el.statusDot.classList.remove("dotOk", "dotBad");
       if (kind === "ok") el.statusDot.classList.add("dotOk");
       if (kind === "bad") el.statusDot.classList.add("dotBad");
-      if (kind === "loading" || kind === "test") return;
     }
     function setDiag(text){ el.diagBox.textContent = text; }
 
@@ -643,6 +628,25 @@
         .replaceAll(">","&gt;")
         .replaceAll('"',"&quot;")
         .replaceAll("'","&#039;");
+    }
+
+    function loadRole(){
+      const r = (localStorage.getItem(LS.role) || "READ").toUpperCase();
+      if (r === "HR" || r === "MANAGER" || r === "READ") return r;
+      return "READ";
+    }
+
+    function applyRoleToActions(){
+      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
+      el.btnBulkTraining.disabled = !canEdit || !currentCompanyName;
+
+      if (!currentCompanyName){
+        el.actionsNote.textContent = "Vyber firmu pro aktivaci akcí.";
+        return;
+      }
+      el.actionsNote.textContent = canEdit
+        ? "Můžeš provádět akce (HR / Manažer)."
+        : "Read-only režim: akce měnící data jsou vypnuté.";
     }
 
     function daysBetween(today, futureDate){
@@ -672,27 +676,101 @@
       return `<span class="badge bOk">${escapeHtml(text)}</span>`;
     }
 
-    // ====== Role ======
-    function loadRole(){
-      const r = (localStorage.getItem(LS.role) || "READ").toUpperCase();
-      if (r === "HR" || r === "MANAGER" || r === "READ") return r;
-      return "READ";
-    }
-
-    function applyRoleToActions(){
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      el.btnBulkTraining.disabled = !canEdit || !currentCompanyId;
-
-      if (!currentCompanyId){
-        el.actionsNote.textContent = "Vyber firmu pro aktivaci akcí.";
-        return;
+    async function apiGetJson(path){
+      const res = await fetch(path, { method:"GET", headers:{ "Accept":"application/json" } });
+      if (!res.ok){
+        const text = await res.text().catch(()=> "");
+        throw new Error(`HTTP ${res.status} pro ${path}. ${text ? "Odpověď: " + text : ""}`);
       }
-      el.actionsNote.textContent = canEdit
-        ? "Můžeš provádět akce (HR / Manažer)."
-        : "Read-only režim: akce měnící data jsou vypnuté.";
+      return await res.json();
     }
 
-    // ====== Souhrn ======
+    // ===== TEST data (zůstává jako fallback) =====
+    function testEmployees(){
+      return [
+        {
+          id:"e101", firstName:"Jan", lastName:"Novák", company:"TEST Firma Alfa",
+          trainings: [
+            { name:"BOZP – základ", validTo: new Date(Date.now() + 9*86400000).toISOString().slice(0,10) },
+            { name:"Práce ve výškách", validTo: new Date(Date.now() - 3*86400000).toISOString().slice(0,10) }
+          ]
+        },
+        {
+          id:"e102", firstName:"Petra", lastName:"Dvořáková", company:"TEST Firma Alfa",
+          trainings: [
+            { name:"PO – opakování", validTo: new Date(Date.now() + 26*86400000).toISOString().slice(0,10) }
+          ]
+        },
+        {
+          id:"e201", firstName:"Tomáš", lastName:"Procházka", company:"TEST Firma Beta",
+          trainings: [
+            { name:"BOZP – základ", validTo: new Date(Date.now() + 4*86400000).toISOString().slice(0,10) }
+          ]
+        },
+      ];
+    }
+
+    // ===== Data derivace z employees =====
+    function norm(s){
+      return String(s || "").trim().replace(/\s+/g, " ");
+    }
+
+    function fullName(emp){
+      const fn = norm(emp.firstName || emp.firstname || "");
+      const ln = norm(emp.lastName || emp.lastname || "");
+      const n = norm(emp.name || "");
+      const r = norm((fn + " " + ln).trim());
+      return r || n || "—";
+    }
+
+    function flattenExpirationsFromEmployees(employees){
+      // 1 řádek = 1 školení s validTo
+      const out = [];
+      for (const emp of (employees || [])){
+        const empId = String(emp.id || "");
+        const empName = fullName(emp);
+        const trainings = Array.isArray(emp.trainings) ? emp.trainings : [];
+        for (const t of trainings){
+          const expiresAt = t && (t.validTo || t.expiresAt);
+          if (!expiresAt) continue;
+          const d = new Date(expiresAt);
+          if (isNaN(d.getTime())) continue;
+
+          out.push({
+            employeeId: empId,
+            employeeName: empName,
+            trainingName: String((t && t.name) || "—"),
+            expiresAt: d.toISOString()
+          });
+        }
+      }
+      return out;
+    }
+
+    function computeWarningCountsFromExpirations(items){
+      const today = new Date();
+      let expired = 0, exp14 = 0, exp30 = 0;
+
+      for (const it of (items || [])){
+        const d = new Date(it.expiresAt);
+        if (isNaN(d.getTime())) continue;
+        const left = daysBetween(today, d);
+        if (left <= 0) expired++;
+        if (left > 0 && left <= 14) exp14++;
+        if (left > 0 && left <= 30) exp30++;
+      }
+      return { expired, exp14, exp30 };
+    }
+
+    function setWarnMain(kind, title, sub){
+      el.warnMain.classList.remove("warnOk", "warnWarn", "warnBad");
+      if (kind === "ok") el.warnMain.classList.add("warnOk");
+      if (kind === "warn") el.warnMain.classList.add("warnWarn");
+      if (kind === "bad") el.warnMain.classList.add("warnBad");
+      el.warnTitle.textContent = title;
+      el.warnSub.textContent = sub;
+    }
+
     function clearSummary(){
       el.kpiEmployees.textContent = "–";
       el.kpiRisks.textContent = "–";
@@ -703,10 +781,8 @@
       el.kpiExp30Sub.textContent = "—";
       el.kpiExp60Sub.textContent = "—";
       el.summaryMsg.textContent = "Vyber firmu.";
-      lastSummary = null;
     }
 
-    // ====== Varovný BOX ======
     function clearWarnings(){
       el.warnMain.classList.remove("warnOk", "warnWarn", "warnBad");
       el.warnMain.classList.add("warnOk");
@@ -727,41 +803,83 @@
       el.btnShowCritical.disabled = true;
     }
 
-    function setWarnMain(kind, title, sub){
-      el.warnMain.classList.remove("warnOk", "warnWarn", "warnBad");
-      if (kind === "ok") el.warnMain.classList.add("warnOk");
-      if (kind === "warn") el.warnMain.classList.add("warnWarn");
-      if (kind === "bad") el.warnMain.classList.add("warnBad");
-      el.warnTitle.textContent = title;
-      el.warnSub.textContent = sub;
+    function clearExpirations(message){
+      el.expTbody.innerHTML = `<tr><td colspan="5" class="note">${escapeHtml(message)}</td></tr>`;
+      el.expState.textContent = message;
+      lastExpirations = [];
     }
 
-    function computeWarningCounts(){
-      const today = new Date();
-      let expired = 0;
-      let exp14 = 0;
-      let exp30 = 0;
+    function clearRiskIssues(message){
+      el.riskTbody.innerHTML = `<tr><td colspan="4" class="note">${escapeHtml(message)}</td></tr>`;
+      el.riskState.textContent = message;
+      lastRiskIssues = [];
+    }
 
-      for (const it of (lastExpirations || [])){
-        const d = new Date(it.expiresAt);
-        if (isNaN(d.getTime())) continue;
-        const left = daysBetween(today, d);
+    function setRecMain(kind, title, sub){
+      el.recMain.classList.remove("recOk","recWarn","recBad");
+      if (kind === "ok") el.recMain.classList.add("recOk");
+      if (kind === "warn") el.recMain.classList.add("recWarn");
+      if (kind === "bad") el.recMain.classList.add("recBad");
+      el.recTitle.textContent = title;
+      el.recSub.textContent = sub;
+    }
 
-        if (left <= 0) expired++;
-        if (left > 0 && left <= 14) exp14++;
-        if (left > 0 && left <= 30) exp30++;
+    function renderRecommendations(){
+      if (!currentCompanyName){
+        setRecMain("ok", "Vyber firmu.", "Až vybereš firmu, nabídneme nejkratší cestu k řešení.");
+        el.btnRecCritical.disabled = true;
+        el.btnRec30.disabled = true;
+        el.btnRecBulk.disabled = true;
+        el.btnRecEmployees.setAttribute("aria-disabled", "true");
+        return;
       }
 
-      return { expired, exp14, exp30 };
+      el.btnRecEmployees.removeAttribute("aria-disabled");
+
+      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
+      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
+
+      el.btnRecCritical.disabled = false;
+      el.btnRec30.disabled = false;
+      el.btnRecBulk.disabled = !canEdit;
+
+      if (expired > 0 || exp14 > 0){
+        setRecMain(
+          "bad",
+          "Kritické – řešit hned",
+          `Doporučení: zobrazit kritické (14 dní) a naplánovat akci. Prošlá: ${expired} • Do 14 dnů: ${exp14}.`
+        );
+        el.recNote.textContent = canEdit
+          ? "Tip: začni zobrazením kritických a pak rovnou použij „Hromadné školení“."
+          : "Read-only: můžeš zobrazit kritické a předat úkol HR / Manažerovi.";
+        return;
+      }
+
+      if (exp30 > 0){
+        setRecMain(
+          "warn",
+          "Varování – naplánovat včas",
+          `Doporučení: zobrazit expirace do 30 dnů a naplánovat školení. Do 30 dnů: ${exp30}.`
+        );
+        el.recNote.textContent = "Tip: plánuj dopředu – vyhneš se kritickému stavu.";
+        return;
+      }
+
+      setRecMain(
+        "ok",
+        "OK – nic kritického",
+        "Doporučení: můžeš jen zkontrolovat evidenci nebo pokračovat v práci."
+      );
+      el.recNote.textContent = "Tip: pravidelně kontroluj aspoň expirace do 30 dnů.";
     }
 
     function renderWarnings(){
-      if (!currentCompanyId){
+      if (!currentCompanyName){
         clearWarnings();
         return;
       }
 
-      const { expired, exp14, exp30 } = computeWarningCounts();
+      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
 
       el.wExpired.textContent = String(expired);
       el.w14.textContent = String(exp14);
@@ -798,81 +916,6 @@
       el.btnShowCritical.disabled = false;
     }
 
-    // ====== Doporučené kroky (NOVÉ) ======
-    function setRecMain(kind, title, sub){
-      el.recMain.classList.remove("recOk","recWarn","recBad");
-      if (kind === "ok") el.recMain.classList.add("recOk");
-      if (kind === "warn") el.recMain.classList.add("recWarn");
-      if (kind === "bad") el.recMain.classList.add("recBad");
-      el.recTitle.textContent = title;
-      el.recSub.textContent = sub;
-    }
-
-    function renderRecommendations(){
-      // Bez firmy: nic nedává smysl
-      if (!currentCompanyId){
-        setRecMain("ok", "Vyber firmu.", "Až vybereš firmu, nabídneme nejkratší cestu k řešení.");
-        el.btnRecCritical.disabled = true;
-        el.btnRec30.disabled = true;
-        el.btnRecEmployees.classList.add("disabled");
-        el.btnRecBulk.disabled = true;
-        el.btnRecEmployees.setAttribute("aria-disabled", "true");
-        return;
-      }
-
-      el.btnRecEmployees.removeAttribute("aria-disabled");
-
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      const { expired, exp14, exp30 } = computeWarningCounts();
-
-      // Default: tlačítka zapneme podle smyslu
-      el.btnRecCritical.disabled = false;
-      el.btnRec30.disabled = false;
-      el.btnRecBulk.disabled = !canEdit;
-
-      if (expired > 0 || exp14 > 0){
-        setRecMain(
-          "bad",
-          "Kritické – řešit hned",
-          `Doporučení: zobrazit kritické (14 dní) a naplánovat akci. Prošlá: ${expired} • Do 14 dnů: ${exp14}.`
-        );
-        el.recNote.textContent = canEdit
-          ? "Tip: začni zobrazením kritických a pak rovnou použij „Hromadné školení“."
-          : "Read-only: můžeš zobrazit kritické a předat úkol HR / Manažerovi.";
-        return;
-      }
-
-      if (exp30 > 0){
-        setRecMain(
-          "warn",
-          "Varování – naplánovat včas",
-          `Doporučení: zobrazit expirace do 30 dnů a naplánovat školení. Do 30 dnů: ${exp30}.`
-        );
-        el.recNote.textContent = "Tip: plánuj dopředu – vyhneš se kritickému stavu.";
-        return;
-      }
-
-      setRecMain(
-        "ok",
-        "OK – nic kritického",
-        "Doporučení: můžeš jen zkontrolovat evidenci nebo pokračovat v práci."
-      );
-      el.recNote.textContent = "Tip: pravidelně kontroluj aspoň expirace do 30 dnů.";
-    }
-
-    // ====== Expirace ======
-    function clearExpirations(message){
-      el.expTbody.innerHTML = `<tr><td colspan="5" class="note">${escapeHtml(message)}</td></tr>`;
-      lastExpirations = [];
-    }
-
-    // ====== Rizika bez platného školení ======
-    function clearRiskIssues(message){
-      el.riskTbody.innerHTML = `<tr><td colspan="4" class="note">${escapeHtml(message)}</td></tr>`;
-      el.riskState.textContent = message;
-      lastRiskIssues = [];
-    }
-
     function computeRiskIssuesFromExpirations(){
       const today = new Date();
       const issues = [];
@@ -903,7 +946,7 @@
     }
 
     function renderRiskIssues(){
-      if (!currentCompanyId){
+      if (!currentCompanyName){
         clearRiskIssues("Vyber firmu.");
         return;
       }
@@ -927,10 +970,9 @@
         return;
       }
 
-   el.riskState.textContent = criticalOnly
-  ? `Nalezeno: ${issues.length} (jen kritické).`
-  : `Nalezeno: ${issues.length} (kritické + varování).`;
-
+      el.riskState.textContent = criticalOnly
+        ? `Nalezeno: ${issues.length} (jen kritické).`
+        : `Nalezeno: ${issues.length} (kritické + varování).`;
 
       const top = issues.slice(0, 10);
 
@@ -958,172 +1000,10 @@
       });
     }
 
-    // ====== Fetch helper ======
-    async function apiGet(path){
-      const url = API.baseUrl + path;
-      const res = await fetch(url, { method:"GET", headers:{ "Accept":"application/json" } });
-      if (!res.ok){
-        const text = await res.text().catch(()=> "");
-        throw new Error(`HTTP ${res.status} pro ${url}. ${text ? "Odpověď: " + text : ""}`);
-      }
-      return await res.json();
-    }
-
-    // ====== TEST data ======
-    function testCompanies(){
-      return [
-        { id: "c1", name: "TEST Firma Alfa" },
-        { id: "c2", name: "TEST Firma Beta" }
-      ];
-    }
-
-    function testSummary(companyId){
-      const base = (companyId === "c1") ? 18 : 42;
-      return {
-        employeesCount: base,
-        risksTotal: (companyId === "c1") ? 6 : 19,
-        expirations30: (companyId === "c1") ? 2 : 7,
-        expirations60: (companyId === "c1") ? 4 : 12
-      };
-    }
-
-    function testExpirations(companyId, days){
-      const today = new Date();
-      const mk = (employeeId, employeeName, trainingName, daysFromNow) => {
-        const d = new Date(today.getTime() + daysFromNow*24*60*60*1000);
-        return {
-          employeeId,
-          employeeName,
-          trainingName,
-          expiresAt: d.toISOString()
-        };
-      };
-
-      const all = (companyId === "c1")
-        ? [
-            mk("e101","Jan Novák","BOZP – základ", 9),
-            mk("e102","Petra Dvořáková","PO – opakování", 26),
-            mk("e103","Karel Černý","Řidič VZV", 55),
-            mk("e104","Eva Malá","Práce ve výškách", -3)
-          ]
-        : [
-            mk("e201","Tomáš Procházka","BOZP – základ", 4),
-            mk("e202","Lucie Králová","PO – opakování", 16),
-            mk("e203","Marek Jelínek","Chemie – bezpečnost", 33),
-            mk("e204","Alena Kučerová","První pomoc", 58),
-            mk("e205","David Svoboda","Práce ve výškách", 2)
-          ];
-
-      return all.filter(x => daysBetween(today, new Date(x.expiresAt)) <= days);
-    }
-
-    // ====== Načtení firem ======
-    async function loadCompanies(){
-      el.companySelect.innerHTML = `<option value="">Načítám…</option>`;
-      setStatus((mode === "TEST") ? "test" : "loading", (mode === "TEST") ? "TEST data" : "Načítám firmy…");
-      setDiag("Načítám seznam firem…");
-
-      try{
-        let companies;
-        if (mode === "TEST"){
-          companies = testCompanies();
-        } else {
-          companies = await apiGet(API.companies);
-        }
-
-        if (!Array.isArray(companies)) throw new Error("Seznam firem není pole (array).");
-
-        const saved = localStorage.getItem(LS.companyId) || "";
-        el.companySelect.innerHTML = `<option value="">— Vyber firmu —</option>` + companies
-          .map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.id)}</option>`)
-          .join("");
-
-        if (saved && companies.some(c => String(c.id) === String(saved))){
-          el.companySelect.value = saved;
-          currentCompanyId = saved;
-        } else {
-          el.companySelect.value = "";
-          currentCompanyId = "";
-        }
-
-        setStatus((mode === "TEST") ? "test" : "ok", (mode === "TEST") ? "TEST data" : "API OK");
-        setDiag(`Firmy načteny: ${companies.length}. Režim: ${mode}.`);
-
-      } catch(err){
-        mode = "TEST";
-        localStorage.setItem(LS.forceMode, mode);
-
-        const companies = testCompanies();
-        el.companySelect.innerHTML = `<option value="">— Vyber firmu —</option>` + companies
-          .map(c => `<option value="${escapeHtml(c.id)}">${escapeHtml(c.name || c.id)}</option>`)
-          .join("");
-
-        setStatus("bad", "Chyba API → TEST");
-        setDiag(`API chyba: ${err.message}. Přepínám na TEST data, aby šlo UI používat.`);
-      }
-
-      currentRole = loadRole();
-      el.roleBox.textContent = currentRole;
-      applyRoleToActions();
-
-      await reloadCompanyData();
-    }
-
-    // ====== Souhrn ======
-    async function loadSummary(companyId){
-      clearSummary();
-      if (!companyId){
-        el.summaryMsg.textContent = "Vyber firmu.";
-        return;
-      }
-
-      el.summaryMsg.textContent = "Načítám souhrn…";
-
-      try{
-        let sum;
-        if (mode === "TEST"){
-          sum = testSummary(companyId);
-        } else {
-          sum = await apiGet(API.companySummary(companyId));
-        }
-
-        const employeesCount = Number(sum.employeesCount ?? sum.employees ?? 0);
-        const risksTotal = Number(sum.risksTotal ?? sum.risks ?? 0);
-        const exp30 = Number(sum.expirations30 ?? sum.exp30 ?? 0);
-        const exp60 = Number(sum.expirations60 ?? sum.exp60 ?? 0);
-
-        el.kpiEmployees.textContent = isFinite(employeesCount) ? String(employeesCount) : "—";
-        el.kpiRisks.textContent = isFinite(risksTotal) ? String(risksTotal) : "—";
-        el.kpiExp30.textContent = isFinite(exp30) ? String(exp30) : "—";
-        el.kpiExp60.textContent = isFinite(exp60) ? String(exp60) : "—";
-
-        el.kpiEmployeesSub.textContent = "Počet evidovaných osob";
-        el.kpiRisksSub.textContent = "Součet rizik přes pracovníky";
-        el.kpiExp30Sub.textContent = "Vyprší do 30 dnů";
-        el.kpiExp60Sub.textContent = "Vyprší do 60 dnů";
-
-        lastSummary = { employeesCount, risksTotal, exp30, exp60 };
-
-        // Doporučení se odvíjí hlavně od expirací, ale souhrn je ok mít hotový
-        renderWarnings();
-        renderRecommendations();
-
-        el.summaryMsg.textContent = (mode === "TEST")
-          ? "Souhrn z TEST dat."
-          : "Souhrn načten z API.";
-
-      } catch(err){
-        el.summaryMsg.innerHTML = `<div class="danger"><b>Souhrn se nepodařilo načíst.</b><br>${escapeHtml(err.message)}</div>`;
-        setStatus("bad", "Chyba dat");
-        setDiag(`Chyba při načítání souhrnu: ${err.message}`);
-      }
-    }
-
-    // ====== Expirace ======
-    async function loadExpirations(companyId){
+    async function loadExpirationsForCompany(){
       const days = Number(el.daysInput.value || 60);
-      if (!companyId){
-        el.expState.textContent = "Vyber firmu.";
+
+      if (!currentCompanyName){
         clearExpirations("Vyber firmu.");
         lastExpirations = [];
         renderWarnings();
@@ -1132,230 +1012,337 @@
         return;
       }
 
-      el.expState.textContent = "Načítám…";
-      clearExpirations("Načítám…");
+      el.expState.textContent = "Počítám z dat zaměstnanců…";
+      el.expTbody.innerHTML = `<tr><td colspan="5" class="note">Počítám…</td></tr>`;
 
-      try{
-        let items;
-        if (mode === "TEST"){
-          items = testExpirations(companyId, days);
-        } else {
-          items = await apiGet(API.companyExpirations(companyId, days));
-        }
+      // vezmeme firmy z employee dat
+      const all = flattenExpirationsFromEmployees(companyEmployees);
+      const today = new Date();
 
-        if (!Array.isArray(items)) throw new Error("Expirace nejsou pole (array).");
+      const filtered = all.filter(it => {
+        const d = new Date(it.expiresAt);
+        if (isNaN(d.getTime())) return false;
+        const left = daysBetween(today, d);
+        return left <= days;
+      });
 
-        lastExpirations = items;
+      filtered.sort((a,b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
+      lastExpirations = filtered;
 
-        renderWarnings();
-        renderRiskIssues();
-        renderRecommendations();
+      renderWarnings();
+      renderRiskIssues();
+      renderRecommendations();
 
-        const today = new Date();
-        items.sort((a,b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
-
-        if (items.length === 0){
-          el.expState.textContent = `Nic do ${days} dnů.`;
-          clearExpirations(`Žádné expirace do ${days} dnů.`);
-          return;
-        }
-
-        el.expState.textContent = `Nalezeno: ${items.length} (do ${days} dnů)`;
-
-        el.expTbody.innerHTML = items.map(it => {
-          const exp = new Date(it.expiresAt);
-          const left = daysBetween(today, exp);
-          const badge = badgeForDaysLeft(left);
-
-          const employeeName = it.employeeName || it.employee || "—";
-          const trainingName = it.trainingName || it.training || "—";
-          const employeeId = it.employeeId || it.employee_id || "";
-
-          const dateText = formatDateISO(it.expiresAt);
-
-          return `
-            <tr>
-              <td>${escapeHtml(dateText)}</td>
-              <td><span class="${badge.cls}">${escapeHtml(badge.text)}</span></td>
-              <td>${escapeHtml(employeeName)}</td>
-              <td>${escapeHtml(trainingName)}</td>
-              <td><button class="btn" data-employee-id="${escapeHtml(employeeId)}">Otevřít</button></td>
-            </tr>
-          `;
-        }).join("");
-
-        el.expTbody.querySelectorAll("button[data-employee-id]").forEach(btn => {
-          btn.addEventListener("click", () => {
-            const empId = btn.getAttribute("data-employee-id") || "";
-            if (!empId){
-              alert("Chybí employeeId – backend ho v expiracích neposlal.");
-              return;
-            }
-            localStorage.setItem(LS.employeeId, empId);
-            window.location.href = "employee.html";
-          });
-        });
-
-      } catch(err){
-        el.expState.textContent = "Chyba";
-        el.expTbody.innerHTML = `<tr><td colspan="5"><div class="danger"><b>Expirace se nepodařilo načíst.</b><br>${escapeHtml(err.message)}</div></td></tr>`;
-        setStatus("bad", "Chyba dat");
-        setDiag(`Chyba při načítání expirací: ${err.message}`);
+      if (filtered.length === 0){
+        el.expState.textContent = `Žádné expirace do ${days} dnů.`;
+        el.expTbody.innerHTML = `<tr><td colspan="5" class="note">Žádné expirace do ${days} dnů.</td></tr>`;
+        return;
       }
-    }
-// ====== Helper: kritické riziko = 14 dní + jen kritické + scroll ======
-function focusCriticalRisks(){
-  // 0) Bez firmy to nedává smysl
-  if (!currentCompanyId){
-    alert("Nejdřív vyber firmu.");
-    return;
-  }
 
-  // 1) nastavíme 14 dní
-  el.daysInput.value = 14;
+      el.expState.textContent = `Nalezeno: ${filtered.length} (do ${days} dnů)`;
 
-  // 2) zaškrtneme „jen kritické“
-  el.chkCriticalOnly.checked = true;
+      el.expTbody.innerHTML = filtered.map(it => {
+        const exp = new Date(it.expiresAt);
+        const left = daysBetween(today, exp);
+        const badge = badgeForDaysLeft(left);
 
-  // 3) načteme expirace (to přepočítá i rizika + varovný panel + doporučení)
-  // schválně bez await: je to UX akce, UI se aktualizuje po doběhu fetch/test výpočtu
-  loadExpirations(currentCompanyId);
+        const dateText = formatDateISO(it.expiresAt);
+        return `
+          <tr>
+            <td>${escapeHtml(dateText)}</td>
+            <td><span class="${badge.cls}">${escapeHtml(badge.text)}</span></td>
+            <td>${escapeHtml(it.employeeName || "—")}</td>
+            <td>${escapeHtml(it.trainingName || "—")}</td>
+            <td><button class="btn" data-employee-id="${escapeHtml(it.employeeId || "")}">Otevřít</button></td>
+          </tr>
+        `;
+      }).join("");
 
-  // 4) scroll na box Rizika (krátká prodleva, aby už bylo co vidět)
-  setTimeout(() => {
-    document.getElementById("boxRiskIssues")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, 150);
-}
-
-    function initRiskIssuesBox(){
-      el.chkCriticalOnly.addEventListener("change", () => {
-        renderRiskIssues();
+      el.expTbody.querySelectorAll("button[data-employee-id]").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const empId = btn.getAttribute("data-employee-id") || "";
+          if (!empId){
+            alert("Chybí employeeId – v expiracích není identifikátor pracovníka.");
+            return;
+          }
+          localStorage.setItem(LS.employeeId, empId);
+          window.location.href = "employee.html";
+        });
       });
     }
 
-    // ====== Kompletní reload firmy ======
+    function renderSummaryForCompany(){
+      clearSummary();
+
+      if (!currentCompanyName){
+        el.summaryMsg.textContent = "Vyber firmu.";
+        return;
+      }
+
+      // vypočítáme KPI z companyEmployees
+      const employeesCount = companyEmployees.length;
+
+      const expAll = flattenExpirationsFromEmployees(companyEmployees);
+      const today = new Date();
+
+      let exp30 = 0;
+      let exp60 = 0;
+      let risksTotal = 0; // součet „problémových“ školení (<=30, včetně prošlých)
+
+      for (const it of expAll){
+        const d = new Date(it.expiresAt);
+        if (isNaN(d.getTime())) continue;
+        const left = daysBetween(today, d);
+
+        if (left <= 30) { exp30++; risksTotal++; }
+        if (left <= 60) { exp60++; }
+      }
+
+      el.kpiEmployees.textContent = String(employeesCount);
+      el.kpiRisks.textContent = String(risksTotal);
+      el.kpiExp30.textContent = String(exp30);
+      el.kpiExp60.textContent = String(exp60);
+
+      el.kpiEmployeesSub.textContent = "Počet evidovaných osob";
+      el.kpiRisksSub.textContent = "Školení s expirací do 30 dnů (vč. prošlých)";
+      el.kpiExp30Sub.textContent = "Počet školení do 30 dnů";
+      el.kpiExp60Sub.textContent = "Počet školení do 60 dnů";
+
+      el.summaryMsg.textContent = (mode === "TEST")
+        ? "Souhrn z TEST dat."
+        : "Souhrn z dat /api/employees (bez /api/companies).";
+    }
+
+    function buildCompanyListFromEmployees(items){
+      const map = new Map(); // key->display
+      for (const e of (items || [])){
+        const c = norm(e.company);
+        if (!c) continue;
+        const k = c.toLowerCase();
+        if (!map.has(k)) map.set(k, c);
+      }
+      return Array.from(map.values()).sort((a,b) => a.localeCompare(b, "cs"));
+    }
+
+    function fillCompanySelect(companies){
+      const saved = norm(localStorage.getItem(LS.companyId) || "");
+      el.companySelect.innerHTML = `<option value="">— Vyber firmu —</option>` + companies
+        .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
+        .join("");
+
+      if (saved && companies.some(x => x.toLowerCase() === saved.toLowerCase())){
+        // nastavíme přesně z option (kvůli správnému case)
+        const found = companies.find(x => x.toLowerCase() === saved.toLowerCase());
+        el.companySelect.value = found || "";
+        currentCompanyName = found || "";
+      } else {
+        el.companySelect.value = "";
+        currentCompanyName = "";
+      }
+    }
+
+    function filterEmployeesByCompany(companyName){
+      const key = String(companyName || "").toLowerCase();
+      companyEmployees = (allEmployees || []).filter(e => String(e.company || "").toLowerCase() === key);
+    }
+
+    async function loadEmployeesSource(){
+      if (mode === "TEST"){
+        allEmployees = testEmployees();
+        return;
+      }
+      const data = await apiGetJson("/api/employees");
+      if (!Array.isArray(data)) throw new Error("/api/employees nevrátil pole (array).");
+      allEmployees = data;
+    }
+
+    async function loadCompanies(){
+      el.companySelect.innerHTML = `<option value="">Načítám…</option>`;
+      setDiag("Načítám firmy z employees…");
+
+      try{
+        if (mode === "TEST"){
+          setStatus("ok", "TEST data");
+        } else {
+          setStatus("ok", "API OK");
+        }
+
+        await loadEmployeesSource();
+
+        const companies = buildCompanyListFromEmployees(allEmployees);
+
+        if (companies.length === 0){
+          el.companySelect.innerHTML = `<option value="">— Žádné firmy —</option>`;
+          currentCompanyName = "";
+          setDiag("Nenalezeny žádné firmy v datech zaměstnanců.");
+          return;
+        }
+
+        fillCompanySelect(companies);
+
+        setDiag(`Firmy načteny (${companies.length}) z ${mode === "TEST" ? "TEST" : "/api/employees"}.`);
+      } catch(err){
+        // fallback do TEST
+        mode = "TEST";
+        localStorage.setItem(LS.forceMode, mode);
+
+        allEmployees = testEmployees();
+        const companies = buildCompanyListFromEmployees(allEmployees);
+        fillCompanySelect(companies);
+
+        setStatus("bad", "Chyba API → TEST");
+        setDiag(`API chyba: ${err.message}. Přepínám na TEST data, aby šlo UI používat.`);
+      }
+    }
+
     async function reloadCompanyData(){
       clearSummary();
       clearWarnings();
       clearRiskIssues("Vyber firmu.");
       clearExpirations("Vyber firmu.");
+
       applyRoleToActions();
       renderRecommendations();
 
-      if (!currentCompanyId){
+      if (!currentCompanyName){
         setDiag(`Vyber firmu. Režim: ${mode}. Role: ${currentRole}.`);
         return;
       }
 
-      localStorage.setItem(LS.companyId, currentCompanyId);
-      applyRoleToActions();
+      localStorage.setItem(LS.companyId, currentCompanyName);
 
-      await loadSummary(currentCompanyId);
-      await loadExpirations(currentCompanyId);
+      // firma = filtr zaměstnanců
+      filterEmployeesByCompany(currentCompanyName);
+
+      // souhrn a expirace lokálně
+      renderSummaryForCompany();
+      await loadExpirationsForCompany();
     }
 
-    // ====== Akce ======
+    // ===== Kritické: nastav 14 dní + jen kritické + scroll =====
+    function focusCriticalRisks(){
+      if (!currentCompanyName){
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+
+      el.daysInput.value = 14;
+      el.chkCriticalOnly.checked = true;
+
+      loadExpirationsForCompany();
+
+      setTimeout(() => {
+        document.getElementById("boxRiskIssues")
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }, 150);
+    }
+
+    function initRiskIssuesBox(){
+      el.chkCriticalOnly.addEventListener("change", () => {
+        renderRiskIssues();
+        renderWarnings();
+        renderRecommendations();
+      });
+    }
+
+    // ===== EVENTS =====
     el.companySelect.addEventListener("change", async () => {
-      currentCompanyId = el.companySelect.value || "";
+      currentCompanyName = el.companySelect.value || "";
       await reloadCompanyData();
     });
 
     el.btnReload.addEventListener("click", async () => {
       await loadCompanies();
+      await reloadCompanyData();
     });
 
     el.btnRefreshExp.addEventListener("click", async () => {
-      await loadExpirations(currentCompanyId);
+      await loadExpirationsForCompany();
     });
 
-el.btnShowCritical.addEventListener("click", () => {
-  if (!currentCompanyId){
-    alert("Nejdřív vyber firmu.");
-    return;
-  }
-  focusCriticalRisks();
-});
-
-el.btnGoEmployees.addEventListener("click", (e) => {
-  if (!currentCompanyId){
-    e.preventDefault();
-    alert("Nejdřív vyber firmu.");
-    return;
-  }
-
-  // Pokud je firma v kritickém stavu, pošleme evidenci s focusem na kritické
-  const { expired, exp14, exp30 } = computeWarningCounts();
-
-  let focus = "none";
-  if (expired > 0 || exp14 > 0) focus = "critical14";
-  else if (exp30 > 0) focus = "exp30";
-
-  localStorage.setItem(LS.navFocus, focus);
-});
-
-    el.btnBulkTraining.addEventListener("click", () => {
-      if (!currentCompanyId){
+    el.btnShowCritical.addEventListener("click", () => {
+      if (!currentCompanyName){
         alert("Nejdřív vyber firmu.");
         return;
       }
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      if (!canEdit){
-        alert("Read-only: hromadné školení není povoleno.");
-        return;
-      }
-      window.location.href = "employees.html";
+      focusCriticalRisks();
     });
 
-     // ====== Doporučené kroky – tlačítka (NOVÉ) ======
- el.btnRecCritical.addEventListener("click", () => {
-  if (!currentCompanyId){
-    alert("Nejdřív vyber firmu.");
-    return;
-  }
-  focusCriticalRisks();
-});
-
-
-    el.btnRec30.addEventListener("click", async () => {
-      if (!currentCompanyId){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      el.daysInput.value = 30;
-      await loadExpirations(currentCompanyId);
-    });
-
-    el.btnRecBulk.addEventListener("click", () => {
-      if (!currentCompanyId){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      if (!canEdit){
-        alert("Read-only: hromadné školení není povoleno.");
-        return;
-      }
-      window.location.href = "employees.html";
-    });
-
-    // Klik na "Přejít na evidenci" v BOXu Doporučené kroky
-    // Uložíme do localStorage fokus, aby se evidence mohla rovnou nastavit na správný pohled.
-    el.btnRecEmployees.addEventListener("click", (e) => {
-      if (!currentCompanyId){
+    el.btnGoEmployees.addEventListener("click", (e) => {
+      if (!currentCompanyName){
         e.preventDefault();
         alert("Nejdřív vyber firmu.");
         return;
       }
 
-      const { expired, exp14, exp30 } = computeWarningCounts();
+      // vyhodnotíme fokus dle stavu
+      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
+      let focus = "none";
+      if (expired > 0 || exp14 > 0) focus = "critical14";
+      else if (exp30 > 0) focus = "exp30";
+
+      WA_NAV.set(focus, "dashboard");
+      // navigace proběhne přes href
+    });
+
+    el.btnBulkTraining.addEventListener("click", () => {
+      if (!currentCompanyName){
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
+      if (!canEdit){
+        alert("Read-only: hromadné školení není povoleno.");
+        return;
+      }
+      window.location.href = "employees.html";
+    });
+
+    // Doporučené kroky – tlačítka
+    el.btnRecCritical.addEventListener("click", () => {
+      if (!currentCompanyName){
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+      focusCriticalRisks();
+    });
+
+    el.btnRec30.addEventListener("click", async () => {
+      if (!currentCompanyName){
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+      el.daysInput.value = 30;
+      await loadExpirationsForCompany();
+    });
+
+    el.btnRecBulk.addEventListener("click", () => {
+      if (!currentCompanyName){
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
+      if (!canEdit){
+        alert("Read-only: hromadné školení není povoleno.");
+        return;
+      }
+      window.location.href = "employees.html";
+    });
+
+    el.btnRecEmployees.addEventListener("click", (e) => {
+      if (!currentCompanyName){
+        e.preventDefault();
+        alert("Nejdřív vyber firmu.");
+        return;
+      }
+
+      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
 
       let focus = "none";
       if (expired > 0 || exp14 > 0) focus = "critical14";
       else if (exp30 > 0) focus = "exp30";
 
-      localStorage.setItem(LS.navFocus, focus);
-      // samotná navigace proběhne přes <a href="employees.html">
+      WA_NAV.set(focus, "dashboard");
     });
 
     function setModeButtonsDisabled(disabled){
@@ -1365,13 +1352,14 @@ el.btnGoEmployees.addEventListener("click", (e) => {
 
     el.btnForceTest.addEventListener("click", async () => {
       setDiag("Klik: Přepínám na TEST data…");
-      setStatus("test", "TEST data");
       setModeButtonsDisabled(true);
 
       mode = "TEST";
       localStorage.setItem(LS.forceMode, mode);
+      setStatus("ok", "TEST data");
 
       await loadCompanies();
+      await reloadCompanyData();
 
       setDiag("Hotovo: Režim TEST je aktivní.");
       setModeButtonsDisabled(false);
@@ -1379,31 +1367,35 @@ el.btnGoEmployees.addEventListener("click", (e) => {
 
     el.btnForceApi.addEventListener("click", async () => {
       setDiag("Klik: Přepínám na API…");
-      setStatus("loading", "Načítám…");
       setModeButtonsDisabled(true);
 
       mode = "API";
       localStorage.setItem(LS.forceMode, mode);
+      setStatus("ok", "API OK");
 
       await loadCompanies();
+      await reloadCompanyData();
 
-      setDiag("Hotovo: Pokus o režim API dokončen (pokud API selže, spadne to do TEST).");
+      setDiag("Hotovo: Režim API aktivní (data z /api/employees).");
       setModeButtonsDisabled(false);
     });
 
-    // ====== Start ======
+    // ===== START =====
     (async function init(){
       initRiskIssuesBox();
 
       currentRole = loadRole();
       el.roleBox.textContent = currentRole;
 
-      currentCompanyId = localStorage.getItem(LS.companyId) || "";
+      currentCompanyName = localStorage.getItem(LS.companyId) || "";
 
-      setStatus((mode === "TEST") ? "test" : "loading", (mode === "TEST") ? "TEST data" : "Start…");
-      setDiag(`Start. Režim: ${mode}. Role: ${currentRole}. Uložená firma: ${currentCompanyId || "žádná"}.`);
+      setStatus((mode === "TEST") ? "ok" : "ok", (mode === "TEST") ? "TEST data" : "Start…");
+      setDiag(`Start. Režim: ${mode}. Role: ${currentRole}. Uložená firma: ${currentCompanyName || "žádná"}.`);
 
       await loadCompanies();
+
+      // po loadCompanies se currentCompanyName nastaví podle localStorage, takže jen reload
+      await reloadCompanyData();
     })();
   </script>
 </body>

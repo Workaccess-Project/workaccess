@@ -8,52 +8,27 @@
     "focus": "Svářeč",
     "active": true,
     "createdAt": "2026-02-04T16:07:35.040Z",
+    "updatedAt": "2026-02-05T13:53:41.444Z",
+    "company": "Armina",
+    "email": "armina@armina.cz",
+    "position": "Prodavač",
     "trainings": [
       {
-        "name": "bozp",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
-      },
-      {
-        "name": "bozp",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
-      },
-      {
         "name": "BOZP",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
+        "validFrom": "2023-01-01",
+        "validTo": "2024-01-01"
       },
       {
-        "name": "Nové školení - TEST 1",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
-      },
-      {
-        "name": "BOZP",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
-      },
-      {
-        "name": "POžární ochrana",
+        "name": "Požární ochrana",
         "validFrom": "2026-02-05",
         "validTo": "2029-02-05"
       },
       {
-        "name": "Interní Armina",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
-      },
-      {
-        "name": "TEST ARMINA",
+        "name": "Práce ve výškách",
         "validFrom": "2026-02-05",
         "validTo": "2027-02-05"
       }
-    ],
-    "updatedAt": "2026-02-05T13:53:41.444Z",
-    "company": "Armina",
-    "email": "armina@armina.cz",
-    "position": "Prodavač"
+    ]
   },
   {
     "id": "emp_ml8az52n_zsq8bg",
