@@ -2,1150 +2,1122 @@
 <html lang="cs">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Evidence pracovníků – WORKACCESS</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Zaměstnanci</title>
+
   <style>
-    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:16px; background:#f6f7f9; color:#0f172a; }
-    .bar { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom: 12px; }
-    .pill { display:inline-flex; gap:8px; align-items:center; padding:6px 10px; border:1px solid #e5e7eb; border-radius:999px; background:#fff; }
-    .muted { color:#6b7280; font-size: 14px; }
-    .card { background:#fff; border:1px solid #e5e7eb; border-radius:12px; padding:16px; margin-top: 12px; max-width: 1200px; }
-    table { width:100%; border-collapse:collapse; background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden; }
-    th, td { padding:10px 12px; border-bottom:1px solid #eef2f7; text-align:left; vertical-align: middle; }
-    th { background:#fafafa; font-size: 13px; color:#6b7280; }
-    tr:hover td { background:#fbfdff; }
-    a { color:#0b57d0; text-decoration:none; }
-    a:hover { text-decoration:underline; }
-
-    button, select, input {
-      font-family: inherit;
-      padding:10px 12px;
-      border:1px solid #e5e7eb;
-      border-radius:10px;
-      background:#fff;
-      font-size:14px;
+    :root{
+      --bg:#0b1020;
+      --muted:#8aa0c6;
+      --text:#e8eeff;
+      --accent:#6ea8fe;
+      --danger:#ff6b6b;
+      --warn:#ffd166;
+      --ok:#63e6be;
+      --border:rgba(255,255,255,.08);
+      --shadow:0 10px 25px rgba(0,0,0,.35);
     }
-    button:hover { background:#f1f5f9; cursor:pointer; }
-    button:disabled { opacity:.55; cursor:not-allowed; }
-    .btnTiny { padding:6px 10px; font-size:13px; border-radius:10px; }
-    .btnPrimary { background:#0b5d7d; color:#fff; border-color:#0b5d7d; }
-    .btnPrimary:hover { background:#094e68; }
-    .btnDanger { background:#7f1d1d; color:#fff; border-color:#7f1d1d; }
-    .btnDanger:hover { background:#6b1515; }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(110,168,254,.25), transparent 60%),
+                  radial-gradient(1200px 600px at 80% 20%, rgba(99,230,190,.18), transparent 60%),
+                  var(--bg);
+      color:var(--text);
+      padding:24px;
+    }
+    .wrap{max-width:1100px;margin:0 auto}
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
+      border:1px solid var(--border);
+      border-radius:16px;
+      box-shadow:var(--shadow);
+      overflow:hidden;
+      position:relative;
+    }
+    header{
+      padding:18px 18px 12px;
+      border-bottom:1px solid var(--border);
+      display:flex;
+      gap:12px;
+      align-items:flex-start;
+      justify-content:space-between;
+    }
+    h1{font-size:18px;margin:0;letter-spacing:.2px}
+    .hint{font-size:12px;color:var(--muted);margin:6px 0 0;line-height:1.35}
 
-    .error { background:#fff; border:1px solid #fecaca; color:#991b1b; border-radius:12px; padding:16px; margin-top: 12px; max-width: 1200px; }
+    .nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .pill{
+      padding:6px 10px;border-radius:999px;border:1px solid var(--border);
+      background:rgba(0,0,0,.14);color:var(--muted);font-size:12px;
+    }
+    a.navlink{
+      color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid transparent;
+    }
+    a.navlink.active{
+      color:var(--text);border-color:rgba(110,168,254,.35);background:rgba(110,168,254,.16);
+    }
 
-    /* Riziko pill */
-    .riskPill { display:inline-flex; align-items:center; gap:8px; padding:6px 10px; border-radius:999px; border:1px solid #e5e7eb; background:#fff; font-size: 13px; }
-    .dot { width:10px; height:10px; border-radius:999px; display:inline-block; background:#94a3b8; }
-    .dot.ok { background:#22c55e; }
-    .dot.warn { background:#f59e0b; }
-    .dot.bad { background:#ef4444; }
-    .dot.na { background:#94a3b8; }
+    button{
+      padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+      background:rgba(255,255,255,.06);color:var(--text);cursor:pointer;user-select:none;white-space:nowrap;
+    }
+    button:hover{border-color:rgba(255,255,255,.18)}
+    button.primary{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
+    button:disabled{opacity:.45;cursor:not-allowed}
 
-    /* Filtry */
-    .filterRow { display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top: 10px; }
-    .filterRow button.active { background:#0b5d7d; color:#fff; border-color:#0b5d7d; }
+    .toolbar{
+      padding:14px 18px;
+      display:grid;
+      grid-template-columns: 1fr 220px 170px auto;
+      gap:10px;
+      border-bottom:1px solid var(--border);
+      align-items:end;
+    }
+    input[type="text"], input[type="date"], input[type="number"], select{
+      width:100%;
+      padding:12px 12px;
+      border-radius:12px;
+      border:1px solid var(--border);
+      background:rgba(0,0,0,.18);
+      color:var(--text);
+      outline:none;
+    }
+    input::placeholder{color:rgba(232,238,255,.45)}
+    .toolbar .miniLabel{
+      font-size:11px;
+      color:var(--muted);
+      margin-bottom:6px;
+    }
+    @media (max-width: 980px){
+      .toolbar{grid-template-columns:1fr 1fr; }
+      .toolbar button{grid-column:1 / -1}
+    }
 
-    /* Layout pro bulk */
-    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 900px) { .grid2 { grid-template-columns: 1fr; } }
-    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .w240 { width:240px; }
-    .w180 { width:180px; }
+    .statusLine{padding:0 18px 14px;color:var(--muted);font-size:12px;}
 
-    .tableWrap { max-width: 1200px; }
+    table{width:100%;border-collapse:collapse;font-size:13px;}
+    thead th{
+      text-align:left;padding:10px 18px;color:var(--muted);font-weight:600;
+      border-top:1px solid var(--border);border-bottom:1px solid var(--border);background:rgba(0,0,0,.10);
+    }
+    tbody td{padding:10px 18px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:middle;}
+    tbody tr{cursor:pointer;}
+    tbody tr:hover{background:rgba(110,168,254,.10);}
 
-    /* Templates mini-table */
-    .miniTable { width:100%; border-collapse: collapse; margin-top: 8px; }
-    .miniTable th, .miniTable td { border-bottom:1px solid #eef2f7; padding:8px 10px; }
-    .miniTable th { background:#fafafa; color:#6b7280; font-size: 13px; }
+    .okBadge{display:inline-flex;align-items:center;gap:6px;color:var(--muted);font-size:12px;padding-right:18px;}
+    .okDot{
+      width:10px;height:10px;border-radius:999px;background:rgba(99,230,190,.55);
+      box-shadow:0 0 0 3px rgba(99,230,190,.12);display:inline-block;
+    }
+
+    /* status pill */
+    .st{
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      font-size:12px;
+      color:var(--muted);
+      white-space:nowrap;
+    }
+    .dot{
+      width:10px;height:10px;border-radius:999px;display:inline-block;
+      box-shadow:0 0 0 3px rgba(255,255,255,.06);
+    }
+    .dot.ok{background:rgba(99,230,190,.65); box-shadow:0 0 0 3px rgba(99,230,190,.12);}
+    .dot.warn{background:rgba(255,209,102,.75); box-shadow:0 0 0 3px rgba(255,209,102,.12);}
+    .dot.bad{background:rgba(255,107,107,.75); box-shadow:0 0 0 3px rgba(255,107,107,.12);}
+
+    /* Modal */
+    .modalBack{
+      position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;
+      padding:18px;z-index:9999;
+    }
+    .modal{
+      width:min(980px, 100%);
+      background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05));
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      box-shadow:0 20px 50px rgba(0,0,0,.55);
+      overflow:hidden;
+    }
+    .modalHead{
+      padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.10);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+    }
+    .modalHead strong{font-size:14px}
+    .iconbtn{width:38px;height:34px;display:inline-grid;place-items:center;padding:0;}
+    .modalBody{padding:14px 16px}
+    .grid{display:grid;grid-template-columns: 1fr 1fr;gap:12px;}
+    .field{
+      border:1px solid rgba(255,255,255,.10);border-radius:14px;padding:12px 12px;
+      background:rgba(0,0,0,.10);min-width:0;
+    }
+    .field .label{font-size:11px;color:var(--muted);margin-bottom:6px;}
+    .field .value{font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+
+    .trainingsBox{
+      margin-top:12px;border:1px solid rgba(255,255,255,.10);border-radius:14px;background:rgba(0,0,0,.10);overflow:hidden;
+    }
+    .trainingsHead{
+      padding:12px 12px;display:flex;align-items:center;justify-content:space-between;
+      border-bottom:1px solid rgba(255,255,255,.10);color:var(--muted);font-size:12px;
+    }
+    .trainingItem{padding:12px 12px;border-bottom:1px solid rgba(255,255,255,.08);}
+    .trainingItem:last-child{border-bottom:0}
+    .trainingTitle{
+      font-size:13px;color:var(--text);display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    }
+    .tag{
+      font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
+      color:var(--muted);background:rgba(0,0,0,.12);
+    }
+    .trainingDates{margin-top:6px;font-size:12px;color:var(--muted);}
+
+    .rowBtns{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+    .btnSmall{
+      padding:6px 10px;border-radius:999px;font-size:12px;border:1px solid rgba(255,255,255,.12);
+      background:rgba(255,255,255,.06);
+    }
+    .btnDanger{background:rgba(255,107,107,.12);}
+    .btnQuick{background:rgba(110,168,254,.14);border-color:rgba(110,168,254,.25);}
+    .btnQuick2{background:rgba(99,230,190,.12);border-color:rgba(99,230,190,.25);}
+
+    .editBox{
+      margin-top:10px;
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:12px;
+      padding:10px;
+      background:rgba(0,0,0,.10);
+      display:grid;
+      grid-template-columns: 1fr 180px 180px auto auto;
+      gap:10px;
+      align-items:end;
+    }
+    .editBox .miniLabel{font-size:11px;color:var(--muted);margin-bottom:6px;}
+    .editBox .col{min-width:0;}
+    @media (max-width: 820px){
+      .grid{grid-template-columns:1fr}
+      .editBox{grid-template-columns: 1fr 1fr; }
+      .editBox button{grid-column:1 / -1}
+    }
+
+    .addTrainingBox{
+      margin-top:12px;border:1px solid rgba(110,168,254,.22);border-radius:14px;background:rgba(110,168,254,.06);overflow:hidden;
+    }
+    .addTrainingHead{
+      padding:12px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px;border-bottom:1px solid rgba(255,255,255,.10);
+    }
+    .addTrainingForm{
+      padding:12px 12px;display:grid;grid-template-columns: 1fr 180px 180px auto;gap:10px;align-items:end;
+    }
+    .addTrainingForm .help{grid-column: 1 / -1;font-size:12px;color:var(--muted);margin:0;}
+    @media (max-width: 820px){
+      .addTrainingForm{grid-template-columns: 1fr 1fr; }
+      .addTrainingForm button{grid-column:1 / -1}
+    }
+
+    .modalFoot{padding:12px 16px 16px;display:flex;justify-content:flex-end;gap:10px;border-top:1px solid rgba(255,255,255,.10);}
   </style>
 </head>
+
 <body>
+  <div class="wrap">
+    <div class="card">
+      <header>
+        <div>
+          <div class="nav">
+            <span class="pill" style="color:var(--text)">WORKACCESS</span>
+            <a class="navlink" href="./dashboard.html">Dashboard</a>
+            <a class="navlink active" href="./employees.html">Zaměstnanci</a>
+            <a class="navlink" href="./index.html">TODO</a>
+          </div>
+          <h1 style="margin-top:10px">Zaměstnanci</h1>
+          <div class="hint">Seznam je z backendu: <span class="pill">/api/employees</span></div>
+        </div>
 
-  <div class="bar">
-    <span class="pill">
-      <span class="muted">Role (DEMO):</span>
-      <select id="roleSelect">
-        <option value="HR">HR</option>
-        <option value="MANAGER">Manažer</option>
-        <option value="SAFETY">Bezpečnost</option>
-        <option value="EXTERN">Externista</option>
-      </select>
-    </span>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+          <div class="pill">Role: <span id="roleLabel" style="color:var(--text)">—</span></div>
+          <button id="btnChangeRole">Změnit roli</button>
+        </div>
+      </header>
 
-    <span class="pill">
-      <span class="muted">Aktuálně:</span>
-      <strong id="roleLabel">…</strong>
-    </span>
+      <div class="toolbar">
+        <div>
+          <div class="miniLabel">Hledat</div>
+          <input id="q" type="text" placeholder="Hledat (jméno, email, oddělení)..." autocomplete="off" />
+        </div>
 
-    <span class="pill">
-      <span class="muted">Práva:</span>
-      <span id="perms">…</span>
-    </span>
+        <div>
+          <div class="miniLabel">Filtr</div>
+          <select id="filterMode">
+            <option value="all">Všichni</option>
+            <option value="expired">Propadlé</option>
+            <option value="expiring">Končí brzy</option>
+            <option value="ok">OK</option>
+          </select>
+        </div>
 
-    <!-- Firma filtr z dashboardu -->
-    <span class="pill" id="companyFilterPill" style="display:none;">
-      <span class="muted">Firma:</span>
-      <strong id="companyFilterLabel">—</strong>
-      <button id="btnClearCompanyFilter" type="button" class="btnTiny btnDanger">Zrušit filtr firmy</button>
-    </span>
-  </div>
+        <div>
+          <div class="miniLabel">Končí brzy (dní)</div>
+          <input id="expDays" type="number" min="0" value="30" />
+        </div>
 
-  <div id="errorBox" class="error" style="display:none;"></div>
-
-  <div id="navInfo" class="card" style="display:none; border-left: 6px solid #0b5d7d;">
-    <div style="display:flex; justify-content:space-between; align-items:center; gap:10px;">
-      <div>
-        <strong id="navInfoTitle">Otevřeno z dashboardu</strong>
-        <div id="navInfoText" class="muted" style="margin-top:6px;"></div>
-      </div>
-      <button id="navInfoClose" type="button" class="btnTiny">Zavřít</button>
-    </div>
-  </div>
-
-  <!-- BOX: Přehled rizik školení -->
-  <div id="riskBox" class="card" style="display:none;">
-    <h2 style="margin:0 0 10px 0; font-size: 18px;">Přehled školení (rychle)</h2>
-
-    <div class="row" style="margin-bottom:10px;">
-      <span class="pill">Celkem: <strong id="sumAll">0</strong></span>
-      <span class="pill">Expirované: <strong id="sumBad">0</strong></span>
-      <span class="pill">Brzy expiruje: <strong id="sumWarn">0</strong></span>
-      <span class="pill">Bez problému: <strong id="sumOk">0</strong></span>
-      <span class="pill">Bez školení: <strong id="sumNone">0</strong></span>
-      <span class="pill">Bez dat: <strong id="sumNoData">0</strong></span>
-
-      <button id="btnLoadAllTrainings" type="button" class="btnTiny btnPrimary" style="display:none;">
-        Načíst školení všem
-      </button>
-    </div>
-
-    <div class="filterRow">
-      <button type="button" class="active" data-filter="all">Všichni</button>
-      <button type="button" data-filter="problem">Problémové</button>
-      <button type="button" data-filter="bad">Expirované</button>
-      <button type="button" data-filter="warn">Brzy expiruje</button>
-      <button type="button" data-filter="none">Bez školení</button>
-      <button type="button" data-filter="nodata">Bez dat</button>
-
-      <span class="pill">
-        <span class="muted">Hledat:</span>
-        <input id="search" placeholder="Jméno / firma / ID" style="width:320px; max-width:100%;">
-      </span>
-    </div>
-
-    <div id="bulkMsgLoad" class="muted" style="margin-top:10px;"></div>
-    <div class="muted" style="margin-top:6px;">
-      Tip: „Bez dat“ znamená, že seznam z API neposlal pole <code>trainings</code>. Lze doplnit tlačítkem „Načíst školení“ nebo „Načíst školení všem“.
-    </div>
-  </div>
-
-  <!-- BOX: Hromadné školení + šablony firmy (jen HR/Manažer) -->
-  <div id="bulkBox" class="card" style="display:none;">
-    <h2 style="margin:0 0 10px 0; font-size: 18px;">Hromadné školení (HR / Manažer)</h2>
-
-    <div class="row" style="margin-bottom:10px;">
-      Vybráno: <strong id="bulkCount">0</strong> zaměstnanců
-      <button id="btnSelectAll" type="button" class="btnTiny">Vybrat vše (viditelné)</button>
-      <button id="btnClearSel" type="button" class="btnTiny">Zrušit výběr</button>
-
-      <span class="pill" id="tplCompanyPill" style="display:none;">
-        <span class="muted">Firma pro šablony:</span>
-        <select id="tplCompanySelect"></select>
-      </span>
-
-      <span class="pill">
-        <span class="muted">Aktivní firma:</span>
-        <strong id="tplCompanyLabel">—</strong>
-      </span>
-    </div>
-
-    <div class="grid2">
-      <div class="row">
-        <select id="bulkTemplate" class="w240">
-          <option value="">— vyber šablonu —</option>
-        </select>
-
-        <input id="bulkName" class="w240" placeholder="Nebo napiš název školení">
+        <button class="primary" id="btnLoad">Načíst</button>
       </div>
 
-      <div class="row">
-        <input id="bulkFrom" class="w180" type="date">
-        <input id="bulkTo" class="w180" type="date">
-        <button id="bulkAddBtn" class="btnPrimary">Přidat vybraným</button>
-      </div>
-    </div>
-
-    <div class="muted" style="margin-top:10px;">
-      Tip: Šablony jsou <strong>per firma</strong> a ukládají se do <code>localStorage</code>. Pokud školení už existuje, automaticky se <strong>prodlouží</strong> (nevytvoří duplicitu).
-    </div>
-
-    <div id="bulkMsg" class="muted" style="margin-top:10px;"></div>
-
-    <!-- Správa šablon firmy -->
-    <div class="card" style="margin-top:12px;">
-      <h3 style="margin:0 0 8px 0; font-size: 16px;">Šablony firmy</h3>
-      <div class="muted">Tady si HR/Manažer upraví šablony pro vybranou firmu. (Zatím v localStorage.)</div>
-
-      <div class="row" style="margin-top:10px;">
-        <input id="tplName" class="w240" placeholder="Název (např. BOZP)">
-        <input id="tplMonths" class="w180" type="number" min="1" step="1" placeholder="Měsíce (např. 12)">
-        <button id="tplAddBtn" type="button">Přidat šablonu</button>
-        <button id="tplResetBtn" type="button" class="btnTiny">Reset na výchozí</button>
+      <div class="statusLine">
+        <span id="statusText">—</span>
+        <span style="float:right" class="okBadge" id="okBadge" hidden><span class="okDot"></span>Hotovo</span>
       </div>
 
-      <div id="tplMsg" class="muted" style="margin-top:8px;"></div>
-
-      <table class="miniTable" id="tplTable">
+      <table>
         <thead>
           <tr>
-            <th>Název</th>
-            <th>Platnost (měsíce)</th>
-            <th style="width:120px;">Akce</th>
+            <th style="width:22%">Jméno</th>
+            <th style="width:28%">Email</th>
+            <th style="width:22%">Oddělení</th>
+            <th style="width:18%">Pozice</th>
+            <th>Stav</th>
           </tr>
         </thead>
-        <tbody id="tplTbody"></tbody>
+        <tbody id="rows"></tbody>
       </table>
     </div>
   </div>
 
-  <!-- BOX: Přidat pracovníka -->
-  <div id="addCard" class="card" style="display:none;">
-    <h2 style="margin:0 0 10px 0; font-size: 18px;">Přidat pracovníka</h2>
-    <div class="row" style="margin:0;">
-      <input id="firstName" class="w240" placeholder="Jméno" />
-      <input id="lastName" class="w240" placeholder="Příjmení" />
-      <input id="company" class="w240" placeholder="Společnost" />
-      <button id="btnAdd">Přidat</button>
-    </div>
-    <div class="muted" style="margin-top:10px;">
-      Tip: po kliknutí na jméno se otevře detail <code>employee.html?id=...</code>
+  <!-- Modal: Detail -->
+  <div class="modalBack" id="detailBack" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHead">
+        <strong id="detailTitle">Detail</strong>
+        <button class="iconbtn" id="btnDetailClose" title="Zavřít">✕</button>
+      </div>
+
+      <div class="modalBody">
+        <div class="grid">
+          <div class="field">
+            <div class="label">Jméno</div>
+            <div class="value" id="dName">—</div>
+          </div>
+          <div class="field">
+            <div class="label">Email</div>
+            <div class="value" id="dEmail">—</div>
+          </div>
+          <div class="field">
+            <div class="label">Oddělení / Firma</div>
+            <div class="value" id="dCompany">—</div>
+          </div>
+          <div class="field">
+            <div class="label">Role / Pozice</div>
+            <div class="value" id="dPosition">—</div>
+          </div>
+          <div class="field">
+            <div class="label">ID</div>
+            <div class="value" id="dId">—</div>
+          </div>
+          <div class="field">
+            <div class="label">Aktualizováno</div>
+            <div class="value" id="dUpdatedAt">—</div>
+          </div>
+        </div>
+
+        <div class="trainingsBox" style="margin-top:12px">
+          <div class="trainingsHead">
+            <strong style="color:var(--text); font-weight:700">Školení</strong>
+            <span class="tag" id="dTrainCount">0</span>
+          </div>
+          <div id="dTrainings"></div>
+        </div>
+
+        <!-- Add training -->
+        <div class="addTrainingBox" id="addTrainingBox" hidden>
+          <div class="addTrainingHead">
+            <strong style="color:var(--text); font-weight:700">+ Přidat školení</strong>
+            <span class="tag">POST /api/employees/:id/trainings</span>
+          </div>
+
+          <div class="addTrainingForm">
+            <p class="help">Vyplň název a platnost. Po uložení se detail znovu načte.</p>
+
+            <div>
+              <div class="label" style="margin-bottom:6px;color:var(--muted);font-size:11px;">Název školení</div>
+              <input id="tName" type="text" placeholder="Např. BOZP" />
+            </div>
+
+            <div>
+              <div class="label" style="margin-bottom:6px;color:var(--muted);font-size:11px;">Platí od</div>
+              <input id="tFrom" type="date" />
+            </div>
+
+            <div>
+              <div class="label" style="margin-bottom:6px;color:var(--muted);font-size:11px;">Platí do</div>
+              <input id="tTo" type="date" />
+            </div>
+
+            <button class="primary" id="btnSaveTraining">Uložit školení</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="modalFoot">
+        <button id="btnDetailClose2">Zavřít</button>
+      </div>
     </div>
   </div>
 
-  <div class="tableWrap">
-    <table>
-      <thead>
-        <tr>
-          <th style="width:44px;"><input type="checkbox" id="checkAll"></th>
-          <th>Jméno</th>
-          <th>Společnost</th>
-          <th>Riziko</th>
-          <th>ID</th>
-          <th>Akce</th>
-        </tr>
-      </thead>
-      <tbody id="tbody"></tbody>
-    </table>
+  <!-- Modal: Role -->
+  <div class="modalBack" id="roleBack" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal" style="width:min(820px,100%)">
+      <div class="modalHead">
+        <strong>Vyber roli (DEMO)</strong>
+        <button class="iconbtn" id="btnRoleClose" title="Zavřít">✕</button>
+      </div>
+      <div class="modalBody">
+        <div class="hint" style="margin:0 0 10px">
+          Demo přihlášení. Role se ukládá do localStorage a posílá se do backendu v hlavičce <span class="pill">x-role</span>.
+        </div>
+        <select id="roleSelect" style="width:100%; padding:12px 12px; border-radius:12px; border:1px solid rgba(255,255,255,.14); background:rgba(0,0,0,.22); color:var(--text); outline:none; font-size:14px;">
+          <option value="hr">HR</option>
+          <option value="security">Bezpečnost</option>
+          <option value="manager">Manažer</option>
+          <option value="external">Externista</option>
+        </select>
+      </div>
+      <div class="modalFoot">
+        <button id="btnRoleCancel">Zrušit</button>
+        <button class="primary" id="btnRoleApply">Použít roli</button>
+      </div>
+    </div>
   </div>
-
-  <!-- helper pro navigaci -->
-  <script src="js/wa_nav.js"></script>
 
   <script>
-    // ===== DOM =====
+    const API_BASE = "http://localhost:3000/api/employees";
+
+    const LS_ROLE = "workaccess.portal.role";
+    const ROLE_LABELS = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
+
+    let role = localStorage.getItem(LS_ROLE) || "hr";
+
+    let employees = [];
+    let selectedEmployeeId = null;
+
+    // edit state
+    let editingTrainingId = null;
+    let editDraft = { name: "", validFrom: "", validTo: "" };
+
+    // UI
+    const elRoleLabel = document.getElementById("roleLabel");
+    const elBtnChangeRole = document.getElementById("btnChangeRole");
+    const elQ = document.getElementById("q");
+    const elFilterMode = document.getElementById("filterMode");
+    const elExpDays = document.getElementById("expDays");
+    const elBtnLoad = document.getElementById("btnLoad");
+    const elRows = document.getElementById("rows");
+    const elStatusText = document.getElementById("statusText");
+    const elOkBadge = document.getElementById("okBadge");
+
+    // Detail modal
+    const detailBack = document.getElementById("detailBack");
+    const btnDetailClose = document.getElementById("btnDetailClose");
+    const btnDetailClose2 = document.getElementById("btnDetailClose2");
+    const elDetailTitle = document.getElementById("detailTitle");
+
+    const dName = document.getElementById("dName");
+    const dEmail = document.getElementById("dEmail");
+    const dCompany = document.getElementById("dCompany");
+    const dPosition = document.getElementById("dPosition");
+    const dId = document.getElementById("dId");
+    const dUpdatedAt = document.getElementById("dUpdatedAt");
+    const dTrainCount = document.getElementById("dTrainCount");
+    const dTrainings = document.getElementById("dTrainings");
+
+    const addTrainingBox = document.getElementById("addTrainingBox");
+    const tName = document.getElementById("tName");
+    const tFrom = document.getElementById("tFrom");
+    const tTo = document.getElementById("tTo");
+    const btnSaveTraining = document.getElementById("btnSaveTraining");
+
+    // Role modal
+    const roleBack = document.getElementById("roleBack");
     const roleSelect = document.getElementById("roleSelect");
-    const roleLabelEl = document.getElementById("roleLabel");
-    const permsEl = document.getElementById("perms");
-    const errorBox = document.getElementById("errorBox");
-    const navInfo = document.getElementById("navInfo");
-    const navInfoTitle = document.getElementById("navInfoTitle");
-    const navInfoText = document.getElementById("navInfoText");
-    const navInfoClose = document.getElementById("navInfoClose");
+    const btnRoleClose = document.getElementById("btnRoleClose");
+    const btnRoleCancel = document.getElementById("btnRoleCancel");
+    const btnRoleApply = document.getElementById("btnRoleApply");
 
-    const companyFilterPill = document.getElementById("companyFilterPill");
-    const companyFilterLabel = document.getElementById("companyFilterLabel");
-    const btnClearCompanyFilter = document.getElementById("btnClearCompanyFilter");
-
-    const riskBox = document.getElementById("riskBox");
-    const sumAll = document.getElementById("sumAll");
-    const sumBad = document.getElementById("sumBad");
-    const sumWarn = document.getElementById("sumWarn");
-    const sumOk = document.getElementById("sumOk");
-    const sumNone = document.getElementById("sumNone");
-    const sumNoData = document.getElementById("sumNoData");
-    const searchInput = document.getElementById("search");
-    const btnLoadAllTrainings = document.getElementById("btnLoadAllTrainings");
-    const bulkMsgLoad = document.getElementById("bulkMsgLoad");
-
-    const bulkBox = document.getElementById("bulkBox");
-    const bulkCount = document.getElementById("bulkCount");
-    const bulkTemplate = document.getElementById("bulkTemplate");
-    const bulkName = document.getElementById("bulkName");
-    const bulkFrom = document.getElementById("bulkFrom");
-    const bulkTo = document.getElementById("bulkTo");
-    const bulkAddBtn = document.getElementById("bulkAddBtn");
-    const bulkMsg = document.getElementById("bulkMsg");
-    const btnSelectAll = document.getElementById("btnSelectAll");
-    const btnClearSel = document.getElementById("btnClearSel");
-
-    const tplCompanyPill = document.getElementById("tplCompanyPill");
-    const tplCompanySelect = document.getElementById("tplCompanySelect");
-    const tplCompanyLabel = document.getElementById("tplCompanyLabel");
-
-    const tplName = document.getElementById("tplName");
-    const tplMonths = document.getElementById("tplMonths");
-    const tplAddBtn = document.getElementById("tplAddBtn");
-    const tplResetBtn = document.getElementById("tplResetBtn");
-    const tplMsg = document.getElementById("tplMsg");
-    const tplTbody = document.getElementById("tplTbody");
-
-    const addCard = document.getElementById("addCard");
-    const btnAdd = document.getElementById("btnAdd");
-    const firstName = document.getElementById("firstName");
-    const lastName = document.getElementById("lastName");
-    const company = document.getElementById("company");
-
-    const tbody = document.getElementById("tbody");
-    const checkAll = document.getElementById("checkAll");
-
-    // ===== state =====
-    let currentFilter = "all";
-    let currentSearch = "";
-    let lastItems = [];
-    let lastMe = null;
-
-    const detailsCache = new Map(); // id -> empDetail
-    const selectedIds = new Set();  // bulk selection
-
-    // aktivní firma pro šablony
-    let activeTplCompany = "";
-    let activeTplCompanyKey = "";
-    let lastTplCompanyKey = "";
-
-    // filtr firmy z dashboardu
-    let activeCompanyFilterRaw = "";
-    let activeCompanyFilterKey = "";
-
-    // ===== templates (per company / localStorage) =====
-    const DEFAULT_TEMPLATES = [
-      { name: "BOZP", months: 12 },
-      { name: "Požární ochrana", months: 24 },
-      { name: "První pomoc", months: 24 },
-      { name: "VZV – řidič", months: 36 },
-      { name: "Práce ve výškách", months: 24 },
-      { name: "Obsluha jeřábu", months: 36 },
-      { name: "Školení řidičů (referenti)", months: 24 }
-    ];
-
-    function normalizeCompanyKey(s) {
-      const v = String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
-      return v || "_nezadano";
+    function headersWithRole() {
+      return {
+        "Content-Type": "application/json",
+        "x-role": role
+      };
     }
 
-    function templatesStorageKey(companyKey) {
-      return "trainingTemplates:" + companyKey;
+    function applyRoleUI() {
+      elRoleLabel.textContent = ROLE_LABELS[role] || role;
     }
 
-    function loadTemplates(companyKey) {
-      const key = templatesStorageKey(companyKey);
-      const raw = localStorage.getItem(key);
-      if (!raw) return null;
-      try {
-        const parsed = JSON.parse(raw);
-        if (!Array.isArray(parsed)) return null;
-        return parsed
-          .map(x => ({ name: String(x.name || "").trim(), months: Number(x.months) }))
-          .filter(x => x.name && Number.isFinite(x.months) && x.months > 0);
-      } catch {
-        return null;
-      }
+    function fmtDate(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      if (String(d) === "Invalid Date") return String(iso);
+      return d.toLocaleString("cs-CZ");
     }
 
-    function saveTemplates(companyKey, list) {
-      const clean = (Array.isArray(list) ? list : [])
-        .map(x => ({ name: String(x.name || "").trim(), months: Number(x.months) }))
-        .filter(x => x.name && Number.isFinite(x.months) && x.months > 0);
-
-      localStorage.setItem(templatesStorageKey(companyKey), JSON.stringify(clean));
+    function normalizeText(s) {
+      return (s ?? "").toString().trim();
     }
 
-    function ensureTemplates(companyKey) {
-      const existing = loadTemplates(companyKey);
-      if (existing && existing.length) return existing;
-      saveTemplates(companyKey, DEFAULT_TEMPLATES);
-      return DEFAULT_TEMPLATES.slice();
+    function displayName(e) {
+      const n = normalizeText(e?.name);
+      if (n) return n;
+      const fn = normalizeText(e?.firstName);
+      const ln = normalizeText(e?.lastName);
+      const joined = [fn, ln].filter(Boolean).join(" ").trim();
+      return joined || "—";
     }
 
-    function setTplMsg(text) {
-      tplMsg.textContent = text || "";
+    function canEditTraining() {
+      return role === "hr" || role === "manager";
     }
 
-    function renderTemplatesUI(companyDisplay, companyKey) {
-      const list = ensureTemplates(companyKey);
-      tplTbody.innerHTML = "";
-
-      list.forEach((t, idx) => {
-        const tr = document.createElement("tr");
-
-        const td1 = document.createElement("td");
-        td1.textContent = t.name;
-
-        const td2 = document.createElement("td");
-        td2.textContent = String(t.months);
-
-        const td3 = document.createElement("td");
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "btnTiny";
-        btn.textContent = "Smazat";
-        btn.addEventListener("click", () => {
-          const next = list.filter((_, i) => i !== idx);
-          saveTemplates(companyKey, next);
-          setTplMsg("Šablona smazána.");
-          syncTemplateDropdown();
-        });
-        td3.appendChild(btn);
-
-        tr.appendChild(td1);
-        tr.appendChild(td2);
-        tr.appendChild(td3);
-        tplTbody.appendChild(tr);
-      });
-
-      tplCompanyLabel.textContent = companyDisplay || "—";
+    function isIsoDateOnly(s) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
     }
 
-    function fillTemplateDropdown(list) {
-      bulkTemplate.innerHTML = "";
-      const opt0 = document.createElement("option");
-      opt0.value = "";
-      opt0.textContent = "— vyber šablonu —";
-      bulkTemplate.appendChild(opt0);
-
-      (list || []).forEach(t => {
-        const o = document.createElement("option");
-        o.value = t.name + "|" + t.months;
-        o.textContent = t.name + " (" + t.months + " měsíců)";
-        bulkTemplate.appendChild(o);
-      });
+    function parseDateOnlyUtc(yyyyMmDd) {
+      if (!isIsoDateOnly(yyyyMmDd)) return null;
+      const [y, m, d] = yyyyMmDd.split("-").map(n => Number(n));
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return String(dt) === "Invalid Date" ? null : dt;
     }
 
-    function getSelectedCompanies() {
-      const map = new Map(); // key -> display
-      selectedIds.forEach(id => {
-        const emp = lastItems.find(x => String(x.id) === String(id));
-        const display = String((emp && emp.company) || "").trim() || "— nezadáno —";
-        const key = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
-        map.set(key, display);
-      });
-      return map;
+    function todayUtcStart() {
+      const n = new Date();
+      return new Date(Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate()));
     }
 
-    function chooseActiveCompanyFromSelection() {
-      const companies = getSelectedCompanies();
+    function daysBetweenUtc(a, b) {
+      const ms = b.getTime() - a.getTime();
+      return Math.floor(ms / (1000 * 60 * 60 * 24));
+    }
 
-      if (companies.size === 0) {
-        const first = lastItems && lastItems[0];
-        const display = String((first && first.company) || "").trim() || "— nezadáno —";
-        const key = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
-        activeTplCompany = display;
-        activeTplCompanyKey = key;
-        return;
+    function todayStrUtc() {
+      const d = new Date();
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function addYearsToDateStr(yyyyMmDd, years) {
+      if (!isIsoDateOnly(yyyyMmDd)) return null;
+      const [y, m, d] = yyyyMmDd.split("-").map(n => Number(n));
+      if (!y || !m || !d) return null;
+      const dt2 = new Date(Date.UTC(y + years, m - 1, d));
+      if (String(dt2) === "Invalid Date") return null;
+      const yy = dt2.getUTCFullYear();
+      const mm = String(dt2.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(dt2.getUTCDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    function trainingStatus(t, expiringDays) {
+      const toDt = parseDateOnlyUtc(t?.validTo);
+      if (!toDt) return { status: "unknown", daysLeft: null };
+
+      const now = todayUtcStart();
+      const dl = daysBetweenUtc(now, toDt);
+
+      if (dl < 0) return { status: "expired", daysLeft: dl };
+      if (dl <= expiringDays) return { status: "expiring", daysLeft: dl };
+      return { status: "ok", daysLeft: dl };
+    }
+
+    function employeeStatus(emp, expiringDays) {
+      const arr = Array.isArray(emp?.trainings) ? emp.trainings : [];
+      let hasExpired = false;
+      let hasExpiring = false;
+      let bestDaysLeft = null;
+
+      for (const t of arr) {
+        const st = trainingStatus(t, expiringDays);
+        if (st.status === "expired") hasExpired = true;
+        else if (st.status === "expiring") hasExpiring = true;
+
+        if (typeof st.daysLeft === "number") {
+          if (bestDaysLeft == null) bestDaysLeft = st.daysLeft;
+          else bestDaysLeft = Math.min(bestDaysLeft, st.daysLeft);
+        }
       }
 
-      const keys = Array.from(companies.keys());
-      if (keys.includes(activeTplCompanyKey)) return;
-
-      const firstKey = keys[0];
-      activeTplCompanyKey = firstKey;
-      activeTplCompany = companies.get(firstKey) || "— nezadáno —";
+      if (hasExpired) return { status: "expired", label: "Propadlé", daysLeft: bestDaysLeft };
+      if (hasExpiring) return { status: "expiring", label: `Končí brzy`, daysLeft: bestDaysLeft };
+      return { status: "ok", label: "OK", daysLeft: bestDaysLeft };
     }
 
-    function syncCompanyPickerUI() {
-      const companies = getSelectedCompanies();
-
-      if (companies.size > 1) {
-        tplCompanyPill.style.display = "inline-flex";
-        tplCompanySelect.innerHTML = "";
-        Array.from(companies.entries()).forEach(([key, display]) => {
-          const o = document.createElement("option");
-          o.value = key;
-          o.textContent = display;
-          tplCompanySelect.appendChild(o);
-        });
-        tplCompanySelect.value = activeTplCompanyKey;
-      } else {
-        tplCompanyPill.style.display = "none";
-        tplCompanySelect.innerHTML = "";
-      }
+    async function apiList() {
+      const res = await fetch(API_BASE, { headers: headersWithRole() });
+      if (!res.ok) throw new Error(`GET /employees failed (${res.status})`);
+      return await res.json();
     }
 
-    function syncTemplateDropdown() {
-      const beforeKey = activeTplCompanyKey;
-
-      chooseActiveCompanyFromSelection();
-
-      if (activeTplCompanyKey && activeTplCompanyKey !== lastTplCompanyKey) {
-        bulkTemplate.value = "";
-        bulkName.value = "";
-        bulkTo.value = "";
-        bulkFrom.value = "";
-        lastTplCompanyKey = activeTplCompanyKey;
-      } else if (beforeKey !== activeTplCompanyKey) {
-        bulkTemplate.value = "";
-        bulkName.value = "";
-        bulkTo.value = "";
-        bulkFrom.value = "";
-        lastTplCompanyKey = activeTplCompanyKey;
-      }
-
-      const list = ensureTemplates(activeTplCompanyKey);
-      fillTemplateDropdown(list);
-      renderTemplatesUI(activeTplCompany, activeTplCompanyKey);
-      syncCompanyPickerUI();
+    async function apiDetail(id) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { headers: headersWithRole() });
+      if (!res.ok) throw new Error(`GET /employees/:id failed (${res.status})`);
+      return await res.json();
     }
 
-    // ===== general helpers =====
-    function setError(msg) {
-      errorBox.style.display = "block";
-      errorBox.textContent = msg || "Chyba.";
-    }
-    function clearError() {
-      errorBox.style.display = "none";
-      errorBox.textContent = "";
-    }
-
-    function getRole() { return localStorage.getItem("demoRole") || "HR"; }
-    function setRole(role) { localStorage.setItem("demoRole", role); }
-
-    function isHrManager(me) {
-      const r = String((me && me.role) || "").toUpperCase();
-      return r === "HR" || r === "MANAGER";
-    }
-
-    function normalizeName(s) {
-      return String(s || "").trim().replace(/\s+/g, " ").toLowerCase();
-    }
-
-    // ===== COMPANY FILTER (dashboard -> evidence) =====
-    function readCompanyFilterFromStorage() {
-      const raw = String(localStorage.getItem("wa_company_id") || "").trim();
-      activeCompanyFilterRaw = raw;
-      activeCompanyFilterKey = raw ? normalizeCompanyKey(raw) : "";
-      updateCompanyFilterUI();
-    }
-
-    function updateCompanyFilterUI() {
-      const on = !!activeCompanyFilterKey;
-      companyFilterPill.style.display = on ? "inline-flex" : "none";
-      if (on) companyFilterLabel.textContent = activeCompanyFilterRaw || "—";
-    }
-
-    function clearCompanyFilter() {
-      localStorage.removeItem("wa_company_id");
-      activeCompanyFilterRaw = "";
-      activeCompanyFilterKey = "";
-      updateCompanyFilterUI();
-
-      // reset výběr (aby nezůstaly selected z jiného filtru)
-      clearSelectionUI();
-
-      if (lastMe) renderRows(lastItems, lastMe);
-      showNavInfo("Filtr firmy zrušen", "Zobrazuji všechny firmy.");
-    }
-
-    if (btnClearCompanyFilter) {
-      btnClearCompanyFilter.addEventListener("click", () => clearCompanyFilter());
-    }
-
-    function matchCompany(emp) {
-      if (!activeCompanyFilterKey) return true;
-      const c = String((emp && emp.company) || "").trim();
-      const key = normalizeCompanyKey(c);
-      return key === activeCompanyFilterKey;
-    }
-
-    // ===== API =====
-    async function apiText(url, opts) {
-      const r = await fetch(url, opts);
-      const text = await r.text();
-      if (!r.ok) throw new Error(url + " → HTTP " + r.status + " → " + text);
-      return text;
-    }
-
-    async function apiMe(role) {
-      const text = await apiText("/api/me", { headers: { "x-role": role } });
-      try { return JSON.parse(text); } catch { return {}; }
-    }
-
-    async function apiList(role) {
-      const text = await apiText("/api/employees", { headers: { "x-role": role } });
-      try { return JSON.parse(text); } catch { return []; }
-    }
-
-    async function apiGetEmployee(role, id) {
-      const text = await apiText("/api/employees/" + encodeURIComponent(id), { headers: { "x-role": role } });
-      try { return JSON.parse(text); } catch { return null; }
-    }
-
-    async function apiPutEmployee(role, id, empObj) {
-      const text = await apiText("/api/employees/" + encodeURIComponent(id), {
-        method: "PUT",
-        headers: { "Content-Type": "application/json", "x-role": role },
-        body: JSON.stringify(empObj)
-      });
-      try { return JSON.parse(text); } catch { return null; }
-    }
-
-    async function apiCreate(role, payload) {
-      const text = await apiText("/api/employees", {
+    async function apiAddTraining(id, payload) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}/trainings`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "x-role": role },
+        headers: headersWithRole(),
         body: JSON.stringify(payload)
       });
-      try { return JSON.parse(text); } catch { return null; }
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`POST /trainings failed (${res.status}) ${txt}`);
+      }
+      return await res.json();
     }
 
-    async function apiDelete(role, id) {
-      const text = await apiText("/api/employees/" + encodeURIComponent(id), {
+    async function apiDeleteTraining(empId, trainingId) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "DELETE",
-        headers: { "x-role": role }
+        headers: headersWithRole(),
       });
-      try { return JSON.parse(text); } catch { return null; }
-    }
-
-    function canWrite(perms, role) {
-      if (Array.isArray(perms)) {
-        if (perms.includes("employees:write") || perms.includes("write") || perms.includes("add") || perms.includes("delete")) return true;
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`DELETE /trainings failed (${res.status}) ${txt}`);
       }
-      return (role === "HR" || role === "MANAGER");
+      return await res.json().catch(() => ({}));
     }
 
-    // ===== risk logic =====
-    function daysUntil(dateStr) {
-      if (!dateStr) return null;
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return null;
-      const today = new Date(); today.setHours(0,0,0,0);
-      d.setHours(0,0,0,0);
-      return Math.round((d - today) / 86400000);
-    }
-
-    function trainingTypeByValidTo(validTo) {
-      const d = daysUntil(validTo);
-      if (d === null) return "ok";
-      if (d < 0) return "bad";
-      if (d <= 30) return "warn";
-      return "ok";
-    }
-
-    function riskForEmployee(emp) {
-      if (!emp || typeof emp !== "object") return { key:"nodata", label:"Bez dat", dot:"na" };
-      if (!("trainings" in emp)) return { key:"nodata", label:"Bez dat", dot:"na" };
-
-      const tr = Array.isArray(emp.trainings) ? emp.trainings : [];
-      if (!tr.length) return { key:"none", label:"Bez školení", dot:"na" };
-
-      let hasBad = false, hasWarn = false;
-      tr.forEach(t => {
-        const type = trainingTypeByValidTo(t && t.validTo);
-        if (type === "bad") hasBad = true;
-        if (type === "warn") hasWarn = true;
+    async function apiUpdateTraining(empId, trainingId, payload) {
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+        method: "PUT",
+        headers: headersWithRole(),
+        body: JSON.stringify(payload),
       });
-
-      if (hasBad) return { key:"bad", label:"Expirované", dot:"bad" };
-      if (hasWarn) return { key:"warn", label:"Brzy expiruje", dot:"warn" };
-      return { key:"ok", label:"Bez problému", dot:"ok" };
-    }
-
-    function setRiskPill(td, risk) {
-      td.innerHTML = "";
-      const pill = document.createElement("span");
-      pill.className = "riskPill";
-
-      const dot = document.createElement("span");
-      dot.className = "dot " + (risk.dot || "na");
-
-      const lab = document.createElement("span");
-      lab.textContent = risk.label;
-
-      pill.appendChild(dot);
-      pill.appendChild(lab);
-      td.appendChild(pill);
-    }
-
-    function matchSearch(emp, text) {
-      if (!text) return true;
-      const q = text.trim().toLowerCase();
-      if (!q) return true;
-
-      const fullName = (((emp.firstName || emp.firstname || "") + " " + (emp.lastName || emp.lastname || "")).trim() || (emp.name || "")).toLowerCase();
-      const comp = String(emp.company || "").toLowerCase();
-      const id = String(emp.id || "").toLowerCase();
-
-      return fullName.includes(q) || comp.includes(q) || id.includes(q);
-    }
-
-    function matchFilter(riskKey) {
-      if (currentFilter === "all") return true;
-      if (currentFilter === "problem") return (riskKey === "bad" || riskKey === "warn");
-      return riskKey === currentFilter;
-    }
-
-    function recomputeSummary(items) {
-      const counts = { all: items.length, ok: 0, warn: 0, bad: 0, none: 0, nodata: 0 };
-      items.forEach(emp => {
-        const r = riskForEmployee(emp);
-        counts[r.key] = (counts[r.key] || 0) + 1;
-      });
-
-      sumAll.textContent = counts.all;
-      sumBad.textContent = counts.bad || 0;
-      sumWarn.textContent = counts.warn || 0;
-      sumOk.textContent = counts.ok || 0;
-      sumNone.textContent = counts.none || 0;
-      sumNoData.textContent = counts.nodata || 0;
-
-      return counts;
-    }
-
-    function updateBulkCount() {
-      bulkCount.textContent = String(selectedIds.size);
-    }
-
-    function clearSelectionUI() {
-      selectedIds.clear();
-      updateBulkCount();
-      checkAll.checked = false;
-      tbody.querySelectorAll("input[data-emp-check]").forEach(cb => { cb.checked = false; });
-      syncTemplateDropdown();
-    }
-
-    // ===== render =====
-    function renderRows(items, me) {
-      tbody.innerHTML = "";
-
-      // 1) nejdřív omezíme na firmu (pokud je z dashboardu nastavena)
-      const byCompany = (items || []).filter(matchCompany);
-
-      const counts = recomputeSummary(byCompany);
-      riskBox.style.display = "block";
-
-      const hrm = isHrManager(me);
-      btnLoadAllTrainings.style.display = hrm ? "inline-block" : "none";
-      if (hrm) {
-        btnLoadAllTrainings.disabled = (counts.nodata === 0);
-        btnLoadAllTrainings.textContent = (counts.nodata === 0) ? "Vše doplněno" : "Načíst školení všem";
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`PUT /trainings failed (${res.status}) ${txt}`);
       }
-
-      bulkBox.style.display = hrm ? "block" : "none";
-
-      const enriched = byCompany.map(emp => ({ emp, risk: riskForEmployee(emp) }));
-      const filtered = enriched.filter(x => matchFilter(x.risk.key) && matchSearch(x.emp, currentSearch));
-
-      filtered.forEach(({ emp, risk }) => {
-        const tr = document.createElement("tr");
-
-        // checkbox
-        const tdCb = document.createElement("td");
-        const cb = document.createElement("input");
-        cb.type = "checkbox";
-        cb.dataset.empCheck = "1";
-        cb.dataset.empId = emp.id;
-        cb.checked = selectedIds.has(emp.id);
-
-        cb.addEventListener("change", () => {
-          if (cb.checked) selectedIds.add(emp.id);
-          else selectedIds.delete(emp.id);
-
-          updateBulkCount();
-          syncTemplateDropdown();
-        });
-
-        tdCb.appendChild(cb);
-
-        // name
-        const tdName = document.createElement("td");
-        const fullName =
-          ((emp.firstName || emp.firstname || "") + " " + (emp.lastName || emp.lastname || "")).trim()
-          || (emp.name || "Pracovník");
-        const a = document.createElement("a");
-        a.href = "/employee.html?id=" + encodeURIComponent(emp.id);
-        a.textContent = fullName;
-        tdName.appendChild(a);
-
-        // company
-        const tdCompany = document.createElement("td");
-        tdCompany.textContent = emp.company || "—";
-
-        // risk
-        const tdRisk = document.createElement("td");
-        setRiskPill(tdRisk, risk);
-
-        // id
-        const tdId = document.createElement("td");
-        tdId.textContent = emp.id;
-
-        // actions
-        const tdActions = document.createElement("td");
-        if (me._canWrite) {
-          const btnDel = document.createElement("button");
-          btnDel.textContent = "Smazat";
-          btnDel.addEventListener("click", async () => {
-            if (!confirm("Opravdu smazat pracovníka?")) return;
-            try {
-              clearError();
-              await apiDelete(me.role, emp.id);
-              await reload();
-            } catch (e) {
-              setError(e && e.message ? e.message : "Chyba při mazání.");
-            }
-          });
-          tdActions.appendChild(btnDel);
-        } else {
-          tdActions.textContent = "—";
-        }
-
-        tr.appendChild(tdCb);
-        tr.appendChild(tdName);
-        tr.appendChild(tdCompany);
-        tr.appendChild(tdRisk);
-        tr.appendChild(tdId);
-        tr.appendChild(tdActions);
-
-        tbody.appendChild(tr);
-      });
-
-      updateBulkCount();
-      syncTemplateDropdown();
+      return await res.json().catch(() => ({}));
     }
 
-    // ===== bulk add training (WITH DEDUPE) =====
-    function addMonthsToDateStr(dateStr, months) {
-      if (!dateStr) return null;
-      const d = new Date(dateStr);
-      if (isNaN(d.getTime())) return null;
-      const day = d.getDate();
-      d.setMonth(d.getMonth() + months);
-      if (d.getDate() !== day) d.setDate(0);
-      return d.toISOString().slice(0,10);
-    }
-
-    function parseTemplateValue(v) {
-      const parts = String(v || "").split("|");
-      if (parts.length < 2) return null;
-      const name = parts[0].trim();
-      const months = Number(parts[1]);
-      if (!name || !Number.isFinite(months)) return null;
-      return { name, months };
-    }
-
-    function dateStrToTime(s) {
-      if (!s) return null;
-      const d = new Date(s);
-      if (isNaN(d.getTime())) return null;
-      return d.getTime();
-    }
-
-    function mergeTraining(trainings, newItem) {
-      const list = Array.isArray(trainings) ? trainings : [];
-      const nn = normalizeName(newItem && newItem.name);
-      if (!nn) return list;
-
-      const idx = list.findIndex(t => normalizeName(t && t.name) === nn);
-
-      if (idx < 0) {
-        list.push(newItem);
-        return list;
-      }
-
-      const existing = list[idx] || {};
-      const oldToT = dateStrToTime(existing.validTo);
-      const newToT = dateStrToTime(newItem.validTo);
-
-      const merged = {
-        ...existing,
-        name: existing.name || newItem.name,
-        validFrom: newItem.validFrom || existing.validFrom || null,
-        validTo: (oldToT === null && newToT === null)
-          ? (newItem.validTo || existing.validTo || null)
-          : (oldToT === null ? newItem.validTo : (newToT === null ? existing.validTo : (newToT > oldToT ? newItem.validTo : existing.validTo)))
+    function startEditTraining(t) {
+      editingTrainingId = t?.id || null;
+      editDraft = {
+        name: String(t?.name || ""),
+        validFrom: String(t?.validFrom || ""),
+        validTo: String(t?.validTo || "")
       };
-
-      list[idx] = merged;
-      return list;
+      renderTrainings(lastDetailTrainings);
     }
 
-    async function bulkAddTraining() {
-      if (!lastMe || !isHrManager(lastMe)) return;
+    function cancelEditTraining() {
+      editingTrainingId = null;
+      editDraft = { name: "", validFrom: "", validTo: "" };
+      renderTrainings(lastDetailTrainings);
+    }
 
-      clearError();
-      bulkMsg.textContent = "";
+    async function saveEditTraining() {
+      if (!selectedEmployeeId || !editingTrainingId) return;
 
-      if (selectedIds.size === 0) { bulkMsg.textContent = "Vyber alespoň 1 zaměstnance."; return; }
+      const name = normalizeText(editDraft.name);
+      const validFrom = normalizeText(editDraft.validFrom);
+      const validTo = normalizeText(editDraft.validTo);
 
-      const tpl = parseTemplateValue(bulkTemplate.value);
-      const name = (tpl && tpl.name) || bulkName.value.trim();
-      if (!name) { bulkMsg.textContent = "Vyplň název školení nebo vyber šablonu."; return; }
-
-      const from = bulkFrom.value || new Date().toISOString().slice(0,10);
-      let to = bulkTo.value || null;
-
-      if (!to && tpl && tpl.months) {
-        to = addMonthsToDateStr(from, tpl.months);
+      if (!name || !validFrom || !validTo) {
+        alert("Vyplň název, platí od a platí do.");
+        return;
       }
-
-      const newTraining = { name, validFrom: from, validTo: to };
-
-      bulkAddBtn.disabled = true;
-      bulkAddBtn.textContent = "Přidávám…";
-
-      try {
-        const ids = Array.from(selectedIds);
-        let ok = 0, fail = 0;
-
-        for (let i = 0; i < ids.length; i++) {
-          const id = ids[i];
-          bulkMsg.textContent = `Zpracovávám ${i + 1} / ${ids.length}…`;
-
-          try {
-            let emp = await apiGetEmployee(lastMe.role, id);
-            if (!emp || typeof emp !== "object") throw new Error("Detail je prázdný.");
-
-            let list = Array.isArray(emp.trainings) ? emp.trainings : [];
-            list = mergeTraining(list, newTraining);
-
-            await apiPutEmployee(lastMe.role, (emp.id || id), { ...emp, trainings: list });
-
-            ok++;
-          } catch (e) {
-            console.error(e);
-            fail++;
-          }
-        }
-
-        bulkMsg.textContent = `Hotovo. OK: ${ok}, Chyby: ${fail}. (Školení se případně prodloužilo.)`;
-        clearSelectionUI();
-      } catch (e) {
-        setError(e && e.message ? e.message : "Chyba při hromadném přidání.");
-      } finally {
-        bulkAddBtn.disabled = false;
-        bulkAddBtn.textContent = "Přidat vybraným";
-        await reload();
-      }
-    }
-
-    // ===== templates events =====
-    tplCompanySelect.addEventListener("change", () => {
-      activeTplCompanyKey = tplCompanySelect.value;
-      const opt = tplCompanySelect.options[tplCompanySelect.selectedIndex];
-      activeTplCompany = opt ? opt.textContent : "—";
-      setTplMsg("");
-      bulkTemplate.value = "";
-      bulkName.value = "";
-      bulkTo.value = "";
-      bulkFrom.value = "";
-      lastTplCompanyKey = activeTplCompanyKey;
-      syncTemplateDropdown();
-    });
-
-    tplAddBtn.addEventListener("click", () => {
-      const name = String(tplName.value || "").trim();
-      const months = Number(tplMonths.value);
-
-      if (!name) { setTplMsg("Vyplň název šablony."); return; }
-      if (!Number.isFinite(months) || months <= 0) { setTplMsg("Vyplň platnost v měsících (např. 12)."); return; }
-
-      const list = ensureTemplates(activeTplCompanyKey);
-      const nn = normalizeName(name);
-
-      const idx = list.findIndex(t => normalizeName(t && t.name) === nn);
-      if (idx >= 0) {
-        list[idx] = { name, months };
-        setTplMsg("Šablona upravena.");
-      } else {
-        list.push({ name, months });
-        setTplMsg("Šablona přidána.");
-      }
-
-      saveTemplates(activeTplCompanyKey, list);
-      tplName.value = "";
-      tplMonths.value = "";
-      syncTemplateDropdown();
-    });
-
-    tplResetBtn.addEventListener("click", () => {
-      if (!confirm("Resetovat šablony firmy na výchozí?")) return;
-      saveTemplates(activeTplCompanyKey, DEFAULT_TEMPLATES);
-      setTplMsg("Šablony resetovány.");
-      syncTemplateDropdown();
-    });
-
-    // ===== CRUD add employee =====
-    async function addEmployee() {
-      clearError();
-      const role = getRole();
-
-      const payload = {
-        firstName: firstName.value.trim(),
-        lastName: lastName.value.trim(),
-        company: company.value.trim()
-      };
-
-      try {
-        await apiCreate(role, payload);
-        firstName.value = "";
-        lastName.value = "";
-        company.value = "";
-        await reload();
-      } catch (e) {
-        setError(e && e.message ? e.message : "Chyba při přidání.");
-      }
-    }
-
-    // ===== reload =====
-    async function reload() {
-      clearError();
-      bulkMsgLoad.textContent = "";
-      bulkMsg.textContent = "";
-      setTplMsg("");
-
-      // vždy si načteme firmu filtr z localStorage (dashboard)
-      readCompanyFilterFromStorage();
-
-      const role = getRole();
-
-      const me = await apiMe(role);
-      me.role = role;
-      me._canWrite = canWrite(me.perms, role);
-      lastMe = me;
-
-      roleLabelEl.textContent = me.roleLabel || me.role || role;
-      permsEl.textContent = Array.isArray(me.perms) ? me.perms.join(", ") : "—";
-
-      addCard.style.display = me._canWrite ? "block" : "none";
-
-      const items = await apiList(role);
-      lastItems = Array.isArray(items) ? items : [];
-
-      detailsCache.clear();
-
-      if (!activeTplCompanyKey) {
-        const first = lastItems && lastItems[0];
-        const display = String((first && first.company) || "").trim() || "— nezadáno —";
-        activeTplCompany = display;
-        activeTplCompanyKey = normalizeCompanyKey(display === "— nezadáno —" ? "" : display);
-        lastTplCompanyKey = activeTplCompanyKey;
-      }
-
-      selectedIds.clear();
-      checkAll.checked = false;
-
-      renderRows(lastItems, me);
-    }
-
-    // ===== events =====
-    roleSelect.value = getRole();
-    roleSelect.addEventListener("change", async () => {
-      setRole(roleSelect.value);
-      await reload();
-    });
-
-    document.querySelectorAll("#riskBox button[data-filter]").forEach(b => {
-      b.addEventListener("click", () => {
-        currentFilter = b.dataset.filter || "all";
-        document.querySelectorAll("#riskBox button[data-filter]").forEach(x => x.classList.remove("active"));
-        b.classList.add("active");
-        if (lastMe) renderRows(lastItems, lastMe);
-      });
-    });
-
-    searchInput.addEventListener("input", () => {
-      currentSearch = searchInput.value || "";
-      if (lastMe) renderRows(lastItems, lastMe);
-    });
-
-    checkAll.addEventListener("change", () => {
-      const checked = !!checkAll.checked;
-      tbody.querySelectorAll('input[data-emp-check]').forEach(cb => {
-        cb.checked = checked;
-        const id = cb.dataset.empId;
-        if (checked) selectedIds.add(id);
-        else selectedIds.delete(id);
-      });
-      updateBulkCount();
-      syncTemplateDropdown();
-    });
-
-    // ===== NAV FOCUS z dashboardu =====
-    function showNavInfo(title, text) {
-      if (!navInfo || !navInfoTitle || !navInfoText) return;
-
-      navInfoTitle.textContent = title;
-      navInfoText.textContent = text;
-      navInfo.style.display = "block";
-
-      window.setTimeout(() => {
-        navInfo.style.display = "none";
-      }, 5000);
-    }
-
-    if (navInfoClose && navInfo) {
-      navInfoClose.addEventListener("click", () => {
-        navInfo.style.display = "none";
-      });
-    }
-
-    function setActiveFilterButton(filterKey) {
-      document
-        .querySelectorAll("#riskBox button[data-filter]")
-        .forEach(x => x.classList.remove("active"));
-
-      const btn = document.querySelector(
-        `#riskBox button[data-filter="${filterKey}"]`
-      );
-      if (btn) btn.classList.add("active");
-    }
-
-    function applyNavFocusIfAny() {
-      const hasHelper =
-        window.WA_NAV && typeof WA_NAV.consume === "function";
-
-      const focus = hasHelper
-        ? WA_NAV.consume()
-        : localStorage.getItem("wa_nav_focus");
-
-      if (!focus) return;
-      if (!hasHelper) localStorage.removeItem("wa_nav_focus");
-
-      if (focus === "critical14") {
-        currentFilter = "bad";
-        setActiveFilterButton("bad");
-        showNavInfo(
-          "Otevřeno z dashboardu: Kritické",
-          "Zobrazuji expirované položky (nejvyšší priorita)."
-        );
+      if (validTo < validFrom) {
+        alert("Datum 'platí do' musí být později než 'platí od'.");
         return;
       }
 
-      if (focus === "exp30") {
-        currentFilter = "warn";
-        setActiveFilterButton("warn");
-        showNavInfo(
-          "Otevřeno z dashboardu: Varování (do 30 dnů)",
-          "Zobrazuji položky, které brzy expirují (do 30 dnů)."
-        );
+      try {
+        await apiUpdateTraining(selectedEmployeeId, editingTrainingId, { name, validFrom, validTo });
+        editingTrainingId = null;
+        await openDetail(selectedEmployeeId);
+      } catch (err) {
+        console.error(err);
+        alert("Nepodařilo se upravit školení: " + (err?.message || err));
       }
     }
 
-    // ===== INIT =====
-    (async function init(){
-      try {
-        await reload();
+    async function quickExtendOneYearFromOld(t) {
+      if (!selectedEmployeeId) return;
+      if (!canEditTraining()) return alert("Tvoje role nemůže upravovat školení.");
 
-        // info: pokud je firma z dashboardu, ukážeme krátkou hlášku
-        if (activeCompanyFilterKey) {
-          showNavInfo("Firma z dashboardu nastavena", "Zobrazuji pouze firmu: " + (activeCompanyFilterRaw || "—"));
+      const tid = t?.id;
+      if (!tid) return alert("Školení nemá id (znovu načti seznam).");
+
+      const oldTo = String(t?.validTo || "");
+      const newTo = addYearsToDateStr(oldTo, 1);
+
+      if (!newTo) return alert("Nejde prodloužit: 'Platí do' není YYYY-MM-DD.");
+
+      const ok = confirm(`Prodloužit "${t?.name || "—"}"\nPlatí do: ${oldTo} → ${newTo}\n\nPokračovat?`);
+      if (!ok) return;
+
+      try {
+        await apiUpdateTraining(selectedEmployeeId, tid, {
+          name: String(t?.name || "—"),
+          validFrom: String(t?.validFrom || ""),
+          validTo: newTo
+        });
+        await openDetail(selectedEmployeeId);
+      } catch (err) {
+        console.error(err);
+        alert("Nepodařilo se prodloužit školení: " + (err?.message || err));
+      }
+    }
+
+    async function quickResetOneYearFromToday(t) {
+      if (!selectedEmployeeId) return;
+      if (!canEditTraining()) return alert("Tvoje role nemůže upravovat školení.");
+
+      const tid = t?.id;
+      if (!tid) return alert("Školení nemá id (znovu načti seznam).");
+
+      const from = todayStrUtc();
+      const to = addYearsToDateStr(from, 1);
+      if (!to) return alert("Chyba výpočtu data.");
+
+      const ok = confirm(`Nastavit od dneška +1 rok\n"${t?.name || "—"}"\nPlatí od: ${from}\nPlatí do: ${to}\n\nPokračovat?`);
+      if (!ok) return;
+
+      try {
+        await apiUpdateTraining(selectedEmployeeId, tid, {
+          name: String(t?.name || "—"),
+          validFrom: from,
+          validTo: to
+        });
+        await openDetail(selectedEmployeeId);
+      } catch (err) {
+        console.error(err);
+        alert("Nepodařilo se nastavit od dneška: " + (err?.message || err));
+      }
+    }
+
+    let lastDetailTrainings = [];
+
+    function isTrainingValid(t) {
+      const to = parseDateOnlyUtc(t?.validTo);
+      if (!to) return false;
+      return to.getTime() >= todayUtcStart().getTime();
+    }
+
+    function renderTrainings(trainings) {
+      const arr = Array.isArray(trainings) ? trainings : [];
+      lastDetailTrainings = arr;
+
+      dTrainCount.textContent = String(arr.length);
+      dTrainings.innerHTML = "";
+
+      if (arr.length === 0) {
+        const div = document.createElement("div");
+        div.className = "trainingItem";
+        div.style.color = "rgba(232,238,255,.55)";
+        div.textContent = "Žádná školení.";
+        dTrainings.appendChild(div);
+        return;
+      }
+
+      for (const t of arr) {
+        const item = document.createElement("div");
+        item.className = "trainingItem";
+
+        const title = document.createElement("div");
+        title.className = "trainingTitle";
+
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = t?.name || "—";
+        title.appendChild(nameSpan);
+
+        const badge = document.createElement("span");
+        badge.className = "tag";
+        badge.textContent = isTrainingValid(t) ? "platné" : "propadlé";
+        title.appendChild(badge);
+
+        if (canEditTraining()) {
+          const btns = document.createElement("div");
+          btns.className = "rowBtns";
+
+          const plusBtn = document.createElement("button");
+          plusBtn.className = "btnSmall btnQuick";
+          plusBtn.textContent = "+1 rok";
+          plusBtn.title = "Prodlouží 'Platí do' o 1 rok (od původního data)";
+          plusBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await quickExtendOneYearFromOld(t);
+          });
+
+          const resetBtn = document.createElement("button");
+          resetBtn.className = "btnSmall btnQuick2";
+          resetBtn.textContent = "Od dneška +1 rok";
+          resetBtn.title = "Nastaví validFrom = dnes a validTo = dnes + 1 rok";
+          resetBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await quickResetOneYearFromToday(t);
+          });
+
+          const editBtn = document.createElement("button");
+          editBtn.className = "btnSmall";
+          editBtn.textContent = "Upravit";
+          editBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!t?.id) return alert("Školení nemá id (znovu načti seznam).");
+            startEditTraining(t);
+          });
+
+          const delBtn = document.createElement("button");
+          delBtn.className = "btnSmall btnDanger";
+          delBtn.textContent = "Smazat";
+          delBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const tid = t?.id;
+            if (!tid) return alert("Školení nemá id (znovu načti seznam).");
+
+            const ok = confirm(`Opravdu smazat školení "${t?.name || "—"}"?`);
+            if (!ok) return;
+
+            try {
+              await apiDeleteTraining(selectedEmployeeId, tid);
+              if (editingTrainingId === tid) cancelEditTraining();
+              await openDetail(selectedEmployeeId);
+            } catch (err) {
+              console.error(err);
+              alert("Nepodařilo se smazat školení: " + (err?.message || err));
+            }
+          });
+
+          btns.appendChild(plusBtn);
+          btns.appendChild(resetBtn);
+          btns.appendChild(editBtn);
+          btns.appendChild(delBtn);
+
+          title.appendChild(btns);
         }
 
-        applyNavFocusIfAny();
-        if (lastMe) renderRows(lastItems, lastMe);
-      } catch (e) {
-        setError(e && e.message ? e.message : "Chyba při načítání.");
+        const dates = document.createElement("div");
+        dates.className = "trainingDates";
+        dates.textContent = `Od: ${t?.validFrom || "—"}  •  Do: ${t?.validTo || "—"}`;
+
+        item.appendChild(title);
+        item.appendChild(dates);
+
+        if (canEditTraining() && t?.id && String(t.id) === String(editingTrainingId)) {
+          const box = document.createElement("div");
+          box.className = "editBox";
+
+          const col1 = document.createElement("div");
+          col1.className = "col";
+          const l1 = document.createElement("div");
+          l1.className = "miniLabel";
+          l1.textContent = "Název školení";
+          const i1 = document.createElement("input");
+          i1.type = "text";
+          i1.value = editDraft.name;
+          i1.addEventListener("input", () => editDraft.name = i1.value);
+          col1.appendChild(l1); col1.appendChild(i1);
+
+          const col2 = document.createElement("div");
+          col2.className = "col";
+          const l2 = document.createElement("div");
+          l2.className = "miniLabel";
+          l2.textContent = "Platí od";
+          const i2 = document.createElement("input");
+          i2.type = "date";
+          i2.value = editDraft.validFrom;
+          i2.addEventListener("input", () => editDraft.validFrom = i2.value);
+          col2.appendChild(l2); col2.appendChild(i2);
+
+          const col3 = document.createElement("div");
+          col3.className = "col";
+          const l3 = document.createElement("div");
+          l3.className = "miniLabel";
+          l3.textContent = "Platí do";
+          const i3 = document.createElement("input");
+          i3.type = "date";
+          i3.value = editDraft.validTo;
+          i3.addEventListener("input", () => editDraft.validTo = i3.value);
+          col3.appendChild(l3); col3.appendChild(i3);
+
+          const saveBtn = document.createElement("button");
+          saveBtn.className = "primary";
+          saveBtn.textContent = "Uložit";
+          saveBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            saveEditTraining();
+          });
+
+          const cancelBtn = document.createElement("button");
+          cancelBtn.textContent = "Zrušit";
+          cancelBtn.addEventListener("click", (e) => {
+            e.stopPropagation();
+            cancelEditTraining();
+          });
+
+          box.appendChild(col1);
+          box.appendChild(col2);
+          box.appendChild(col3);
+          box.appendChild(saveBtn);
+          box.appendChild(cancelBtn);
+
+          item.appendChild(box);
+        }
+
+        dTrainings.appendChild(item);
       }
+    }
+
+    function applyFilter(list, q, mode, expDays) {
+      const s = normalizeText(q).toLowerCase();
+      const nowMode = mode || "all";
+      const days = Math.max(0, Number(expDays || 30) || 30);
+
+      return list.filter(e => {
+        const name = displayName(e).toLowerCase();
+        const email = (e?.email || "").toLowerCase();
+        const company = (e?.company || "").toLowerCase();
+        const position = (e?.position || "").toLowerCase();
+
+        const matchesText = !s || name.includes(s) || email.includes(s) || company.includes(s) || position.includes(s);
+        if (!matchesText) return false;
+
+        const st = employeeStatus(e, days).status;
+        if (nowMode === "all") return true;
+        return st === nowMode;
+      });
+    }
+
+    function renderTable() {
+      const mode = elFilterMode.value || "all";
+      const days = Math.max(0, Number(elExpDays.value || 30) || 30);
+
+      const visible = applyFilter(employees, elQ.value, mode, days);
+      elRows.innerHTML = "";
+
+      for (const e of visible) {
+        const tr = document.createElement("tr");
+        tr.addEventListener("click", () => openDetail(e.id));
+
+        const tdName = document.createElement("td");
+        tdName.textContent = displayName(e);
+
+        const tdEmail = document.createElement("td");
+        tdEmail.textContent = e?.email || "—";
+
+        const tdCompany = document.createElement("td");
+        tdCompany.textContent = e?.company || "—";
+
+        const tdPos = document.createElement("td");
+        tdPos.textContent = e?.position || "—";
+
+        const tdSt = document.createElement("td");
+        const st = employeeStatus(e, days);
+
+        const wrap = document.createElement("span");
+        wrap.className = "st";
+
+        const dot = document.createElement("span");
+        dot.className = "dot " + (st.status === "expired" ? "bad" : st.status === "expiring" ? "warn" : "ok");
+
+        const txt = document.createElement("span");
+        if (st.status === "expired") txt.textContent = "Propadlé";
+        else if (st.status === "expiring") txt.textContent = `Končí do ${days} dní`;
+        else txt.textContent = "OK";
+
+        wrap.appendChild(dot);
+        wrap.appendChild(txt);
+        tdSt.appendChild(wrap);
+
+        tr.appendChild(tdName);
+        tr.appendChild(tdEmail);
+        tr.appendChild(tdCompany);
+        tr.appendChild(tdPos);
+        tr.appendChild(tdSt);
+
+        elRows.appendChild(tr);
+      }
+
+      elStatusText.textContent = `Načteno: ${visible.length} záznamů. Filtr: ${mode === "all" ? "Všichni" : (mode === "expired" ? "Propadlé" : mode === "expiring" ? "Končí brzy" : "OK")} • Končí brzy: ${days} dní`;
+    }
+
+    async function loadList() {
+      elOkBadge.hidden = true;
+      elStatusText.textContent = "Načítám…";
+
+      try {
+        employees = await apiList();
+        renderTable();
+        elOkBadge.hidden = false;
+      } catch (err) {
+        console.error(err);
+        elStatusText.textContent = "Nepodařilo se načíst /api/employees. Je backend spuštěný a route existuje?";
+      }
+    }
+
+    function openDetailModal() {
+      detailBack.style.display = "flex";
+      detailBack.setAttribute("aria-hidden", "false");
+    }
+    function closeDetailModal() {
+      detailBack.style.display = "none";
+      detailBack.setAttribute("aria-hidden", "true");
+      selectedEmployeeId = null;
+      cancelEditTraining();
+    }
+
+    async function openDetail(id) {
+      selectedEmployeeId = id;
+      openDetailModal();
+
+      elDetailTitle.textContent = "Detail – načítám…";
+      dName.textContent = dEmail.textContent = dCompany.textContent = dPosition.textContent = dId.textContent = dUpdatedAt.textContent = "—";
+      dTrainCount.textContent = "0";
+      dTrainings.innerHTML = "";
+
+      const allow = canEditTraining();
+      addTrainingBox.hidden = !allow;
+      btnSaveTraining.disabled = !allow;
+
+      try {
+        const e = await apiDetail(id);
+
+        elDetailTitle.textContent = `Detail – ${displayName(e)}`;
+        dName.textContent = displayName(e);
+        dEmail.textContent = e?.email || "—";
+        dCompany.textContent = e?.company || "—";
+        dPosition.textContent = e?.position || "—";
+        dId.textContent = e?.id || "—";
+        dUpdatedAt.textContent = fmtDate(e?.updatedAt);
+
+        renderTrainings(e?.trainings);
+
+        tName.value = "";
+        tFrom.value = "";
+        tTo.value = "";
+      } catch (err) {
+        console.error(err);
+        elDetailTitle.textContent = "Detail – chyba načítání";
+        const div = document.createElement("div");
+        div.className = "trainingItem";
+        div.style.color = "rgba(232,238,255,.55)";
+        div.textContent = "Nepodařilo se načíst detail.";
+        dTrainings.appendChild(div);
+      }
+    }
+
+    async function saveTraining() {
+      if (!selectedEmployeeId) return;
+      if (!canEditTraining()) {
+        alert("Tvoje role nemůže přidávat školení.");
+        return;
+      }
+
+      const name = normalizeText(tName.value);
+      const validFrom = normalizeText(tFrom.value);
+      const validTo = normalizeText(tTo.value);
+
+      if (!name || !validFrom || !validTo) {
+        alert("Vyplň název, platí od a platí do.");
+        return;
+      }
+      if (validTo < validFrom) {
+        alert("Datum 'platí do' musí být později než 'platí od'.");
+        return;
+      }
+
+      btnSaveTraining.disabled = true;
+      btnSaveTraining.textContent = "Ukládám…";
+
+      try {
+        await apiAddTraining(selectedEmployeeId, { name, validFrom, validTo });
+        await openDetail(selectedEmployeeId);
+      } catch (err) {
+        console.error(err);
+        alert("Nepodařilo se uložit školení: " + (err?.message || err));
+      } finally {
+        btnSaveTraining.textContent = "Uložit školení";
+        btnSaveTraining.disabled = !canEditTraining();
+      }
+    }
+
+    // Role modal helpers
+    function openRoleModal() {
+      roleSelect.value = role;
+      roleBack.style.display = "flex";
+      roleBack.setAttribute("aria-hidden", "false");
+    }
+    function closeRoleModal() {
+      roleBack.style.display = "none";
+      roleBack.setAttribute("aria-hidden", "true");
+    }
+
+    async function applyRole() {
+      role = roleSelect.value || "hr";
+      localStorage.setItem(LS_ROLE, role);
+      applyRoleUI();
+      closeRoleModal();
+
+      await loadList();
+      if (selectedEmployeeId) await openDetail(selectedEmployeeId);
+    }
+
+    // ✅ PROKLIK z dashboardu: #emp=ID
+    function getEmpIdFromHash() {
+      const hash = (window.location.hash || "").replace(/^#/, "");
+      const params = new URLSearchParams(hash);
+      const empId = params.get("emp");
+      return empId ? String(empId) : null;
+    }
+
+    function clearHash() {
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+
+    async function openEmpFromHashIfAny() {
+      const empId = getEmpIdFromHash();
+      if (!empId) return;
+      await openDetail(empId);
+      clearHash();
+    }
+
+    // events
+    elBtnLoad.addEventListener("click", loadList);
+    elQ.addEventListener("input", renderTable);
+    elFilterMode.addEventListener("change", renderTable);
+    elExpDays.addEventListener("input", renderTable);
+
+    elBtnChangeRole.addEventListener("click", openRoleModal);
+    btnRoleClose.addEventListener("click", closeRoleModal);
+    btnRoleCancel.addEventListener("click", closeRoleModal);
+    btnRoleApply.addEventListener("click", applyRole);
+    roleBack.addEventListener("click", (e) => { if (e.target === roleBack) closeRoleModal(); });
+
+    btnDetailClose.addEventListener("click", closeDetailModal);
+    btnDetailClose2.addEventListener("click", closeDetailModal);
+    detailBack.addEventListener("click", (e) => { if (e.target === detailBack) closeDetailModal(); });
+
+    btnSaveTraining.addEventListener("click", saveTraining);
+
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        if (roleBack.style.display === "flex") closeRoleModal();
+        if (detailBack.style.display === "flex") closeDetailModal();
+      }
+    });
+
+    // start
+    (async () => {
+      applyRoleUI();
+      await loadList();
+      await openEmpFromHashIfAny();
     })();
   </script>
 </body>

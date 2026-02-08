@@ -2,1401 +2,483 @@
 <html lang="cs">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Workaccess – Dashboard firmy</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Dashboard</title>
+
   <style>
     :root{
-      --bg:#0b1220;
-      --panel:#111a2e;
-      --panel2:#0f172a;
-      --text:#e8eefc;
-      --muted:#9fb0d0;
-      --border:rgba(255,255,255,0.10);
-      --ok:#2dd4bf;
-      --warn:#fbbf24;
-      --bad:#fb7185;
-      --btn:#1f2a44;
-      --btn2:#233255;
-      --shadow: 0 10px 30px rgba(0,0,0,0.35);
-      --radius:16px;
-      --gap:14px;
-      --font: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Liberation Sans", sans-serif;
+      --bg:#0b1020;
+      --muted:#8aa0c6;
+      --text:#e8eeff;
+      --accent:#6ea8fe;
+      --danger:#ff6b6b;
+      --border:rgba(255,255,255,.08);
+      --shadow:0 10px 25px rgba(0,0,0,.35);
     }
-    *{ box-sizing:border-box; }
+    *{box-sizing:border-box}
     body{
       margin:0;
-      background: radial-gradient(1200px 700px at 20% 10%, rgba(45,212,191,0.12), transparent 60%),
-                  radial-gradient(900px 600px at 90% 30%, rgba(251,191,36,0.10), transparent 60%),
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      background: radial-gradient(1200px 600px at 20% 0%, rgba(110,168,254,.25), transparent 60%),
+                  radial-gradient(1200px 600px at 80% 20%, rgba(99,230,190,.18), transparent 60%),
                   var(--bg);
       color:var(--text);
-      font-family:var(--font);
+      padding:24px;
     }
-    a{ color:inherit; text-decoration:none; }
-    .wrap{ max-width:1100px; margin:0 auto; padding:18px; }
-    header{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
-    .brand{ display:flex; flex-direction:column; gap:4px; }
-    .brand h1{ margin:0; font-size:18px; letter-spacing:0.2px; }
-    .brand .sub{ color:var(--muted); font-size:13px; }
-    .topnav{ display:flex; gap:10px; flex-wrap:wrap; }
-    .navbtn{
-      background: linear-gradient(180deg, var(--btn2), var(--btn));
+    .wrap{max-width:1100px;margin:0 auto}
+    .card{
+      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
       border:1px solid var(--border);
-      color:var(--text);
-      padding:10px 12px;
-      border-radius:12px;
-      box-shadow: var(--shadow);
-      font-size:13px;
-    }
-    .grid{ display:grid; grid-template-columns: 1fr; gap:var(--gap); }
-    @media (min-width: 900px){
-      .grid{ grid-template-columns: 1.2fr 0.8fr; align-items:start; }
-    }
-    .box{
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 40%), var(--panel);
-      border:1px solid var(--border);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
+      border-radius:16px;
+      box-shadow:var(--shadow);
       overflow:hidden;
+      position:relative;
     }
-    .box .hd{
-      padding: 14px 14px 10px 14px;
+    header{
+      padding:18px 18px 12px;
       border-bottom:1px solid var(--border);
       display:flex;
+      gap:12px;
       align-items:flex-start;
       justify-content:space-between;
-      gap: 10px;
     }
-    .box .hd h2{ margin:0; font-size:15px; }
-    .box .hd .hint{ color:var(--muted); font-size:12px; line-height:1.35; max-width:520px; }
-    .box .bd{ padding:14px; }
-
-    .row{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    label{ font-size:12px; color:var(--muted); display:block; margin-bottom:6px; }
-    select, input{
-      background: var(--panel2);
-      border:1px solid var(--border);
-      color: var(--text);
-      border-radius: 12px;
-      padding: 10px 10px;
-      min-height: 40px;
-      font-size: 14px;
-      outline:none;
-    }
-    input{ width: 140px; }
-
+    .nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
     .pill{
-      display:inline-flex; align-items:center; gap:8px;
-      padding: 8px 10px; border-radius: 999px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      font-size: 12px; color: var(--muted);
+      padding:6px 10px;border-radius:999px;border:1px solid var(--border);
+      background:rgba(0,0,0,.14);color:var(--muted);font-size:12px;
     }
-    .statusDot{
-      width:10px; height:10px;
-      border-radius:999px;
-      background: var(--warn);
-      box-shadow: 0 0 0 3px rgba(251,191,36,0.15);
+    a.navlink{
+      color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid transparent;
     }
-    .dotOk{ background: var(--ok); box-shadow: 0 0 0 3px rgba(45,212,191,0.15); }
-    .dotBad{ background: var(--bad); box-shadow: 0 0 0 3px rgba(251,113,133,0.15); }
+    a.navlink.active{
+      color:var(--text);border-color:rgba(110,168,254,.35);background:rgba(110,168,254,.16);
+    }
 
-    .kpis{ display:grid; grid-template-columns: 1fr 1fr; gap:10px; }
-    @media (min-width: 500px){ .kpis{ grid-template-columns: 1fr 1fr 1fr 1fr; } }
-    .kpi{
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      border-radius: 14px;
-      padding: 12px;
-      min-height: 74px;
+    button, input, select{
+      padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+      background:rgba(0,0,0,.18);color:var(--text);outline:none;
     }
-    .kpi .t{ font-size:12px; color: var(--muted); margin-bottom: 6px; }
-    .kpi .v{ font-size:20px; font-weight: 700; letter-spacing: 0.2px; }
-    .kpi .s{ margin-top: 4px; font-size: 12px; color: var(--muted); }
-
-    table{
-      width:100%;
-      border-collapse: collapse;
-      overflow:hidden;
-      border-radius: 14px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.03);
-    }
-    th, td{
-      text-align:left;
-      padding: 10px 10px;
-      border-bottom:1px solid rgba(255,255,255,0.07);
-      font-size: 13px;
-      vertical-align: top;
-    }
-    th{ color: var(--muted); font-weight: 600; font-size: 12px; }
-    tr:last-child td{ border-bottom:none; }
-
-    .badge{
-      display:inline-flex; align-items:center; gap:8px;
-      padding: 6px 10px;
-      border-radius: 999px;
-      font-size: 12px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.04);
+    button{
+      background:rgba(255,255,255,.06);
+      cursor:pointer;
+      user-select:none;
       white-space:nowrap;
     }
-    .bOk{ border-color: rgba(45,212,191,0.35); }
-    .bWarn{ border-color: rgba(251,191,36,0.35); }
-    .bBad{ border-color: rgba(251,113,133,0.40); }
+    button.primary{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
+    button:disabled{opacity:.45;cursor:not-allowed}
 
-    .btn{
-      background: linear-gradient(180deg, var(--btn2), var(--btn));
-      border:1px solid var(--border);
+    .toolbar{
+      padding:14px 18px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      border-bottom:1px solid var(--border);
+      flex-wrap:wrap;
+    }
+    .status{padding:12px 18px;color:var(--muted);font-size:12px;}
+
+    .grid{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+      padding:0 18px 18px;
+    }
+    @media (max-width: 900px){ .grid{grid-template-columns:1fr} }
+
+    .box{
+      border:1px solid rgba(255,255,255,.10);
+      border-radius:14px;
+      background:rgba(0,0,0,.10);
+      overflow:hidden;
+    }
+    .boxHead{
+      padding:12px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      border-bottom:1px solid rgba(255,255,255,.10);
+      color:var(--muted);
+      font-size:12px;
+    }
+    .count{
+      font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
+      color:var(--muted);background:rgba(0,0,0,.12);
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+      padding:12px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .row:last-child{border-bottom:0}
+    .row:hover{background: rgba(110,168,254,.10);}
+
+    a.rowLink{
+      flex:1;
+      display:block;
       color:var(--text);
-      padding: 10px 12px;
-      border-radius: 12px;
-      font-size: 13px;
+      text-decoration:none;
       cursor:pointer;
-      min-height: 40px;
-      display:inline-flex;
-      align-items:center;
-      justify-content:center;
-      gap:8px;
+      min-width:0;
     }
-    .btn:disabled{ opacity: 0.5; cursor: not-allowed; }
 
-    .note{ color: var(--muted); font-size: 12px; line-height: 1.45; }
-    .danger{
-      color: #ffd1d8;
-      background: rgba(251,113,133,0.10);
-      border: 1px solid rgba(251,113,133,0.22);
-      padding: 10px 12px;
-      border-radius: 12px;
+    .title{
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      font-size:13px;
     }
-    .mutebox{
-      background: rgba(255,255,255,0.03);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 10px 12px;
+    .tag{
+      font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
+      color:var(--muted);background:rgba(0,0,0,.12);
     }
-    .rightCol{ display:flex; flex-direction:column; gap:var(--gap); }
+    .tagDanger{border-color:rgba(255,107,107,.35);background:rgba(255,107,107,.10);color:#ffd1d1;}
+    .meta{margin-top:6px;font-size:12px;color:var(--muted);}
 
-    /* ===== Varovný box (stav firmy) ===== */
-    .warnPanel{
-      border-radius: 14px;
-      padding: 12px 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
+    .btnSmall{
+      padding:6px 10px;
+      border-radius:999px;
+      font-size:12px;
+      border:1px solid rgba(99,230,190,.25);
+      background:rgba(99,230,190,.12);
+      height:32px;
     }
-    .warnOk{ border-color: rgba(45,212,191,0.25); background: rgba(45,212,191,0.08); }
-    .warnWarn{ border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.10); }
-    .warnBad{ border-color: rgba(251,113,133,0.30); background: rgba(251,113,133,0.12); }
-    .warnTitle{ font-weight: 700; letter-spacing: 0.2px; margin-bottom: 4px; }
-    .warnSub{ font-size: 12px; color: var(--muted); line-height: 1.4; }
-    .warnGrid{ display:grid; grid-template-columns: 1fr; gap:10px; }
-    @media (min-width: 600px){ .warnGrid{ grid-template-columns: 1fr 1fr 1fr; } }
-    .warnCard{
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.03);
-      border-radius: 14px;
-      padding: 12px;
-      min-height: 84px;
-    }
-    .warnCard.crit{ border-color: rgba(251,113,133,0.35); background: rgba(251,113,133,0.10); }
-    .warnCard.warn{ border-color: rgba(251,191,36,0.30); background: rgba(251,191,36,0.10); }
-    .wct{ font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-    .wcv{ font-size: 22px; font-weight: 800; letter-spacing: 0.2px; }
-    .wcs{ margin-top: 4px; font-size: 12px; color: var(--muted); }
 
-    /* ===== Nový BOX: Rizika bez platného školení ===== */
-    .miniSwitch{
-      display:inline-flex;
-      align-items:center;
-      gap:8px;
-      padding: 8px 10px;
-      border-radius: 12px;
-      border:1px solid var(--border);
-      background: rgba(255,255,255,0.04);
-      font-size: 12px;
-      color: var(--muted);
-      user-select:none;
+    /* Modal (role) */
+    .modalBack{
+      position:fixed;inset:0;background:rgba(0,0,0,.55);
+      display:none;align-items:center;justify-content:center;
+      padding:18px;z-index:9999;
     }
-    .miniSwitch input{ width:auto; min-height:auto; }
-
-    /* ===== Nový BOX: Doporučené kroky ===== */
-    .recPanel{
-      border-radius: 14px;
-      padding: 12px;
-      border: 1px solid var(--border);
-      background: rgba(255,255,255,0.04);
+    .modal{
+      width:min(820px, 100%);
+      background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05));
+      border:1px solid rgba(255,255,255,.12);
+      border-radius:16px;
+      box-shadow:0 20px 50px rgba(0,0,0,.55);
+      overflow:hidden;
     }
-    .recOk{ border-color: rgba(45,212,191,0.25); background: rgba(45,212,191,0.08); }
-    .recWarn{ border-color: rgba(251,191,36,0.28); background: rgba(251,191,36,0.10); }
-    .recBad{ border-color: rgba(251,113,133,0.30); background: rgba(251,113,133,0.12); }
-    .recTitle{ font-weight: 800; letter-spacing: 0.2px; margin-bottom: 4px; }
-    .recSub{ font-size: 12px; color: var(--muted); line-height: 1.4; }
+    .modalHead{
+      padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.10);
+      display:flex;align-items:center;justify-content:space-between;gap:10px;
+    }
+    .modalBody{padding:14px 16px}
+    .modalFoot{
+      padding:12px 16px 16px;
+      display:flex;justify-content:flex-end;gap:10px;
+      border-top:1px solid rgba(255,255,255,.10);
+    }
+    .iconbtn{width:38px;height:34px;display:inline-grid;place-items:center;padding:0;}
+    .hint{font-size:12px;color:var(--muted);margin:0;line-height:1.35}
   </style>
 </head>
-
 <body>
   <div class="wrap">
-    <header>
-      <div class="brand">
-        <h1>Workaccess – Dashboard firmy</h1>
-        <div class="sub">Přehled → Akce → Test → Uzavření (systematicky, box po boxu)</div>
-      </div>
-      <div class="topnav">
-        <a class="navbtn" href="employees.html">Evidence pracovníků</a>
-        <a class="navbtn" href="employee.html">Detail zaměstnance</a>
-      </div>
-    </header>
-
-    <div class="grid">
-      <!-- LEVÝ SLOUPEC -->
-      <div class="leftCol" style="display:flex; flex-direction:column; gap:var(--gap);">
-
-        <!-- BOX: Firma -->
-        <section class="box" id="boxCompany">
-          <div class="hd">
-            <div>
-              <h2>Firma</h2>
-              <div class="hint">Vyber firmu. Dashboard se vždy kompletně přenačte (aby se nemíchala data).</div>
-            </div>
-            <div class="pill" title="Stav dat (API / TEST)">
-              <span class="statusDot" id="statusDot"></span>
-              <span id="statusText">Čekám…</span>
-            </div>
+    <div class="card">
+      <header>
+        <div>
+          <div class="nav">
+            <span class="pill" style="color:var(--text)">WORKACCESS</span>
+            <a class="navlink active" href="./dashboard.html">Dashboard</a>
+            <a class="navlink" href="./employees.html">Zaměstnanci</a>
+            <a class="navlink" href="./index.html">TODO</a>
           </div>
-          <div class="bd">
-            <div class="row">
-              <div style="min-width:280px; flex:1;">
-                <label for="companySelect">Vybraná firma</label>
-                <select id="companySelect">
-                  <option value="">Načítám seznam firem…</option>
-                </select>
-              </div>
+          <h1 style="margin:10px 0 0;font-size:18px;">Dashboard – expirace školení</h1>
+          <div class="pill" style="margin-top:8px;">GET /api/reports/trainings</div>
+        </div>
 
-              <div style="min-width:220px;">
-                <label>Role</label>
-                <div class="mutebox" id="roleBox">Načítám roli…</div>
-              </div>
+        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
+          <div class="pill">Role: <span id="roleLabel" style="color:var(--text)">—</span></div>
+          <button id="btnChangeRole">Změnit roli</button>
+        </div>
+      </header>
 
-              <div style="min-width:180px;">
-                <label>&nbsp;</label>
-                <button class="btn" id="btnReload">Znovu načíst</button>
-              </div>
-            </div>
-
-            <div style="margin-top:10px;" class="note">
-              Tip: vybraná firma se uloží do <b>localStorage</b> a ostatní stránky ji můžou použít (bez dalšího klikání).
-            </div>
-          </div>
-        </section>
-
-        <!-- BOX: Souhrn -->
-        <section class="box" id="boxSummary">
-          <div class="hd">
-            <div>
-              <h2>Souhrn</h2>
-              <div class="hint">Rychlé KPI pro rozhodnutí „je vše ok, nebo hoří expirace / rizika“.</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div class="kpis">
-              <div class="kpi">
-                <div class="t">Pracovníci</div>
-                <div class="v" id="kpiEmployees">–</div>
-                <div class="s" id="kpiEmployeesSub">—</div>
-              </div>
-              <div class="kpi">
-                <div class="t">Rizika (součet)</div>
-                <div class="v" id="kpiRisks">–</div>
-                <div class="s" id="kpiRisksSub">—</div>
-              </div>
-              <div class="kpi">
-                <div class="t">Expirace do 30 dnů</div>
-                <div class="v" id="kpiExp30">–</div>
-                <div class="s" id="kpiExp30Sub">—</div>
-              </div>
-              <div class="kpi">
-                <div class="t">Expirace do 60 dnů</div>
-                <div class="v" id="kpiExp60">–</div>
-                <div class="s" id="kpiExp60Sub">—</div>
-              </div>
-            </div>
-
-            <div style="margin-top:12px;" id="summaryMsg" class="note">Vyber firmu.</div>
-          </div>
-        </section>
-
-        <!-- BOX: Pozor – stav firmy -->
-        <section class="box" id="boxWarnings">
-          <div class="hd">
-            <div>
-              <h2>Pozor – stav firmy</h2>
-              <div class="hint">Jedno místo, kde zákazník hned vidí, jestli “hoří” prošlé nebo brzké expirace.</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div id="warnMain" class="warnPanel warnOk">
-              <div class="warnTitle" id="warnTitle">Vyber firmu.</div>
-              <div class="warnSub" id="warnSub">—</div>
-            </div>
-
-            <div class="warnGrid" style="margin-top:10px;">
-              <div class="warnCard" id="wcExpired">
-                <div class="wct">Prošlá školení</div>
-                <div class="wcv" id="wExpired">–</div>
-                <div class="wcs" id="wExpiredSub">—</div>
-              </div>
-
-              <div class="warnCard" id="wc14">
-                <div class="wct">Expirace do 14 dnů</div>
-                <div class="wcv" id="w14">–</div>
-                <div class="wcs" id="w14Sub">—</div>
-              </div>
-
-              <div class="warnCard" id="wc30">
-                <div class="wct">Expirace do 30 dnů</div>
-                <div class="wcv" id="w30">–</div>
-                <div class="wcs" id="w30Sub">—</div>
-              </div>
-            </div>
-
-            <div class="row" style="margin-top:12px;">
-              <button class="btn" id="btnShowCritical">Zobrazit kritické (14 dní)</button>
-              <a class="btn" id="btnGoEmployees" href="employees.html">Přejít na evidenci</a>
-            </div>
-
-            <div class="note" style="margin-top:10px;">
-              Logika: “prošlé” a “do 14 dnů” je kritické, “do 30 dnů” je varování.
-            </div>
-          </div>
-        </section>
-
-        <!-- BOX: Rizika bez platného školení -->
-        <section class="box" id="boxRiskIssues">
-          <div class="hd">
-            <div>
-              <h2>Rizika bez platného školení</h2>
-              <div class="hint">Konkrétní důvody, proč „hoří“ firma. Cíl: vědět přesně koho a co řešit.</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div class="row" style="margin-bottom:10px;">
-              <label class="miniSwitch">
-                <input type="checkbox" id="chkCriticalOnly" />
-                Jen kritické (prošlé + do 14 dnů)
-              </label>
-              <div class="mutebox" id="riskState" style="flex:1; min-width:240px;">Vyber firmu.</div>
-            </div>
-
-            <div style="overflow:auto;">
-              <table aria-label="Rizika bez platného školení">
-                <thead>
-                  <tr>
-                    <th>Pracovník</th>
-                    <th>Riziko</th>
-                    <th>Stav školení</th>
-                    <th>Akce</th>
-                  </tr>
-                </thead>
-                <tbody id="riskTbody">
-                  <tr><td colspan="4" class="note">Vyber firmu.</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div style="margin-top:10px;" class="note">
-              Pozn.: Tento box je plně funkční z dat zaměstnanců (/api/employees). Nepotřebuje /api/companies.
-            </div>
-          </div>
-        </section>
-
-        <!-- BOX: Nejbližší expirace -->
-        <section class="box" id="boxExp">
-          <div class="hd">
-            <div>
-              <h2>Nejbližší expirace školení</h2>
-              <div class="hint">Záměr: zákazník vidí „co vyprší“ a hned jde udělat akci (otevřít pracovníka).</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div class="row" style="margin-bottom:10px;">
-              <div>
-                <label for="daysInput">Ukázat expirace do (dnů)</label>
-                <input id="daysInput" type="number" min="1" max="365" value="60" />
-              </div>
-              <div style="min-width:220px;">
-                <label>Stav seznamu</label>
-                <div class="mutebox" id="expState">Vyber firmu.</div>
-              </div>
-              <div>
-                <label>&nbsp;</label>
-                <button class="btn" id="btnRefreshExp">Aktualizovat seznam</button>
-              </div>
-            </div>
-
-            <div style="overflow:auto;">
-              <table aria-label="Seznam expirací">
-                <thead>
-                  <tr>
-                    <th>Do kdy</th>
-                    <th>Za</th>
-                    <th>Pracovník</th>
-                    <th>Školení</th>
-                    <th>Akce</th>
-                  </tr>
-                </thead>
-                <tbody id="expTbody">
-                  <tr><td colspan="5" class="note">Vyber firmu.</td></tr>
-                </tbody>
-              </table>
-            </div>
-
-            <div style="margin-top:10px;" class="note">
-              Pozn.: „Otevřít“ uloží employeeId a přejde na employee.html.
-            </div>
-          </div>
-        </section>
-
+      <div class="toolbar">
+        <label style="font-size:12px;color:var(--muted);">Dní dopředu:</label>
+        <input id="days" type="number" min="0" value="30" style="width:120px;" />
+        <button class="primary" id="btnLoad">Načíst</button>
       </div>
 
-      <!-- PRAVÝ SLOUPEC -->
-      <div class="rightCol">
+      <div class="status" id="status">—</div>
 
-        <!-- BOX: Rychlé akce -->
-        <section class="box" id="boxActions">
-          <div class="hd">
-            <div>
-              <h2>Rychlé akce</h2>
-              <div class="hint">Minimální klikání. Vždy jasné, co je možné dělat v rámci role.</div>
-            </div>
+      <div class="grid">
+        <div class="box">
+          <div class="boxHead">
+            <strong style="color:var(--text);font-weight:700;">Propadlé</strong>
+            <span class="count" id="cExpired">0</span>
           </div>
-          <div class="bd">
-            <div class="row">
-              <a class="btn" id="linkEmployees" href="employees.html">Otevřít evidenci pracovníků</a>
-              <button class="btn" id="btnBulkTraining">Hromadné školení</button>
-            </div>
-            <div style="margin-top:10px;" class="note" id="actionsNote">Vyber firmu pro aktivaci akcí.</div>
-          </div>
-        </section>
+          <div id="expired"></div>
+        </div>
 
-        <!-- BOX: Doporučené kroky -->
-        <section class="box" id="boxRecommendations">
-          <div class="hd">
-            <div>
-              <h2>Doporučené kroky</h2>
-              <div class="hint">Jedno místo s jasným doporučením: co udělat jako další krok (podle stavu firmy a role).</div>
-            </div>
+        <div class="box">
+          <div class="boxHead">
+            <strong style="color:var(--text);font-weight:700;">Končí brzy</strong>
+            <span class="count" id="cExpiring">0</span>
           </div>
-          <div class="bd">
-            <div id="recMain" class="recPanel recOk">
-              <div class="recTitle" id="recTitle">Vyber firmu.</div>
-              <div class="recSub" id="recSub">—</div>
-            </div>
-
-            <div class="row" style="margin-top:12px;">
-              <button class="btn" id="btnRecCritical">Zobrazit kritické (14 dní)</button>
-              <button class="btn" id="btnRec30">Zobrazit do 30 dnů</button>
-              <a class="btn" id="btnRecEmployees" href="employees.html">Přejít na evidenci</a>
-              <button class="btn" id="btnRecBulk">Hromadné školení</button>
-            </div>
-
-            <div class="note" style="margin-top:10px;" id="recNote">
-              Cíl: minimum klikání. Když je kritické, nabídneme nejkratší cestu k řešení.
-            </div>
-          </div>
-        </section>
-
-        <!-- BOX: Test / Diagnostika -->
-        <section class="box" id="boxTest">
-          <div class="hd">
-            <div>
-              <h2>Test / Diagnostika</h2>
-              <div class="hint">Přepnutí TEST/API. V API režimu se data berou z /api/employees.</div>
-            </div>
-          </div>
-          <div class="bd">
-            <div class="row">
-              <button class="btn" id="btnForceTest">Použít TEST data</button>
-              <button class="btn" id="btnForceApi">Použít API</button>
-            </div>
-            <div style="margin-top:10px;" class="note">
-              Když API selže, přepne se to do TEST (aby šlo UI dál používat).
-            </div>
-            <div style="margin-top:10px;" id="diagBox" class="mutebox">—</div>
-          </div>
-        </section>
-
+          <div id="expiring"></div>
+        </div>
       </div>
     </div>
   </div>
 
-  <script src="js/wa_nav.js"></script>
+  <!-- Modal: Role -->
+  <div class="modalBack" id="roleBack" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="modal">
+      <div class="modalHead">
+        <strong>Vyber roli (DEMO)</strong>
+        <button class="iconbtn" id="btnRoleClose" title="Zavřít">✕</button>
+      </div>
+      <div class="modalBody">
+        <p class="hint">
+          Demo přihlášení. Role se ukládá do localStorage a posílá se do backendu v hlavičce
+          <span class="pill">x-role</span>.
+        </p>
+
+        <select id="roleSelect" style="width:100%; margin-top:10px;">
+          <option value="hr">HR</option>
+          <option value="security">Bezpečnost</option>
+          <option value="manager">Manažer</option>
+          <option value="external">Externista</option>
+        </select>
+      </div>
+      <div class="modalFoot">
+        <button id="btnRoleCancel">Zrušit</button>
+        <button class="primary" id="btnRoleApply">Použít roli</button>
+      </div>
+    </div>
+  </div>
 
   <script>
-    /******************************************************************
-     * Workaccess Dashboard – 100% funkční i bez /api/companies
-     * API zdroj: /api/employees (z něj se odvodí firmy, souhrn i expirace)
-     ******************************************************************/
+    const API_REPORT = "http://localhost:3000/api/reports/trainings";
+    const API_EMP = "http://localhost:3000/api/employees";
 
-    const LS = {
-      companyId: "wa_company_id",
-      role: "wa_role",
-      forceMode: "wa_dashboard_mode",
-      employeeId: "wa_employee_id",
-      navFocus: "wa_nav_focus"
-    };
+    // role (stejně jako employees.html)
+    const LS_ROLE = "workaccess.portal.role";
+    const ROLE_LABELS = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
+    let role = localStorage.getItem(LS_ROLE) || "hr";
 
-    const el = {
-      companySelect: document.getElementById("companySelect"),
-      statusDot: document.getElementById("statusDot"),
-      statusText: document.getElementById("statusText"),
-      roleBox: document.getElementById("roleBox"),
-      btnReload: document.getElementById("btnReload"),
+    const roleLabel = document.getElementById("roleLabel");
+    const btnChangeRole = document.getElementById("btnChangeRole");
+    const roleBack = document.getElementById("roleBack");
+    const roleSelect = document.getElementById("roleSelect");
+    const btnRoleClose = document.getElementById("btnRoleClose");
+    const btnRoleCancel = document.getElementById("btnRoleCancel");
+    const btnRoleApply = document.getElementById("btnRoleApply");
 
-      kpiEmployees: document.getElementById("kpiEmployees"),
-      kpiRisks: document.getElementById("kpiRisks"),
-      kpiExp30: document.getElementById("kpiExp30"),
-      kpiExp60: document.getElementById("kpiExp60"),
-      kpiEmployeesSub: document.getElementById("kpiEmployeesSub"),
-      kpiRisksSub: document.getElementById("kpiRisksSub"),
-      kpiExp30Sub: document.getElementById("kpiExp30Sub"),
-      kpiExp60Sub: document.getElementById("kpiExp60Sub"),
-      summaryMsg: document.getElementById("summaryMsg"),
-
-      daysInput: document.getElementById("daysInput"),
-      expState: document.getElementById("expState"),
-      expTbody: document.getElementById("expTbody"),
-      btnRefreshExp: document.getElementById("btnRefreshExp"),
-
-      linkEmployees: document.getElementById("linkEmployees"),
-      btnBulkTraining: document.getElementById("btnBulkTraining"),
-      actionsNote: document.getElementById("actionsNote"),
-
-      btnForceTest: document.getElementById("btnForceTest"),
-      btnForceApi: document.getElementById("btnForceApi"),
-      diagBox: document.getElementById("diagBox"),
-
-      warnMain: document.getElementById("warnMain"),
-      warnTitle: document.getElementById("warnTitle"),
-      warnSub: document.getElementById("warnSub"),
-      wExpired: document.getElementById("wExpired"),
-      w14: document.getElementById("w14"),
-      w30: document.getElementById("w30"),
-      wExpiredSub: document.getElementById("wExpiredSub"),
-      w14Sub: document.getElementById("w14Sub"),
-      w30Sub: document.getElementById("w30Sub"),
-      wcExpired: document.getElementById("wcExpired"),
-      wc14: document.getElementById("wc14"),
-      wc30: document.getElementById("wc30"),
-      btnShowCritical: document.getElementById("btnShowCritical"),
-      btnGoEmployees: document.getElementById("btnGoEmployees"),
-
-      chkCriticalOnly: document.getElementById("chkCriticalOnly"),
-      riskState: document.getElementById("riskState"),
-      riskTbody: document.getElementById("riskTbody"),
-
-      recMain: document.getElementById("recMain"),
-      recTitle: document.getElementById("recTitle"),
-      recSub: document.getElementById("recSub"),
-      recNote: document.getElementById("recNote"),
-      btnRecCritical: document.getElementById("btnRecCritical"),
-      btnRec30: document.getElementById("btnRec30"),
-      btnRecEmployees: document.getElementById("btnRecEmployees"),
-      btnRecBulk: document.getElementById("btnRecBulk")
-    };
-
-    let mode = (localStorage.getItem(LS.forceMode) || "API"); // API | TEST
-    let currentCompanyName = "";
-    let currentRole = "READ";
-
-    // cache dat
-    let allEmployees = [];          // z API/TEST
-    let companyEmployees = [];      // vyfiltrované pro firmu
-    let lastExpirations = [];       // flattened + filter by days
-    let lastRiskIssues = [];        // derived
-
-    function setStatus(kind, text){
-      el.statusText.textContent = text;
-      el.statusDot.classList.remove("dotOk", "dotBad");
-      if (kind === "ok") el.statusDot.classList.add("dotOk");
-      if (kind === "bad") el.statusDot.classList.add("dotBad");
-    }
-    function setDiag(text){ el.diagBox.textContent = text; }
-
-    function escapeHtml(s){
-      return String(s)
-        .replaceAll("&","&amp;")
-        .replaceAll("<","&lt;")
-        .replaceAll(">","&gt;")
-        .replaceAll('"',"&quot;")
-        .replaceAll("'","&#039;");
+    function headersWithRole() {
+      return { "Content-Type": "application/json", "x-role": role };
     }
 
-    function loadRole(){
-      const r = (localStorage.getItem(LS.role) || "READ").toUpperCase();
-      if (r === "HR" || r === "MANAGER" || r === "READ") return r;
-      return "READ";
+    function canWrite() {
+      return role === "hr" || role === "manager";
     }
 
-    function applyRoleToActions(){
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      el.btnBulkTraining.disabled = !canEdit || !currentCompanyName;
+    function applyRoleUI() {
+      roleLabel.textContent = ROLE_LABELS[role] || role;
+    }
 
-      if (!currentCompanyName){
-        el.actionsNote.textContent = "Vyber firmu pro aktivaci akcí.";
-        return;
+    function openRoleModal() {
+      roleSelect.value = role;
+      roleBack.style.display = "flex";
+      roleBack.setAttribute("aria-hidden", "false");
+    }
+    function closeRoleModal() {
+      roleBack.style.display = "none";
+      roleBack.setAttribute("aria-hidden", "true");
+    }
+    async function applyRole() {
+      role = roleSelect.value || "hr";
+      localStorage.setItem(LS_ROLE, role);
+      applyRoleUI();
+      closeRoleModal();
+      await load(); // refresh
+    }
+
+    // dashboard UI
+    const elDays = document.getElementById("days");
+    const btnLoad = document.getElementById("btnLoad");
+    const status = document.getElementById("status");
+
+    const boxExpired = document.getElementById("expired");
+    const boxExpiring = document.getElementById("expiring");
+
+    const cExpired = document.getElementById("cExpired");
+    const cExpiring = document.getElementById("cExpiring");
+
+    function isIsoDateOnly(s) {
+      return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
+    }
+
+    function todayStrUtc() {
+      const d = new Date();
+      const yyyy = d.getUTCFullYear();
+      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      return `${yyyy}-${mm}-${dd}`;
+    }
+
+    function addYearsToDateStr(yyyyMmDd, years) {
+      if (!isIsoDateOnly(yyyyMmDd)) return null;
+      const [y, m, d] = yyyyMmDd.split("-").map(n => Number(n));
+      const dt2 = new Date(Date.UTC(y + years, m - 1, d));
+      if (String(dt2) === "Invalid Date") return null;
+      const yy = dt2.getUTCFullYear();
+      const mm = String(dt2.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(dt2.getUTCDate()).padStart(2, "0");
+      return `${yy}-${mm}-${dd}`;
+    }
+
+    async function apiUpdateTraining(empId, trainingId, payload) {
+      const res = await fetch(`${API_EMP}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+        method: "PUT",
+        headers: headersWithRole(),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`PUT /trainings failed (${res.status}) ${txt}`);
       }
-      el.actionsNote.textContent = canEdit
-        ? "Můžeš provádět akce (HR / Manažer)."
-        : "Read-only režim: akce měnící data jsou vypnuté.";
+      return await res.json().catch(() => ({}));
     }
 
-    function daysBetween(today, futureDate){
-      const ms = (futureDate.getTime() - today.getTime());
-      return Math.ceil(ms / (1000*60*60*24));
-    }
+    function makeRow(it, kind) {
+      const row = document.createElement("div");
+      row.className = "row";
 
-    function formatDateISO(iso){
-      const d = new Date(iso);
-      if (isNaN(d.getTime())) return "—";
-      const dd = String(d.getDate()).padStart(2,"0");
-      const mm = String(d.getMonth()+1).padStart(2,"0");
-      const yy = d.getFullYear();
-      return `${dd}.${mm}.${yy}`;
-    }
+      const a = document.createElement("a");
+      a.className = "rowLink";
+      a.href = `./employees.html#emp=${encodeURIComponent(it.employeeId)}`;
+      a.title = "Klikni pro otevření detailu zaměstnance";
 
-    function badgeForDaysLeft(daysLeft){
-      if (daysLeft <= 0) return { cls:"badge bBad", text:"Prošlé" };
-      if (daysLeft <= 14) return { cls:"badge bBad", text:`Za ${daysLeft} dnů` };
-      if (daysLeft <= 30) return { cls:"badge bWarn", text:`Za ${daysLeft} dnů` };
-      return { cls:"badge bOk", text:`Za ${daysLeft} dnů` };
-    }
+      const title = document.createElement("div");
+      title.className = "title";
 
-    function badgeForIssue(kind, text){
-      if (kind === "bad") return `<span class="badge bBad">${escapeHtml(text)}</span>`;
-      if (kind === "warn") return `<span class="badge bWarn">${escapeHtml(text)}</span>`;
-      return `<span class="badge bOk">${escapeHtml(text)}</span>`;
-    }
+      const who = document.createElement("span");
+      who.textContent = `${it.employeeName} — ${it.trainingName}`;
+      title.appendChild(who);
 
-    async function apiGetJson(path){
-      const res = await fetch(path, { method:"GET", headers:{ "Accept":"application/json" } });
-      if (!res.ok){
-        const text = await res.text().catch(()=> "");
-        throw new Error(`HTTP ${res.status} pro ${path}. ${text ? "Odpověď: " + text : ""}`);
-      }
-      return await res.json();
-    }
+      const tag = document.createElement("span");
+      tag.className = "tag" + (kind === "expired" ? " tagDanger" : "");
+      tag.textContent = kind === "expired"
+        ? `propadlé (${it.daysLeft} dní)`
+        : `za ${it.daysLeft} dní`;
+      title.appendChild(tag);
 
-    // ===== TEST data (zůstává jako fallback) =====
-    function testEmployees(){
-      return [
-        {
-          id:"e101", firstName:"Jan", lastName:"Novák", company:"TEST Firma Alfa",
-          trainings: [
-            { name:"BOZP – základ", validTo: new Date(Date.now() + 9*86400000).toISOString().slice(0,10) },
-            { name:"Práce ve výškách", validTo: new Date(Date.now() - 3*86400000).toISOString().slice(0,10) }
-          ]
-        },
-        {
-          id:"e102", firstName:"Petra", lastName:"Dvořáková", company:"TEST Firma Alfa",
-          trainings: [
-            { name:"PO – opakování", validTo: new Date(Date.now() + 26*86400000).toISOString().slice(0,10) }
-          ]
-        },
-        {
-          id:"e201", firstName:"Tomáš", lastName:"Procházka", company:"TEST Firma Beta",
-          trainings: [
-            { name:"BOZP – základ", validTo: new Date(Date.now() + 4*86400000).toISOString().slice(0,10) }
-          ]
-        },
-      ];
-    }
+      const meta = document.createElement("div");
+      meta.className = "meta";
+      meta.textContent = `Firma: ${it.company} • Pozice: ${it.position} • Platí do: ${it.validTo}`;
 
-    // ===== Data derivace z employees =====
-    function norm(s){
-      return String(s || "").trim().replace(/\s+/g, " ");
-    }
+      a.appendChild(title);
+      a.appendChild(meta);
 
-    function fullName(emp){
-      const fn = norm(emp.firstName || emp.firstname || "");
-      const ln = norm(emp.lastName || emp.lastname || "");
-      const n = norm(emp.name || "");
-      const r = norm((fn + " " + ln).trim());
-      return r || n || "—";
-    }
+      row.appendChild(a);
 
-    function flattenExpirationsFromEmployees(employees){
-      // 1 řádek = 1 školení s validTo
-      const out = [];
-      for (const emp of (employees || [])){
-        const empId = String(emp.id || "");
-        const empName = fullName(emp);
-        const trainings = Array.isArray(emp.trainings) ? emp.trainings : [];
-        for (const t of trainings){
-          const expiresAt = t && (t.validTo || t.expiresAt);
-          if (!expiresAt) continue;
-          const d = new Date(expiresAt);
-          if (isNaN(d.getTime())) continue;
+      // ✅ UX: tlačítko jen pro role s WRITE (hr, manager)
+      if (canWrite()) {
+        const btn = document.createElement("button");
+        btn.className = "btnSmall";
+        btn.textContent = "Od dneška +1 rok";
+        btn.title = "Nastaví validFrom = dnes a validTo = dnes + 1 rok";
 
-          out.push({
-            employeeId: empId,
-            employeeName: empName,
-            trainingName: String((t && t.name) || "—"),
-            expiresAt: d.toISOString()
-          });
-        }
-      }
-      return out;
-    }
+        btn.addEventListener("click", async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
 
-    function computeWarningCountsFromExpirations(items){
-      const today = new Date();
-      let expired = 0, exp14 = 0, exp30 = 0;
+          const empId = it.employeeId;
+          const trainingId = it.trainingId;
 
-      for (const it of (items || [])){
-        const d = new Date(it.expiresAt);
-        if (isNaN(d.getTime())) continue;
-        const left = daysBetween(today, d);
-        if (left <= 0) expired++;
-        if (left > 0 && left <= 14) exp14++;
-        if (left > 0 && left <= 30) exp30++;
-      }
-      return { expired, exp14, exp30 };
-    }
-
-    function setWarnMain(kind, title, sub){
-      el.warnMain.classList.remove("warnOk", "warnWarn", "warnBad");
-      if (kind === "ok") el.warnMain.classList.add("warnOk");
-      if (kind === "warn") el.warnMain.classList.add("warnWarn");
-      if (kind === "bad") el.warnMain.classList.add("warnBad");
-      el.warnTitle.textContent = title;
-      el.warnSub.textContent = sub;
-    }
-
-    function clearSummary(){
-      el.kpiEmployees.textContent = "–";
-      el.kpiRisks.textContent = "–";
-      el.kpiExp30.textContent = "–";
-      el.kpiExp60.textContent = "–";
-      el.kpiEmployeesSub.textContent = "—";
-      el.kpiRisksSub.textContent = "—";
-      el.kpiExp30Sub.textContent = "—";
-      el.kpiExp60Sub.textContent = "—";
-      el.summaryMsg.textContent = "Vyber firmu.";
-    }
-
-    function clearWarnings(){
-      el.warnMain.classList.remove("warnOk", "warnWarn", "warnBad");
-      el.warnMain.classList.add("warnOk");
-      el.warnTitle.textContent = "Vyber firmu.";
-      el.warnSub.textContent = "—";
-
-      el.wExpired.textContent = "–";
-      el.w14.textContent = "–";
-      el.w30.textContent = "–";
-      el.wExpiredSub.textContent = "—";
-      el.w14Sub.textContent = "—";
-      el.w30Sub.textContent = "—";
-
-      el.wcExpired.classList.remove("crit","warn");
-      el.wc14.classList.remove("crit","warn");
-      el.wc30.classList.remove("crit","warn");
-
-      el.btnShowCritical.disabled = true;
-    }
-
-    function clearExpirations(message){
-      el.expTbody.innerHTML = `<tr><td colspan="5" class="note">${escapeHtml(message)}</td></tr>`;
-      el.expState.textContent = message;
-      lastExpirations = [];
-    }
-
-    function clearRiskIssues(message){
-      el.riskTbody.innerHTML = `<tr><td colspan="4" class="note">${escapeHtml(message)}</td></tr>`;
-      el.riskState.textContent = message;
-      lastRiskIssues = [];
-    }
-
-    function setRecMain(kind, title, sub){
-      el.recMain.classList.remove("recOk","recWarn","recBad");
-      if (kind === "ok") el.recMain.classList.add("recOk");
-      if (kind === "warn") el.recMain.classList.add("recWarn");
-      if (kind === "bad") el.recMain.classList.add("recBad");
-      el.recTitle.textContent = title;
-      el.recSub.textContent = sub;
-    }
-
-    function renderRecommendations(){
-      if (!currentCompanyName){
-        setRecMain("ok", "Vyber firmu.", "Až vybereš firmu, nabídneme nejkratší cestu k řešení.");
-        el.btnRecCritical.disabled = true;
-        el.btnRec30.disabled = true;
-        el.btnRecBulk.disabled = true;
-        el.btnRecEmployees.setAttribute("aria-disabled", "true");
-        return;
-      }
-
-      el.btnRecEmployees.removeAttribute("aria-disabled");
-
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
-
-      el.btnRecCritical.disabled = false;
-      el.btnRec30.disabled = false;
-      el.btnRecBulk.disabled = !canEdit;
-
-      if (expired > 0 || exp14 > 0){
-        setRecMain(
-          "bad",
-          "Kritické – řešit hned",
-          `Doporučení: zobrazit kritické (14 dní) a naplánovat akci. Prošlá: ${expired} • Do 14 dnů: ${exp14}.`
-        );
-        el.recNote.textContent = canEdit
-          ? "Tip: začni zobrazením kritických a pak rovnou použij „Hromadné školení“."
-          : "Read-only: můžeš zobrazit kritické a předat úkol HR / Manažerovi.";
-        return;
-      }
-
-      if (exp30 > 0){
-        setRecMain(
-          "warn",
-          "Varování – naplánovat včas",
-          `Doporučení: zobrazit expirace do 30 dnů a naplánovat školení. Do 30 dnů: ${exp30}.`
-        );
-        el.recNote.textContent = "Tip: plánuj dopředu – vyhneš se kritickému stavu.";
-        return;
-      }
-
-      setRecMain(
-        "ok",
-        "OK – nic kritického",
-        "Doporučení: můžeš jen zkontrolovat evidenci nebo pokračovat v práci."
-      );
-      el.recNote.textContent = "Tip: pravidelně kontroluj aspoň expirace do 30 dnů.";
-    }
-
-    function renderWarnings(){
-      if (!currentCompanyName){
-        clearWarnings();
-        return;
-      }
-
-      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
-
-      el.wExpired.textContent = String(expired);
-      el.w14.textContent = String(exp14);
-      el.w30.textContent = String(exp30);
-
-      el.wExpiredSub.textContent = "Vyžaduje okamžitou akci";
-      el.w14Sub.textContent = "Kritické – naplánovat teď";
-      el.w30Sub.textContent = "Varování – hlídat a plánovat";
-
-      el.wcExpired.classList.toggle("crit", expired > 0);
-      el.wc14.classList.toggle("crit", exp14 > 0);
-      el.wc30.classList.toggle("warn", exp30 > 0);
-
-      if (expired > 0 || exp14 > 0){
-        setWarnMain(
-          "bad",
-          "Kritické – hrozí neplatná školení",
-          `Prošlá: ${expired} • Do 14 dnů: ${exp14}. Doporučení: zobrazit kritické a řešit.`
-        );
-      } else if (exp30 > 0){
-        setWarnMain(
-          "warn",
-          "Varování – blíží se expirace",
-          `Do 30 dnů: ${exp30}. Doporučení: naplánovat školení včas.`
-        );
-      } else {
-        setWarnMain(
-          "ok",
-          "OK – nic kritického",
-          "V následujících 30 dnech nejsou žádné blízké expirace."
-        );
-      }
-
-      el.btnShowCritical.disabled = false;
-    }
-
-    function computeRiskIssuesFromExpirations(){
-      const today = new Date();
-      const issues = [];
-
-      for (const it of (lastExpirations || [])){
-        const exp = new Date(it.expiresAt);
-        if (isNaN(exp.getTime())) continue;
-        const left = daysBetween(today, exp);
-
-        let kind = "ok";
-        let text = `OK (${left} dnů)`;
-        if (left <= 0){ kind = "bad"; text = "Prošlé školení"; }
-        else if (left <= 14){ kind = "bad"; text = `Kritické (za ${left} dnů)`; }
-        else if (left <= 30){ kind = "warn"; text = `Blíží se (za ${left} dnů)`; }
-
-        issues.push({
-          employeeId: it.employeeId || "",
-          employeeName: it.employeeName || "—",
-          riskName: it.trainingName || "—",
-          statusKind: kind,
-          statusText: text,
-          daysLeft: left
-        });
-      }
-
-      issues.sort((a,b) => a.daysLeft - b.daysLeft);
-      return issues;
-    }
-
-    function renderRiskIssues(){
-      if (!currentCompanyName){
-        clearRiskIssues("Vyber firmu.");
-        return;
-      }
-
-      let issues = computeRiskIssuesFromExpirations();
-      const criticalOnly = !!el.chkCriticalOnly.checked;
-
-      if (criticalOnly){
-        issues = issues.filter(x => x.statusKind === "bad");
-      } else {
-        issues = issues.filter(x => x.statusKind === "bad" || x.statusKind === "warn");
-      }
-
-      lastRiskIssues = issues;
-
-      if (issues.length === 0){
-        el.riskState.textContent = criticalOnly
-          ? "Žádná kritická rizika (prošlé / do 14 dnů)."
-          : "Žádná rizika k řešení (prošlé / do 30 dnů).";
-        el.riskTbody.innerHTML = `<tr><td colspan="4" class="note">Nic k řešení.</td></tr>`;
-        return;
-      }
-
-      el.riskState.textContent = criticalOnly
-        ? `Nalezeno: ${issues.length} (jen kritické).`
-        : `Nalezeno: ${issues.length} (kritické + varování).`;
-
-      const top = issues.slice(0, 10);
-
-      el.riskTbody.innerHTML = top.map(x => {
-        return `
-          <tr>
-            <td>${escapeHtml(x.employeeName)}</td>
-            <td>${escapeHtml(x.riskName)}</td>
-            <td>${badgeForIssue(x.statusKind, x.statusText)}</td>
-            <td><button class="btn" data-employee-id="${escapeHtml(x.employeeId)}">Otevřít</button></td>
-          </tr>
-        `;
-      }).join("");
-
-      el.riskTbody.querySelectorAll("button[data-employee-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const empId = btn.getAttribute("data-employee-id") || "";
-          if (!empId){
-            alert("Chybí employeeId – v datech není identifikátor pracovníka.");
+          if (!trainingId) {
+            alert("Chybí trainingId v reportu. Pošli mi prosím jeden záznam z /api/reports/trainings (F12 → Network → Response).");
             return;
           }
-          localStorage.setItem(LS.employeeId, empId);
-          window.location.href = "employee.html";
-        });
-      });
-    }
 
-    async function loadExpirationsForCompany(){
-      const days = Number(el.daysInput.value || 60);
+          const from = todayStrUtc();
+          const to = addYearsToDateStr(from, 1);
 
-      if (!currentCompanyName){
-        clearExpirations("Vyber firmu.");
-        lastExpirations = [];
-        renderWarnings();
-        renderRiskIssues();
-        renderRecommendations();
-        return;
-      }
+          const ok = confirm(
+            `Nastavit od dneška +1 rok\n` +
+            `${it.employeeName} — ${it.trainingName}\n\n` +
+            `Platí od: ${from}\nPlatí do: ${to}\n\nPokračovat?`
+          );
+          if (!ok) return;
 
-      el.expState.textContent = "Počítám z dat zaměstnanců…";
-      el.expTbody.innerHTML = `<tr><td colspan="5" class="note">Počítám…</td></tr>`;
+          btn.disabled = true;
+          const oldText = btn.textContent;
+          btn.textContent = "Ukládám…";
 
-      // vezmeme firmy z employee dat
-      const all = flattenExpirationsFromEmployees(companyEmployees);
-      const today = new Date();
+          try {
+            await apiUpdateTraining(empId, trainingId, {
+              name: String(it.trainingName || "—"),
+              validFrom: from,
+              validTo: to
+            });
 
-      const filtered = all.filter(it => {
-        const d = new Date(it.expiresAt);
-        if (isNaN(d.getTime())) return false;
-        const left = daysBetween(today, d);
-        return left <= days;
-      });
-
-      filtered.sort((a,b) => new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime());
-      lastExpirations = filtered;
-
-      renderWarnings();
-      renderRiskIssues();
-      renderRecommendations();
-
-      if (filtered.length === 0){
-        el.expState.textContent = `Žádné expirace do ${days} dnů.`;
-        el.expTbody.innerHTML = `<tr><td colspan="5" class="note">Žádné expirace do ${days} dnů.</td></tr>`;
-        return;
-      }
-
-      el.expState.textContent = `Nalezeno: ${filtered.length} (do ${days} dnů)`;
-
-      el.expTbody.innerHTML = filtered.map(it => {
-        const exp = new Date(it.expiresAt);
-        const left = daysBetween(today, exp);
-        const badge = badgeForDaysLeft(left);
-
-        const dateText = formatDateISO(it.expiresAt);
-        return `
-          <tr>
-            <td>${escapeHtml(dateText)}</td>
-            <td><span class="${badge.cls}">${escapeHtml(badge.text)}</span></td>
-            <td>${escapeHtml(it.employeeName || "—")}</td>
-            <td>${escapeHtml(it.trainingName || "—")}</td>
-            <td><button class="btn" data-employee-id="${escapeHtml(it.employeeId || "")}">Otevřít</button></td>
-          </tr>
-        `;
-      }).join("");
-
-      el.expTbody.querySelectorAll("button[data-employee-id]").forEach(btn => {
-        btn.addEventListener("click", () => {
-          const empId = btn.getAttribute("data-employee-id") || "";
-          if (!empId){
-            alert("Chybí employeeId – v expiracích není identifikátor pracovníka.");
-            return;
+            await load();
+          } catch (err) {
+            console.error(err);
+            alert("Nepodařilo se uložit: " + (err?.message || err));
+          } finally {
+            btn.textContent = oldText;
+            btn.disabled = false;
           }
-          localStorage.setItem(LS.employeeId, empId);
-          window.location.href = "employee.html";
         });
-      });
+
+        row.appendChild(btn);
+      }
+
+      return row;
     }
 
-    function renderSummaryForCompany(){
-      clearSummary();
-
-      if (!currentCompanyName){
-        el.summaryMsg.textContent = "Vyber firmu.";
+    function renderList(el, items, kind) {
+      el.innerHTML = "";
+      if (!items || items.length === 0) {
+        const d = document.createElement("div");
+        d.style.padding = "12px 12px";
+        d.style.color = "rgba(232,238,255,.55)";
+        d.textContent = "Nic.";
+        el.appendChild(d);
         return;
       }
-
-      // vypočítáme KPI z companyEmployees
-      const employeesCount = companyEmployees.length;
-
-      const expAll = flattenExpirationsFromEmployees(companyEmployees);
-      const today = new Date();
-
-      let exp30 = 0;
-      let exp60 = 0;
-      let risksTotal = 0; // součet „problémových“ školení (<=30, včetně prošlých)
-
-      for (const it of expAll){
-        const d = new Date(it.expiresAt);
-        if (isNaN(d.getTime())) continue;
-        const left = daysBetween(today, d);
-
-        if (left <= 30) { exp30++; risksTotal++; }
-        if (left <= 60) { exp60++; }
-      }
-
-      el.kpiEmployees.textContent = String(employeesCount);
-      el.kpiRisks.textContent = String(risksTotal);
-      el.kpiExp30.textContent = String(exp30);
-      el.kpiExp60.textContent = String(exp60);
-
-      el.kpiEmployeesSub.textContent = "Počet evidovaných osob";
-      el.kpiRisksSub.textContent = "Školení s expirací do 30 dnů (vč. prošlých)";
-      el.kpiExp30Sub.textContent = "Počet školení do 30 dnů";
-      el.kpiExp60Sub.textContent = "Počet školení do 60 dnů";
-
-      el.summaryMsg.textContent = (mode === "TEST")
-        ? "Souhrn z TEST dat."
-        : "Souhrn z dat /api/employees (bez /api/companies).";
-    }
-
-    function buildCompanyListFromEmployees(items){
-      const map = new Map(); // key->display
-      for (const e of (items || [])){
-        const c = norm(e.company);
-        if (!c) continue;
-        const k = c.toLowerCase();
-        if (!map.has(k)) map.set(k, c);
-      }
-      return Array.from(map.values()).sort((a,b) => a.localeCompare(b, "cs"));
-    }
-
-    function fillCompanySelect(companies){
-      const saved = norm(localStorage.getItem(LS.companyId) || "");
-      el.companySelect.innerHTML = `<option value="">— Vyber firmu —</option>` + companies
-        .map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`)
-        .join("");
-
-      if (saved && companies.some(x => x.toLowerCase() === saved.toLowerCase())){
-        // nastavíme přesně z option (kvůli správnému case)
-        const found = companies.find(x => x.toLowerCase() === saved.toLowerCase());
-        el.companySelect.value = found || "";
-        currentCompanyName = found || "";
-      } else {
-        el.companySelect.value = "";
-        currentCompanyName = "";
+      for (const it of items) {
+        el.appendChild(makeRow(it, kind));
       }
     }
 
-    function filterEmployeesByCompany(companyName){
-      const key = String(companyName || "").toLowerCase();
-      companyEmployees = (allEmployees || []).filter(e => String(e.company || "").toLowerCase() === key);
-    }
+    async function load() {
+      const days = Math.max(0, Number(elDays.value || 30) || 30);
+      status.textContent = "Načítám…";
 
-    async function loadEmployeesSource(){
-      if (mode === "TEST"){
-        allEmployees = testEmployees();
-        return;
-      }
-      const data = await apiGetJson("/api/employees");
-      if (!Array.isArray(data)) throw new Error("/api/employees nevrátil pole (array).");
-      allEmployees = data;
-    }
+      try {
+        const res = await fetch(API_REPORT + "?days=" + encodeURIComponent(days), { headers: headersWithRole() });
+        if (!res.ok) throw new Error("API error " + res.status);
+        const data = await res.json();
 
-    async function loadCompanies(){
-      el.companySelect.innerHTML = `<option value="">Načítám…</option>`;
-      setDiag("Načítám firmy z employees…");
+        cExpired.textContent = String(data.expired?.length || 0);
+        cExpiring.textContent = String(data.expiring?.length || 0);
 
-      try{
-        if (mode === "TEST"){
-          setStatus("ok", "TEST data");
-        } else {
-          setStatus("ok", "API OK");
-        }
+        status.textContent = `Dnes: ${data.today} • okno: ${data.days} dní • role: ${ROLE_LABELS[role] || role}`;
 
-        await loadEmployeesSource();
-
-        const companies = buildCompanyListFromEmployees(allEmployees);
-
-        if (companies.length === 0){
-          el.companySelect.innerHTML = `<option value="">— Žádné firmy —</option>`;
-          currentCompanyName = "";
-          setDiag("Nenalezeny žádné firmy v datech zaměstnanců.");
-          return;
-        }
-
-        fillCompanySelect(companies);
-
-        setDiag(`Firmy načteny (${companies.length}) z ${mode === "TEST" ? "TEST" : "/api/employees"}.`);
-      } catch(err){
-        // fallback do TEST
-        mode = "TEST";
-        localStorage.setItem(LS.forceMode, mode);
-
-        allEmployees = testEmployees();
-        const companies = buildCompanyListFromEmployees(allEmployees);
-        fillCompanySelect(companies);
-
-        setStatus("bad", "Chyba API → TEST");
-        setDiag(`API chyba: ${err.message}. Přepínám na TEST data, aby šlo UI používat.`);
+        renderList(boxExpired, data.expired, "expired");
+        renderList(boxExpiring, data.expiring, "expiring");
+      } catch (err) {
+        console.error(err);
+        status.textContent = "Nepodařilo se načíst dashboard. Je backend spuštěný a existuje /api/reports/trainings?";
       }
     }
 
-    async function reloadCompanyData(){
-      clearSummary();
-      clearWarnings();
-      clearRiskIssues("Vyber firmu.");
-      clearExpirations("Vyber firmu.");
+    // role events
+    btnChangeRole.addEventListener("click", openRoleModal);
+    btnRoleClose.addEventListener("click", closeRoleModal);
+    btnRoleCancel.addEventListener("click", closeRoleModal);
+    btnRoleApply.addEventListener("click", applyRole);
+    roleBack.addEventListener("click", (e) => { if (e.target === roleBack) closeRoleModal(); });
 
-      applyRoleToActions();
-      renderRecommendations();
+    // dashboard events
+    btnLoad.addEventListener("click", load);
 
-      if (!currentCompanyName){
-        setDiag(`Vyber firmu. Režim: ${mode}. Role: ${currentRole}.`);
-        return;
-      }
-
-      localStorage.setItem(LS.companyId, currentCompanyName);
-
-      // firma = filtr zaměstnanců
-      filterEmployeesByCompany(currentCompanyName);
-
-      // souhrn a expirace lokálně
-      renderSummaryForCompany();
-      await loadExpirationsForCompany();
-    }
-
-    // ===== Kritické: nastav 14 dní + jen kritické + scroll =====
-    function focusCriticalRisks(){
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-
-      el.daysInput.value = 14;
-      el.chkCriticalOnly.checked = true;
-
-      loadExpirationsForCompany();
-
-      setTimeout(() => {
-        document.getElementById("boxRiskIssues")
-          ?.scrollIntoView({ behavior: "smooth", block: "start" });
-      }, 150);
-    }
-
-    function initRiskIssuesBox(){
-      el.chkCriticalOnly.addEventListener("change", () => {
-        renderRiskIssues();
-        renderWarnings();
-        renderRecommendations();
-      });
-    }
-
-    // ===== EVENTS =====
-    el.companySelect.addEventListener("change", async () => {
-      currentCompanyName = el.companySelect.value || "";
-      await reloadCompanyData();
-    });
-
-    el.btnReload.addEventListener("click", async () => {
-      await loadCompanies();
-      await reloadCompanyData();
-    });
-
-    el.btnRefreshExp.addEventListener("click", async () => {
-      await loadExpirationsForCompany();
-    });
-
-    el.btnShowCritical.addEventListener("click", () => {
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      focusCriticalRisks();
-    });
-
-    el.btnGoEmployees.addEventListener("click", (e) => {
-      if (!currentCompanyName){
-        e.preventDefault();
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-
-      // vyhodnotíme fokus dle stavu
-      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
-      let focus = "none";
-      if (expired > 0 || exp14 > 0) focus = "critical14";
-      else if (exp30 > 0) focus = "exp30";
-
-      WA_NAV.set(focus, "dashboard");
-      // navigace proběhne přes href
-    });
-
-    el.btnBulkTraining.addEventListener("click", () => {
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      if (!canEdit){
-        alert("Read-only: hromadné školení není povoleno.");
-        return;
-      }
-      window.location.href = "employees.html";
-    });
-
-    // Doporučené kroky – tlačítka
-    el.btnRecCritical.addEventListener("click", () => {
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      focusCriticalRisks();
-    });
-
-    el.btnRec30.addEventListener("click", async () => {
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      el.daysInput.value = 30;
-      await loadExpirationsForCompany();
-    });
-
-    el.btnRecBulk.addEventListener("click", () => {
-      if (!currentCompanyName){
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-      const canEdit = (currentRole === "HR" || currentRole === "MANAGER");
-      if (!canEdit){
-        alert("Read-only: hromadné školení není povoleno.");
-        return;
-      }
-      window.location.href = "employees.html";
-    });
-
-    el.btnRecEmployees.addEventListener("click", (e) => {
-      if (!currentCompanyName){
-        e.preventDefault();
-        alert("Nejdřív vyber firmu.");
-        return;
-      }
-
-      const { expired, exp14, exp30 } = computeWarningCountsFromExpirations(lastExpirations);
-
-      let focus = "none";
-      if (expired > 0 || exp14 > 0) focus = "critical14";
-      else if (exp30 > 0) focus = "exp30";
-
-      WA_NAV.set(focus, "dashboard");
-    });
-
-    function setModeButtonsDisabled(disabled){
-      el.btnForceTest.disabled = disabled;
-      el.btnForceApi.disabled = disabled;
-    }
-
-    el.btnForceTest.addEventListener("click", async () => {
-      setDiag("Klik: Přepínám na TEST data…");
-      setModeButtonsDisabled(true);
-
-      mode = "TEST";
-      localStorage.setItem(LS.forceMode, mode);
-      setStatus("ok", "TEST data");
-
-      await loadCompanies();
-      await reloadCompanyData();
-
-      setDiag("Hotovo: Režim TEST je aktivní.");
-      setModeButtonsDisabled(false);
-    });
-
-    el.btnForceApi.addEventListener("click", async () => {
-      setDiag("Klik: Přepínám na API…");
-      setModeButtonsDisabled(true);
-
-      mode = "API";
-      localStorage.setItem(LS.forceMode, mode);
-      setStatus("ok", "API OK");
-
-      await loadCompanies();
-      await reloadCompanyData();
-
-      setDiag("Hotovo: Režim API aktivní (data z /api/employees).");
-      setModeButtonsDisabled(false);
-    });
-
-    // ===== START =====
-    (async function init(){
-      initRiskIssuesBox();
-
-      currentRole = loadRole();
-      el.roleBox.textContent = currentRole;
-
-      currentCompanyName = localStorage.getItem(LS.companyId) || "";
-
-      setStatus((mode === "TEST") ? "ok" : "ok", (mode === "TEST") ? "TEST data" : "Start…");
-      setDiag(`Start. Režim: ${mode}. Role: ${currentRole}. Uložená firma: ${currentCompanyName || "žádná"}.`);
-
-      await loadCompanies();
-
-      // po loadCompanies se currentCompanyName nastaví podle localStorage, takže jen reload
-      await reloadCompanyData();
-    })();
+    // start
+    applyRoleUI();
+    load();
   </script>
 </body>
 </html>

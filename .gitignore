@@ -15,3 +15,10 @@ Thumbs.db
 # env
 .env
 .env.*
+# editor config
+.vscode/
+.idea/
+
+# build output (do budoucna)
+dist/
+build/

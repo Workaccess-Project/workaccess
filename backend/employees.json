@@ -8,25 +8,28 @@
     "focus": "Svářeč",
     "active": true,
     "createdAt": "2026-02-04T16:07:35.040Z",
-    "updatedAt": "2026-02-05T13:53:41.444Z",
-    "company": "Armina",
+    "updatedAt": "2026-02-08T17:38:07.978Z",
+    "company": "Vapeo",
     "email": "armina@armina.cz",
     "position": "Prodavač",
     "trainings": [
       {
-        "name": "BOZP",
-        "validFrom": "2023-01-01",
-        "validTo": "2024-01-01"
+        "name": "Práce ve výškách",
+        "validFrom": "2026-02-05",
+        "validTo": "2027-02-05",
+        "id": "trn_mldtoc5r_ir6ggq"
       },
       {
         "name": "Požární ochrana",
         "validFrom": "2026-02-05",
-        "validTo": "2029-02-05"
+        "validTo": "2029-02-05",
+        "id": "trn_mldtoc5r_qmaybg"
       },
       {
-        "name": "Práce ve výškách",
-        "validFrom": "2026-02-05",
-        "validTo": "2027-02-05"
+        "id": "tr_1770565241866_55996346e53068",
+        "name": "Test školení",
+        "validFrom": "2026-02-08",
+        "validTo": "2027-02-08"
       }
     ]
   },
@@ -36,17 +39,25 @@
     "lastName": "Mikulka",
     "company": "Vapeo",
     "createdAt": "2026-02-04T17:30:04.270Z",
-    "updatedAt": "2026-02-05T11:03:01.741Z",
+    "updatedAt": "2026-02-08T09:06:31.815Z",
     "trainings": [
       {
         "name": "Požární ochrana (PO)",
         "validFrom": "2026-02-04",
-        "validTo": "2028-02-04"
+        "validTo": "2028-02-04",
+        "id": "trn_mldtoc5r_vtokui"
       },
       {
         "name": "Práce ve výškách",
         "validFrom": "2026-02-04",
-        "validTo": "2028-02-04"
+        "validTo": "2028-02-04",
+        "id": "trn_mldtoc5r_c17h8n"
+      },
+      {
+        "name": "První pomoc",
+        "validFrom": "2026-02-08",
+        "validTo": "2027-02-08",
+        "id": "trn_mldtoc5r_4i7vmz"
       }
     ],
     "email": "workaccess@seznam.cz",
