@@ -1,0 +1,24 @@
+[
+  {
+    "id": "aud_mlf9uv77_lpnaea",
+    "ts": "2026-02-09T14:33:08.467Z",
+    "actorRole": "hr",
+    "action": "training.create",
+    "entityType": "training",
+    "entityId": "tr_1770647588461_b80ec223bcdf6",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "tr_1770647588461_b80ec223bcdf6"
+    },
+    "before": null,
+    "after": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "tr_1770647588461_b80ec223bcdf6",
+        "name": "Test školení 3.",
+        "validFrom": "2026-02-09",
+        "validTo": "2026-02-10"
+      }
+    }
+  }
+]

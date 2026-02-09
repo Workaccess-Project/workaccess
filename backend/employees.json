@@ -8,7 +8,7 @@
     "focus": "Svářeč",
     "active": true,
     "createdAt": "2026-02-04T16:07:35.040Z",
-    "updatedAt": "2026-02-08T17:38:07.978Z",
+    "updatedAt": "2026-02-09T14:33:08.462Z",
     "company": "Vapeo",
     "email": "armina@armina.cz",
     "position": "Prodavač",
@@ -16,7 +16,7 @@
       {
         "name": "Práce ve výškách",
         "validFrom": "2026-02-05",
-        "validTo": "2027-02-05",
+        "validTo": "2027-02-06",
         "id": "trn_mldtoc5r_ir6ggq"
       },
       {
@@ -30,6 +30,18 @@
         "name": "Test školení",
         "validFrom": "2026-02-08",
         "validTo": "2027-02-08"
+      },
+      {
+        "id": "tr_1770644850140_ea35864a3a5d7",
+        "name": "Test školení 2.",
+        "validFrom": "2024-02-09",
+        "validTo": "2025-02-09"
+      },
+      {
+        "id": "tr_1770647588461_b80ec223bcdf6",
+        "name": "Test školení 3.",
+        "validFrom": "2026-02-09",
+        "validTo": "2026-02-10"
       }
     ]
   },

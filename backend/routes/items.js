@@ -1,5 +1,7 @@
+// backend/routes/items.js
 import express from "express";
 import { readData, writeData } from "../data.js";
+import { auditLog } from "../data-audit.js";
 
 const router = express.Router();
 
@@ -15,7 +17,7 @@ router.get("/", (req, res) => {
 });
 
 // POST /api/items  { text }
-router.post("/", (req, res) => {
+router.post("/", async (req, res) => {
   const items = readData();
 
   const text = (req.body?.text ?? "").toString().trim();
@@ -32,11 +34,21 @@ router.post("/", (req, res) => {
   items.push(newItem);
   writeData(items);
 
+  await auditLog({
+    actorRole: req.role,
+    action: "item.create",
+    entityType: "item",
+    entityId: newItem.id,
+    meta: {},
+    before: null,
+    after: newItem,
+  });
+
   res.status(201).json(newItem);
 });
 
 // PATCH /api/items/:id  (toggle done)
-router.patch("/:id", (req, res) => {
+router.patch("/:id", async (req, res) => {
   const items = readData();
   const { id } = req.params;
 
@@ -45,14 +57,26 @@ router.patch("/:id", (req, res) => {
     return res.status(404).json({ error: "Položka nenalezena" });
   }
 
+  const before = { ...items[idx] };
+
   items[idx].done = !items[idx].done;
   writeData(items);
+
+  await auditLog({
+    actorRole: req.role,
+    action: "item.toggle",
+    entityType: "item",
+    entityId: id,
+    meta: {},
+    before,
+    after: items[idx],
+  });
 
   res.json(items[idx]);
 });
 
 // PATCH /api/items/:id/text  { text }  (update text)
-router.patch("/:id/text", (req, res) => {
+router.patch("/:id/text", async (req, res) => {
   const items = readData();
   const { id } = req.params;
 
@@ -66,16 +90,30 @@ router.patch("/:id/text", (req, res) => {
     return res.status(404).json({ error: "Položka nenalezena" });
   }
 
+  const before = { ...items[idx] };
+
   items[idx].text = text;
   writeData(items);
+
+  await auditLog({
+    actorRole: req.role,
+    action: "item.updateText",
+    entityType: "item",
+    entityId: id,
+    meta: {},
+    before,
+    after: items[idx],
+  });
 
   res.json(items[idx]);
 });
 
 // DELETE /api/items/:id
-router.delete("/:id", (req, res) => {
+router.delete("/:id", async (req, res) => {
   const items = readData();
   const { id } = req.params;
+
+  const before = items.find((it) => sameId(it.id, id)) || null;
 
   const next = items.filter((it) => !sameId(it.id, id));
   if (next.length === items.length) {
@@ -83,14 +121,38 @@ router.delete("/:id", (req, res) => {
   }
 
   writeData(next);
+
+  await auditLog({
+    actorRole: req.role,
+    action: "item.delete",
+    entityType: "item",
+    entityId: id,
+    meta: {},
+    before,
+    after: null,
+  });
+
   res.json({ ok: true });
 });
 
 // DELETE /api/items  (smazat hotové)
-router.delete("/", (req, res) => {
+router.delete("/", async (req, res) => {
   const items = readData();
+  const doneItems = items.filter((it) => !!it.done);
+
   const next = items.filter((it) => !it.done);
   writeData(next);
+
+  await auditLog({
+    actorRole: req.role,
+    action: "item.deleteDone",
+    entityType: "item",
+    entityId: null,
+    meta: { deleted: doneItems.length },
+    before: doneItems,
+    after: null,
+  });
+
   res.json({ ok: true, deleted: items.length - next.length });
 });
 

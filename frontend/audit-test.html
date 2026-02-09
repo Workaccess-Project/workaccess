@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Audit test</title>
+  <style>
+    body{font-family:system-ui,Segoe UI,Arial,sans-serif;background:#0b1020;color:#e8eeff;margin:0;padding:24px;}
+    .card{max-width:900px;margin:0 auto;border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:16px;background:rgba(255,255,255,.06);}
+    select,button{padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.18);background:rgba(0,0,0,.2);color:#e8eeff;}
+    button{cursor:pointer;background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
+    pre{white-space:pre-wrap;background:rgba(0,0,0,.25);padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.12);}
+    .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
+    .muted{color:rgba(232,238,255,.65);font-size:12px;}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2 style="margin:0 0 10px;">Audit test (posílá header <code>x-role</code>)</h2>
+    <div class="row">
+      <label class="muted">Role:</label>
+      <select id="role">
+        <option value="hr">hr</option>
+        <option value="manager">manager</option>
+        <option value="security">security</option>
+        <option value="external">external</option>
+      </select>
+      <button id="btn">Načíst /api/audit?limit=50</button>
+    </div>
+    <p class="muted" style="margin:10px 0 0;">
+      Očekávání: hr/manager/security → 200, external → 403.
+    </p>
+    <pre id="out">—</pre>
+  </div>
+
+  <script>
+    const out = document.getElementById("out");
+    const roleSel = document.getElementById("role");
+    const btn = document.getElementById("btn");
+
+    btn.addEventListener("click", async () => {
+      out.textContent = "Načítám…";
+      const role = roleSel.value;
+
+      try {
+        const res = await fetch("http://localhost:3000/api/audit?limit=50", {
+          headers: { "x-role": role }
+        });
+
+        const text = await res.text();
+        out.textContent =
+          `HTTP ${res.status} (${res.ok ? "OK" : "ERROR"})\n` +
+          `x-role: ${role}\n\n` +
+          text;
+      } catch (e) {
+        out.textContent = "Chyba: " + (e?.message || e);
+      }
+    });
+  </script>
+</body>
+</html>

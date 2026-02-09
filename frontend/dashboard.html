@@ -77,13 +77,22 @@
     }
     .status{padding:12px 18px;color:var(--muted);font-size:12px;}
 
+    /* ✅ 3 sloupce když je audit vidět, jinak 2 */
     .grid{
       display:grid;
       grid-template-columns: 1fr 1fr;
       gap:12px;
       padding:0 18px 18px;
     }
-    @media (max-width: 900px){ .grid{grid-template-columns:1fr} }
+    .grid.withAudit{
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+    @media (max-width: 1050px){
+      .grid.withAudit{grid-template-columns:1fr;}
+    }
+    @media (max-width: 900px){
+      .grid{grid-template-columns:1fr;}
+    }
 
     .box{
       border:1px solid rgba(255,255,255,.10);
@@ -99,10 +108,12 @@
       border-bottom:1px solid rgba(255,255,255,.10);
       color:var(--muted);
       font-size:12px;
+      gap:10px;
     }
     .count{
       font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
       color:var(--muted);background:rgba(0,0,0,.12);
+      white-space:nowrap;
     }
 
     .row{
@@ -142,6 +153,38 @@
       border:1px solid rgba(99,230,190,.25);
       background:rgba(99,230,190,.12);
       height:32px;
+    }
+
+    /* ✅ audit */
+    .auditRow{
+      padding:12px 12px;
+      border-bottom:1px solid rgba(255,255,255,.08);
+    }
+    .auditRow:last-child{border-bottom:0}
+    .auditTop{
+      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+      font-size:13px;
+    }
+    .auditMeta{
+      margin-top:6px;
+      font-size:12px;
+      color:var(--muted);
+      line-height:1.35;
+      word-break:break-word;
+    }
+    .auditPill{
+      font-size:11px;
+      padding:2px 8px;
+      border-radius:999px;
+      border:1px solid rgba(255,255,255,.12);
+      color:var(--muted);
+      background:rgba(0,0,0,.12);
+      white-space:nowrap;
+    }
+    .auditAction{
+      border-color:rgba(110,168,254,.28);
+      background:rgba(110,168,254,.12);
+      color:rgba(232,238,255,.9);
     }
 
     /* Modal (role) */
@@ -197,11 +240,17 @@
         <label style="font-size:12px;color:var(--muted);">Dní dopředu:</label>
         <input id="days" type="number" min="0" value="30" style="width:120px;" />
         <button class="primary" id="btnLoad">Načíst</button>
+
+        <!-- ✅ audit refresh (jen když je audit vidět) -->
+        <span id="auditControls" style="margin-left:auto; display:none; gap:10px; align-items:center;">
+          <span class="pill" style="margin:0;">Audit: <span id="auditRoleHint" style="color:var(--text)">—</span></span>
+          <button id="btnAuditReload" title="Načíst audit znovu">Načíst audit</button>
+        </span>
       </div>
 
       <div class="status" id="status">—</div>
 
-      <div class="grid">
+      <div class="grid" id="grid">
         <div class="box">
           <div class="boxHead">
             <strong style="color:var(--text);font-weight:700;">Propadlé</strong>
@@ -216,6 +265,15 @@
             <span class="count" id="cExpiring">0</span>
           </div>
           <div id="expiring"></div>
+        </div>
+
+        <!-- ✅ Audit panel (jen pro hr/manager/security) -->
+        <div class="box" id="auditBox" style="display:none;">
+          <div class="boxHead">
+            <strong style="color:var(--text);font-weight:700;">Poslední změny (audit)</strong>
+            <span class="count" id="cAudit">0</span>
+          </div>
+          <div id="audit"></div>
         </div>
       </div>
     </div>
@@ -248,51 +306,23 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { getRole, setRole, roleLabel, canWrite, headersWithRole } from "./js/wa_role.js";
+
     const API_REPORT = "http://localhost:3000/api/reports/trainings";
     const API_EMP = "http://localhost:3000/api/employees";
+    const API_AUDIT = "http://localhost:3000/api/audit";
 
-    // role (stejně jako employees.html)
-    const LS_ROLE = "workaccess.portal.role";
-    const ROLE_LABELS = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
-    let role = localStorage.getItem(LS_ROLE) || "hr";
+    let role = getRole();
 
-    const roleLabel = document.getElementById("roleLabel");
+    // role UI
+    const roleLabelEl = document.getElementById("roleLabel");
     const btnChangeRole = document.getElementById("btnChangeRole");
     const roleBack = document.getElementById("roleBack");
     const roleSelect = document.getElementById("roleSelect");
     const btnRoleClose = document.getElementById("btnRoleClose");
     const btnRoleCancel = document.getElementById("btnRoleCancel");
     const btnRoleApply = document.getElementById("btnRoleApply");
-
-    function headersWithRole() {
-      return { "Content-Type": "application/json", "x-role": role };
-    }
-
-    function canWrite() {
-      return role === "hr" || role === "manager";
-    }
-
-    function applyRoleUI() {
-      roleLabel.textContent = ROLE_LABELS[role] || role;
-    }
-
-    function openRoleModal() {
-      roleSelect.value = role;
-      roleBack.style.display = "flex";
-      roleBack.setAttribute("aria-hidden", "false");
-    }
-    function closeRoleModal() {
-      roleBack.style.display = "none";
-      roleBack.setAttribute("aria-hidden", "true");
-    }
-    async function applyRole() {
-      role = roleSelect.value || "hr";
-      localStorage.setItem(LS_ROLE, role);
-      applyRoleUI();
-      closeRoleModal();
-      await load(); // refresh
-    }
 
     // dashboard UI
     const elDays = document.getElementById("days");
@@ -304,6 +334,48 @@
 
     const cExpired = document.getElementById("cExpired");
     const cExpiring = document.getElementById("cExpiring");
+
+    // audit UI
+    const grid = document.getElementById("grid");
+    const auditBox = document.getElementById("auditBox");
+    const auditList = document.getElementById("audit");
+    const cAudit = document.getElementById("cAudit");
+
+    const auditControls = document.getElementById("auditControls");
+    const auditRoleHint = document.getElementById("auditRoleHint");
+    const btnAuditReload = document.getElementById("btnAuditReload");
+
+    function applyRoleUI() {
+      roleLabelEl.textContent = roleLabel(role);
+
+      const canSeeAudit = role === "hr" || role === "manager" || role === "security";
+
+      // ukážeme/skryjeme audit box + upravíme grid
+      auditBox.style.display = canSeeAudit ? "block" : "none";
+      auditControls.style.display = canSeeAudit ? "inline-flex" : "none";
+      auditRoleHint.textContent = roleLabel(role);
+
+      if (canSeeAudit) grid.classList.add("withAudit");
+      else grid.classList.remove("withAudit");
+    }
+
+    function openRoleModal() {
+      roleSelect.value = role;
+      roleBack.style.display = "flex";
+      roleBack.setAttribute("aria-hidden", "false");
+    }
+    function closeRoleModal() {
+      roleBack.style.display = "none";
+      roleBack.setAttribute("aria-hidden", "true");
+    }
+
+    async function applyRole() {
+      role = setRole(roleSelect.value || "hr");
+      applyRoleUI();
+      closeRoleModal();
+      await load();     // refresh report
+      await loadAudit(); // refresh audit (když je vidět)
+    }
 
     function isIsoDateOnly(s) {
       return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
@@ -331,7 +403,7 @@
     async function apiUpdateTraining(empId, trainingId, payload) {
       const res = await fetch(`${API_EMP}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "PUT",
-        headers: headersWithRole(),
+        headers: headersWithRole(role),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -373,8 +445,7 @@
 
       row.appendChild(a);
 
-      // ✅ UX: tlačítko jen pro role s WRITE (hr, manager)
-      if (canWrite()) {
+      if (canWrite(role)) {
         const btn = document.createElement("button");
         btn.className = "btnSmall";
         btn.textContent = "Od dneška +1 rok";
@@ -414,6 +485,7 @@
             });
 
             await load();
+            await loadAudit();
           } catch (err) {
             console.error(err);
             alert("Nepodařilo se uložit: " + (err?.message || err));
@@ -444,19 +516,141 @@
       }
     }
 
+    function fmtTs(iso) {
+      if (!iso) return "—";
+      const d = new Date(iso);
+      if (String(d) === "Invalid Date") return String(iso);
+      return d.toLocaleString("cs-CZ");
+    }
+
+    function summarizeAuditItem(a) {
+      // očekáváme strukturu, kterou jsme si navrhli:
+      // { ts, actorRole, action, entityType, entityId, meta: { employeeId, trainingId } }
+      const actor = a?.actorRole ? String(a.actorRole) : "—";
+      const action = a?.action ? String(a.action) : "—";
+      const ts = fmtTs(a?.ts);
+
+      const empId = a?.meta?.employeeId ? String(a.meta.employeeId) : null;
+
+      let what = "";
+      if (action.startsWith("training.")) {
+        what = "školení";
+      } else if (action.startsWith("employee.")) {
+        what = "zaměstnanec";
+      } else {
+        what = a?.entityType ? String(a.entityType) : "objekt";
+      }
+
+      return { ts, actor, action, what, empId };
+    }
+
+    function renderAudit(items) {
+      auditList.innerHTML = "";
+
+      const arr = Array.isArray(items) ? items : [];
+      cAudit.textContent = String(arr.length);
+
+      if (arr.length === 0) {
+        const d = document.createElement("div");
+        d.style.padding = "12px 12px";
+        d.style.color = "rgba(232,238,255,.55)";
+        d.textContent = "Zatím žádné změny.";
+        auditList.appendChild(d);
+        return;
+      }
+
+      for (const a of arr) {
+        const s = summarizeAuditItem(a);
+
+        const row = document.createElement("div");
+        row.className = "auditRow";
+
+        const top = document.createElement("div");
+        top.className = "auditTop";
+
+        const ts = document.createElement("span");
+        ts.className = "auditPill";
+        ts.textContent = s.ts;
+
+        const act = document.createElement("span");
+        act.className = "auditPill auditAction";
+        act.textContent = s.action;
+
+        const who = document.createElement("span");
+        who.className = "auditPill";
+        who.textContent = `role: ${s.actor}`;
+
+        top.appendChild(ts);
+        top.appendChild(act);
+        top.appendChild(who);
+
+        const meta = document.createElement("div");
+        meta.className = "auditMeta";
+
+        // link na detail zaměstnance, pokud máme employeeId
+        if (s.empId) {
+          const link = document.createElement("a");
+          link.href = `./employees.html#emp=${encodeURIComponent(s.empId)}`;
+          link.style.color = "rgba(232,238,255,.92)";
+          link.style.textDecoration = "none";
+          link.textContent = `Otevřít zaměstnance (${s.empId})`;
+
+          const line = document.createElement("div");
+          line.appendChild(document.createTextNode(`Změna: ${s.what} • `));
+          line.appendChild(link);
+
+          meta.appendChild(line);
+        } else {
+          meta.textContent = `Změna: ${s.what}`;
+        }
+
+        row.appendChild(top);
+        row.appendChild(meta);
+
+        auditList.appendChild(row);
+      }
+    }
+
+    async function loadAudit() {
+      const canSeeAudit = role === "hr" || role === "manager" || role === "security";
+      if (!canSeeAudit) return;
+
+      // malý UX: ukázat načítání v count
+      cAudit.textContent = "…";
+
+      try {
+        const res = await fetch(API_AUDIT + "?limit=50", { headers: headersWithRole(role) });
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          throw new Error(`Audit API error ${res.status} ${txt}`);
+        }
+        const data = await res.json();
+        renderAudit(data?.items || []);
+      } catch (err) {
+        console.error(err);
+        auditList.innerHTML = "";
+        const d = document.createElement("div");
+        d.style.padding = "12px 12px";
+        d.style.color = "rgba(232,238,255,.55)";
+        d.textContent = "Audit se nepodařilo načíst.";
+        auditList.appendChild(d);
+        cAudit.textContent = "!";
+      }
+    }
+
     async function load() {
       const days = Math.max(0, Number(elDays.value || 30) || 30);
       status.textContent = "Načítám…";
 
       try {
-        const res = await fetch(API_REPORT + "?days=" + encodeURIComponent(days), { headers: headersWithRole() });
+        const res = await fetch(API_REPORT + "?days=" + encodeURIComponent(days), { headers: headersWithRole(role) });
         if (!res.ok) throw new Error("API error " + res.status);
         const data = await res.json();
 
         cExpired.textContent = String(data.expired?.length || 0);
         cExpiring.textContent = String(data.expiring?.length || 0);
 
-        status.textContent = `Dnes: ${data.today} • okno: ${data.days} dní • role: ${ROLE_LABELS[role] || role}`;
+        status.textContent = `Dnes: ${data.today} • okno: ${data.days} dní • role: ${roleLabel(role)}`;
 
         renderList(boxExpired, data.expired, "expired");
         renderList(boxExpiring, data.expiring, "expiring");
@@ -474,11 +668,18 @@
     roleBack.addEventListener("click", (e) => { if (e.target === roleBack) closeRoleModal(); });
 
     // dashboard events
-    btnLoad.addEventListener("click", load);
+    btnLoad.addEventListener("click", async () => {
+      await load();
+      await loadAudit();
+    });
+
+    // audit events
+    btnAuditReload.addEventListener("click", loadAudit);
 
     // start
     applyRoleUI();
     load();
+    loadAudit();
   </script>
 </body>
 </html>

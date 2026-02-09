@@ -112,7 +112,6 @@
       box-shadow:0 0 0 3px rgba(99,230,190,.12);display:inline-block;
     }
 
-    /* status pill */
     .st{
       display:inline-flex;
       align-items:center;
@@ -129,7 +128,6 @@
     .dot.warn{background:rgba(255,209,102,.75); box-shadow:0 0 0 3px rgba(255,209,102,.12);}
     .dot.bad{background:rgba(255,107,107,.75); box-shadow:0 0 0 3px rgba(255,107,107,.12);}
 
-    /* Modal */
     .modalBack{
       position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;
       padding:18px;z-index:9999;
@@ -392,13 +390,12 @@
     </div>
   </div>
 
-  <script>
+  <script type="module">
+    import { getRole, setRole, roleLabel, canWrite, headersWithRole } from "./js/wa_role.js";
+
     const API_BASE = "http://localhost:3000/api/employees";
 
-    const LS_ROLE = "workaccess.portal.role";
-    const ROLE_LABELS = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
-
-    let role = localStorage.getItem(LS_ROLE) || "hr";
+    let role = getRole();
 
     let employees = [];
     let selectedEmployeeId = null;
@@ -446,15 +443,8 @@
     const btnRoleCancel = document.getElementById("btnRoleCancel");
     const btnRoleApply = document.getElementById("btnRoleApply");
 
-    function headersWithRole() {
-      return {
-        "Content-Type": "application/json",
-        "x-role": role
-      };
-    }
-
     function applyRoleUI() {
-      elRoleLabel.textContent = ROLE_LABELS[role] || role;
+      elRoleLabel.textContent = roleLabel(role);
     }
 
     function fmtDate(iso) {
@@ -478,7 +468,7 @@
     }
 
     function canEditTraining() {
-      return role === "hr" || role === "manager";
+      return canWrite(role); // hr + manager
     }
 
     function isIsoDateOnly(s) {
@@ -557,13 +547,13 @@
     }
 
     async function apiList() {
-      const res = await fetch(API_BASE, { headers: headersWithRole() });
+      const res = await fetch(API_BASE, { headers: headersWithRole(role) });
       if (!res.ok) throw new Error(`GET /employees failed (${res.status})`);
       return await res.json();
     }
 
     async function apiDetail(id) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { headers: headersWithRole() });
+      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { headers: headersWithRole(role) });
       if (!res.ok) throw new Error(`GET /employees/:id failed (${res.status})`);
       return await res.json();
     }
@@ -571,7 +561,7 @@
     async function apiAddTraining(id, payload) {
       const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}/trainings`, {
         method: "POST",
-        headers: headersWithRole(),
+        headers: headersWithRole(role),
         body: JSON.stringify(payload)
       });
       if (!res.ok) {
@@ -584,7 +574,7 @@
     async function apiDeleteTraining(empId, trainingId) {
       const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "DELETE",
-        headers: headersWithRole(),
+        headers: headersWithRole(role),
       });
       if (!res.ok) {
         const txt = await res.text().catch(() => "");
@@ -596,7 +586,7 @@
     async function apiUpdateTraining(empId, trainingId, payload) {
       const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "PUT",
-        headers: headersWithRole(),
+        headers: headersWithRole(role),
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -605,6 +595,8 @@
       }
       return await res.json().catch(() => ({}));
     }
+
+    let lastDetailTrainings = [];
 
     function startEditTraining(t) {
       editingTrainingId = t?.id || null;
@@ -703,8 +695,6 @@
       }
     }
 
-    let lastDetailTrainings = [];
-
     function isTrainingValid(t) {
       const to = parseDateOnlyUtc(t?.validTo);
       if (!to) return false;
@@ -752,6 +742,7 @@
           plusBtn.textContent = "+1 rok";
           plusBtn.title = "Prodlouží 'Platí do' o 1 rok (od původního data)";
           plusBtn.addEventListener("click", async (e) => {
+            e.preventDefault();
             e.stopPropagation();
             await quickExtendOneYearFromOld(t);
           });
@@ -761,6 +752,7 @@
           resetBtn.textContent = "Od dneška +1 rok";
           resetBtn.title = "Nastaví validFrom = dnes a validTo = dnes + 1 rok";
           resetBtn.addEventListener("click", async (e) => {
+            e.preventDefault();
             e.stopPropagation();
             await quickResetOneYearFromToday(t);
           });
@@ -769,6 +761,7 @@
           editBtn.className = "btnSmall";
           editBtn.textContent = "Upravit";
           editBtn.addEventListener("click", (e) => {
+            e.preventDefault();
             e.stopPropagation();
             if (!t?.id) return alert("Školení nemá id (znovu načti seznam).");
             startEditTraining(t);
@@ -778,6 +771,7 @@
           delBtn.className = "btnSmall btnDanger";
           delBtn.textContent = "Smazat";
           delBtn.addEventListener("click", async (e) => {
+            e.preventDefault();
             e.stopPropagation();
             const tid = t?.id;
             if (!tid) return alert("Školení nemá id (znovu načti seznam).");
@@ -851,6 +845,7 @@
           saveBtn.className = "primary";
           saveBtn.textContent = "Uložit";
           saveBtn.addEventListener("click", (e) => {
+            e.preventDefault();
             e.stopPropagation();
             saveEditTraining();
           });
@@ -858,6 +853,7 @@
           const cancelBtn = document.createElement("button");
           cancelBtn.textContent = "Zrušit";
           cancelBtn.addEventListener("click", (e) => {
+            e.preventDefault();
             e.stopPropagation();
             cancelEditTraining();
           });
@@ -945,7 +941,10 @@
         elRows.appendChild(tr);
       }
 
-      elStatusText.textContent = `Načteno: ${visible.length} záznamů. Filtr: ${mode === "all" ? "Všichni" : (mode === "expired" ? "Propadlé" : mode === "expiring" ? "Končí brzy" : "OK")} • Končí brzy: ${days} dní`;
+      elStatusText.textContent =
+        `Načteno: ${visible.length} záznamů. Filtr: ${
+          mode === "all" ? "Všichni" : (mode === "expired" ? "Propadlé" : mode === "expiring" ? "Končí brzy" : "OK")
+        } • Končí brzy: ${days} dní`;
     }
 
     async function loadList() {
@@ -1048,7 +1047,6 @@
       }
     }
 
-    // Role modal helpers
     function openRoleModal() {
       roleSelect.value = role;
       roleBack.style.display = "flex";
@@ -1060,8 +1058,7 @@
     }
 
     async function applyRole() {
-      role = roleSelect.value || "hr";
-      localStorage.setItem(LS_ROLE, role);
+      role = setRole(roleSelect.value || "hr");
       applyRoleUI();
       closeRoleModal();
 
@@ -1069,7 +1066,6 @@
       if (selectedEmployeeId) await openDetail(selectedEmployeeId);
     }
 
-    // ✅ PROKLIK z dashboardu: #emp=ID
     function getEmpIdFromHash() {
       const hash = (window.location.hash || "").replace(/^#/, "");
       const params = new URLSearchParams(hash);
