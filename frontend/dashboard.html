@@ -34,47 +34,7 @@
       overflow:hidden;
       position:relative;
     }
-    header{
-      padding:18px 18px 12px;
-      border-bottom:1px solid var(--border);
-      display:flex;
-      gap:12px;
-      align-items:flex-start;
-      justify-content:space-between;
-    }
-    .nav{display:flex;gap:10px;align-items:center;flex-wrap:wrap;}
-    .pill{
-      padding:6px 10px;border-radius:999px;border:1px solid var(--border);
-      background:rgba(0,0,0,.14);color:var(--muted);font-size:12px;
-    }
-    a.navlink{
-      color:var(--muted);text-decoration:none;padding:6px 10px;border-radius:999px;border:1px solid transparent;
-    }
-    a.navlink.active{
-      color:var(--text);border-color:rgba(110,168,254,.35);background:rgba(110,168,254,.16);
-    }
 
-    button, input, select{
-      padding:10px 12px;border-radius:12px;border:1px solid var(--border);
-      background:rgba(0,0,0,.18);color:var(--text);outline:none;
-    }
-    button{
-      background:rgba(255,255,255,.06);
-      cursor:pointer;
-      user-select:none;
-      white-space:nowrap;
-    }
-    button.primary{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
-    button:disabled{opacity:.45;cursor:not-allowed}
-
-    .toolbar{
-      padding:14px 18px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-      border-bottom:1px solid var(--border);
-      flex-wrap:wrap;
-    }
     .status{padding:12px 18px;color:var(--muted);font-size:12px;}
 
     /* ✅ 3 sloupce když je audit vidět, jinak 2 */
@@ -93,6 +53,27 @@
     @media (max-width: 900px){
       .grid{grid-template-columns:1fr;}
     }
+
+    .toolbar{
+      padding:14px 18px;
+      display:flex;
+      gap:10px;
+      align-items:center;
+      border-bottom:1px solid var(--border);
+      flex-wrap:wrap;
+    }
+    button, input{
+      padding:10px 12px;border-radius:12px;border:1px solid var(--border);
+      background:rgba(0,0,0,.18);color:var(--text);outline:none;
+    }
+    button{
+      background:rgba(255,255,255,.06);
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+    }
+    button.primary{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
+    button:disabled{opacity:.45;cursor:not-allowed}
 
     .box{
       border:1px solid rgba(255,255,255,.10);
@@ -186,64 +167,28 @@
       background:rgba(110,168,254,.12);
       color:rgba(232,238,255,.9);
     }
-
-    /* Modal (role) */
-    .modalBack{
-      position:fixed;inset:0;background:rgba(0,0,0,.55);
-      display:none;align-items:center;justify-content:center;
-      padding:18px;z-index:9999;
-    }
-    .modal{
-      width:min(820px, 100%);
-      background:linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.05));
-      border:1px solid rgba(255,255,255,.12);
-      border-radius:16px;
-      box-shadow:0 20px 50px rgba(0,0,0,.55);
-      overflow:hidden;
-    }
-    .modalHead{
-      padding:14px 16px;border-bottom:1px solid rgba(255,255,255,.10);
-      display:flex;align-items:center;justify-content:space-between;gap:10px;
-    }
-    .modalBody{padding:14px 16px}
-    .modalFoot{
-      padding:12px 16px 16px;
-      display:flex;justify-content:flex-end;gap:10px;
-      border-top:1px solid rgba(255,255,255,.10);
-    }
-    .iconbtn{width:38px;height:34px;display:inline-grid;place-items:center;padding:0;}
-    .hint{font-size:12px;color:var(--muted);margin:0;line-height:1.35}
   </style>
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <header>
-        <div>
-          <div class="nav">
-            <span class="pill" style="color:var(--text)">WORKACCESS</span>
-            <a class="navlink active" href="./dashboard.html">Dashboard</a>
-            <a class="navlink" href="./employees.html">Zaměstnanci</a>
-            <a class="navlink" href="./index.html">TODO</a>
-          </div>
-          <h1 style="margin:10px 0 0;font-size:18px;">Dashboard – expirace školení</h1>
-          <div class="pill" style="margin-top:8px;">GET /api/reports/trainings</div>
-        </div>
-
-        <div style="display:flex; flex-direction:column; align-items:flex-end; gap:8px;">
-          <div class="pill">Role: <span id="roleLabel" style="color:var(--text)">—</span></div>
-          <button id="btnChangeRole">Změnit roli</button>
-        </div>
-      </header>
+      <!-- společná navigace -->
+      <div id="wa-nav"></div>
 
       <div class="toolbar">
-        <label style="font-size:12px;color:var(--muted);">Dní dopředu:</label>
+        <div style="display:flex; flex-direction:column; gap:4px; min-width: 260px;">
+          <div style="font-size:18px; font-weight:700;">Dashboard – expirace školení</div>
+          <div style="font-size:12px; color:var(--muted);">GET /api/reports/trainings</div>
+        </div>
+
+        <label style="font-size:12px;color:var(--muted); margin-left:auto;">Dní dopředu:</label>
         <input id="days" type="number" min="0" value="30" style="width:120px;" />
         <button class="primary" id="btnLoad">Načíst</button>
 
-        <!-- ✅ audit refresh (jen když je audit vidět) -->
-        <span id="auditControls" style="margin-left:auto; display:none; gap:10px; align-items:center;">
-          <span class="pill" style="margin:0;">Audit: <span id="auditRoleHint" style="color:var(--text)">—</span></span>
+        <!-- audit refresh (jen když je audit vidět) -->
+        <span id="auditControls" style="display:none; gap:10px; align-items:center;">
+          <span style="font-size:12px;color:var(--muted);">Audit:</span>
+          <span class="auditPill auditAction" id="auditRoleHint">—</span>
           <button id="btnAuditReload" title="Načíst audit znovu">Načíst audit</button>
         </span>
       </div>
@@ -267,7 +212,7 @@
           <div id="expiring"></div>
         </div>
 
-        <!-- ✅ Audit panel (jen pro hr/manager/security) -->
+        <!-- Audit panel (jen pro hr/manager/security) -->
         <div class="box" id="auditBox" style="display:none;">
           <div class="boxHead">
             <strong style="color:var(--text);font-weight:700;">Poslední změny (audit)</strong>
@@ -279,59 +224,23 @@
     </div>
   </div>
 
-  <!-- Modal: Role -->
-  <div class="modalBack" id="roleBack" role="dialog" aria-modal="true" aria-hidden="true">
-    <div class="modal">
-      <div class="modalHead">
-        <strong>Vyber roli (DEMO)</strong>
-        <button class="iconbtn" id="btnRoleClose" title="Zavřít">✕</button>
-      </div>
-      <div class="modalBody">
-        <p class="hint">
-          Demo přihlášení. Role se ukládá do localStorage a posílá se do backendu v hlavičce
-          <span class="pill">x-role</span>.
-        </p>
+  <!-- pořadí: config -> nav -> api -->
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js"></script>
 
-        <select id="roleSelect" style="width:100%; margin-top:10px;">
-          <option value="hr">HR</option>
-          <option value="security">Bezpečnost</option>
-          <option value="manager">Manažer</option>
-          <option value="external">Externista</option>
-        </select>
-      </div>
-      <div class="modalFoot">
-        <button id="btnRoleCancel">Zrušit</button>
-        <button class="primary" id="btnRoleApply">Použít roli</button>
-      </div>
-    </div>
-  </div>
+  <script>
+    WA_NAV.renderNav("dashboard");
 
-  <script type="module">
-    import { getRole, setRole, roleLabel, canWrite, headersWithRole } from "./js/wa_role.js";
+    let role = WA_NAV.getRole(); // hr/security/manager/external
 
-    const API_REPORT = "http://localhost:3000/api/reports/trainings";
-    const API_EMP = "http://localhost:3000/api/employees";
-    const API_AUDIT = "http://localhost:3000/api/audit";
-
-    let role = getRole();
-
-    // role UI
-    const roleLabelEl = document.getElementById("roleLabel");
-    const btnChangeRole = document.getElementById("btnChangeRole");
-    const roleBack = document.getElementById("roleBack");
-    const roleSelect = document.getElementById("roleSelect");
-    const btnRoleClose = document.getElementById("btnRoleClose");
-    const btnRoleCancel = document.getElementById("btnRoleCancel");
-    const btnRoleApply = document.getElementById("btnRoleApply");
-
-    // dashboard UI
+    // UI
     const elDays = document.getElementById("days");
     const btnLoad = document.getElementById("btnLoad");
     const status = document.getElementById("status");
 
     const boxExpired = document.getElementById("expired");
     const boxExpiring = document.getElementById("expiring");
-
     const cExpired = document.getElementById("cExpired");
     const cExpiring = document.getElementById("cExpiring");
 
@@ -345,12 +254,20 @@
     const auditRoleHint = document.getElementById("auditRoleHint");
     const btnAuditReload = document.getElementById("btnAuditReload");
 
+    function roleLabel(r){
+      const map = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
+      return map[r] || r;
+    }
+    function canWrite(r){
+      // stejné jako dřív: externista ne
+      return r === "hr" || r === "manager" || r === "security";
+    }
+
     function applyRoleUI() {
-      roleLabelEl.textContent = roleLabel(role);
+      role = WA_NAV.getRole();
 
       const canSeeAudit = role === "hr" || role === "manager" || role === "security";
 
-      // ukážeme/skryjeme audit box + upravíme grid
       auditBox.style.display = canSeeAudit ? "block" : "none";
       auditControls.style.display = canSeeAudit ? "inline-flex" : "none";
       auditRoleHint.textContent = roleLabel(role);
@@ -359,28 +276,9 @@
       else grid.classList.remove("withAudit");
     }
 
-    function openRoleModal() {
-      roleSelect.value = role;
-      roleBack.style.display = "flex";
-      roleBack.setAttribute("aria-hidden", "false");
-    }
-    function closeRoleModal() {
-      roleBack.style.display = "none";
-      roleBack.setAttribute("aria-hidden", "true");
-    }
-
-    async function applyRole() {
-      role = setRole(roleSelect.value || "hr");
-      applyRoleUI();
-      closeRoleModal();
-      await load();     // refresh report
-      await loadAudit(); // refresh audit (když je vidět)
-    }
-
     function isIsoDateOnly(s) {
       return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
     }
-
     function todayStrUtc() {
       const d = new Date();
       const yyyy = d.getUTCFullYear();
@@ -388,7 +286,6 @@
       const dd = String(d.getUTCDate()).padStart(2, "0");
       return `${yyyy}-${mm}-${dd}`;
     }
-
     function addYearsToDateStr(yyyyMmDd, years) {
       if (!isIsoDateOnly(yyyyMmDd)) return null;
       const [y, m, d] = yyyyMmDd.split("-").map(n => Number(n));
@@ -401,9 +298,12 @@
     }
 
     async function apiUpdateTraining(empId, trainingId, payload) {
-      const res = await fetch(`${API_EMP}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+      const res = await fetch(`${WA_CONFIG.getApiBase()}/employees/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "PUT",
-        headers: headersWithRole(role),
+        headers: {
+          "Content-Type": "application/json",
+          ...(localStorage.getItem("workaccess.role") ? { "x-role": localStorage.getItem("workaccess.role") } : {})
+        },
         body: JSON.stringify(payload),
       });
       if (!res.ok) {
@@ -511,9 +411,7 @@
         el.appendChild(d);
         return;
       }
-      for (const it of items) {
-        el.appendChild(makeRow(it, kind));
-      }
+      for (const it of items) el.appendChild(makeRow(it, kind));
     }
 
     function fmtTs(iso) {
@@ -524,8 +422,6 @@
     }
 
     function summarizeAuditItem(a) {
-      // očekáváme strukturu, kterou jsme si navrhli:
-      // { ts, actorRole, action, entityType, entityId, meta: { employeeId, trainingId } }
       const actor = a?.actorRole ? String(a.actorRole) : "—";
       const action = a?.action ? String(a.action) : "—";
       const ts = fmtTs(a?.ts);
@@ -533,13 +429,9 @@
       const empId = a?.meta?.employeeId ? String(a.meta.employeeId) : null;
 
       let what = "";
-      if (action.startsWith("training.")) {
-        what = "školení";
-      } else if (action.startsWith("employee.")) {
-        what = "zaměstnanec";
-      } else {
-        what = a?.entityType ? String(a.entityType) : "objekt";
-      }
+      if (action.startsWith("training.")) what = "školení";
+      else if (action.startsWith("employee.")) what = "zaměstnanec";
+      else what = a?.entityType ? String(a.entityType) : "objekt";
 
       return { ts, actor, action, what, empId };
     }
@@ -587,7 +479,6 @@
         const meta = document.createElement("div");
         meta.className = "auditMeta";
 
-        // link na detail zaměstnance, pokud máme employeeId
         if (s.empId) {
           const link = document.createElement("a");
           link.href = `./employees.html#emp=${encodeURIComponent(s.empId)}`;
@@ -615,11 +506,13 @@
       const canSeeAudit = role === "hr" || role === "manager" || role === "security";
       if (!canSeeAudit) return;
 
-      // malý UX: ukázat načítání v count
       cAudit.textContent = "…";
 
       try {
-        const res = await fetch(API_AUDIT + "?limit=50", { headers: headersWithRole(role) });
+        const res = await fetch(`${WA_CONFIG.getApiBase()}/audit?limit=50`, {
+          headers: { "x-role": (localStorage.getItem("workaccess.role") || "hr") }
+        });
+
         if (!res.ok) {
           const txt = await res.text().catch(() => "");
           throw new Error(`Audit API error ${res.status} ${txt}`);
@@ -643,9 +536,14 @@
       status.textContent = "Načítám…";
 
       try {
-        const res = await fetch(API_REPORT + "?days=" + encodeURIComponent(days), { headers: headersWithRole(role) });
-        if (!res.ok) throw new Error("API error " + res.status);
-        const data = await res.json();
+        // přes WA_API – už to posílá roli automaticky
+        const data = await (async () => {
+          const res = await fetch(`${WA_CONFIG.getApiBase()}/reports/trainings?days=${encodeURIComponent(days)}`, {
+            headers: { "x-role": (localStorage.getItem("workaccess.role") || "hr") }
+          });
+          if (!res.ok) throw new Error("API error " + res.status);
+          return await res.json();
+        })();
 
         cExpired.textContent = String(data.expired?.length || 0);
         cExpiring.textContent = String(data.expiring?.length || 0);
@@ -660,21 +558,17 @@
       }
     }
 
-    // role events
-    btnChangeRole.addEventListener("click", openRoleModal);
-    btnRoleClose.addEventListener("click", closeRoleModal);
-    btnRoleCancel.addEventListener("click", closeRoleModal);
-    btnRoleApply.addEventListener("click", applyRole);
-    roleBack.addEventListener("click", (e) => { if (e.target === roleBack) closeRoleModal(); });
-
-    // dashboard events
+    // events
     btnLoad.addEventListener("click", async () => {
+      applyRoleUI();
       await load();
       await loadAudit();
     });
 
-    // audit events
-    btnAuditReload.addEventListener("click", loadAudit);
+    btnAuditReload.addEventListener("click", async () => {
+      applyRoleUI();
+      await loadAudit();
+    });
 
     // start
     applyRoleUI();

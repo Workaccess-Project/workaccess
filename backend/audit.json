@@ -20,5 +20,169 @@
         "validTo": "2026-02-10"
       }
     }
+  },
+  {
+    "id": "aud_mlgft2nc_r8f220",
+    "ts": "2026-02-10T10:07:28.680Z",
+    "actorRole": "hr",
+    "action": "training.create",
+    "entityType": "training",
+    "entityId": "trn_mlgft2n6_6iupt4",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "trn_mlgft2n6_6iupt4"
+    },
+    "before": null,
+    "after": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlgft2n6_6iupt4",
+        "name": "Test školení 10.2.26",
+        "validFrom": "2026-02-10",
+        "validTo": "2027-02-10"
+      }
+    }
+  },
+  {
+    "id": "aud_mlggwjug_s4fgqj",
+    "ts": "2026-02-10T10:38:10.552Z",
+    "actorRole": "hr",
+    "action": "training.create",
+    "entityType": "training",
+    "entityId": "trn_mlggwjua_7kn1an",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "trn_mlggwjua_7kn1an"
+    },
+    "before": null,
+    "after": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2026-02-12"
+      }
+    }
+  },
+  {
+    "id": "aud_mlggwsvg_xbbvx3",
+    "ts": "2026-02-10T10:38:22.252Z",
+    "actorRole": "hr",
+    "action": "training.update",
+    "entityType": "training",
+    "entityId": "trn_mlggwjua_7kn1an",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "trn_mlggwjua_7kn1an"
+    },
+    "before": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2026-02-12"
+      }
+    },
+    "after": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2027-02-12"
+      }
+    }
+  },
+  {
+    "id": "aud_mlggx5rk_r6tcce",
+    "ts": "2026-02-10T10:38:38.960Z",
+    "actorRole": "hr",
+    "action": "training.update",
+    "entityType": "training",
+    "entityId": "trn_mlggwjua_7kn1an",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "trn_mlggwjua_7kn1an"
+    },
+    "before": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2027-02-12"
+      }
+    },
+    "after": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2027-02-10"
+      }
+    }
+  },
+  {
+    "id": "aud_mlggxica_y61ccr",
+    "ts": "2026-02-10T10:38:55.258Z",
+    "actorRole": "manager",
+    "action": "training.delete",
+    "entityType": "training",
+    "entityId": "trn_mlggwjua_7kn1an",
+    "meta": {
+      "employeeId": "1770221255039",
+      "trainingId": "trn_mlggwjua_7kn1an"
+    },
+    "before": {
+      "employeeId": "1770221255039",
+      "training": {
+        "id": "trn_mlggwjua_7kn1an",
+        "name": "Test školení 123",
+        "validFrom": "2026-02-10",
+        "validTo": "2027-02-10"
+      }
+    },
+    "after": null
+  },
+  {
+    "id": "aud_mlgkrim8_4bx5wb",
+    "ts": "2026-02-10T12:26:14.144Z",
+    "actorRole": "hr",
+    "action": "item.toggle",
+    "entityType": "item",
+    "entityId": "1770140591826",
+    "meta": {},
+    "before": {
+      "id": "1770140591826",
+      "text": "Položka 1",
+      "done": false
+    },
+    "after": {
+      "id": "1770140591826",
+      "text": "Položka 1",
+      "done": true
+    }
+  },
+  {
+    "id": "aud_mlgkrjni_qswu7u",
+    "ts": "2026-02-10T12:26:15.486Z",
+    "actorRole": "hr",
+    "action": "item.toggle",
+    "entityType": "item",
+    "entityId": "1770140591826",
+    "meta": {},
+    "before": {
+      "id": "1770140591826",
+      "text": "Položka 1",
+      "done": true
+    },
+    "after": {
+      "id": "1770140591826",
+      "text": "Položka 1",
+      "done": false
+    }
   }
 ]

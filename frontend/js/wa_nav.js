@@ -2,7 +2,7 @@
 // Společná navigace + role (DEMO). Bez bundleru – vše na window.
 
 (() => {
-  const LS_ROLE = "workaccess.role";
+  const LS_ROLE = "workaccess.portal.role";
 
   const ROLE_LABELS = {
     hr: "HR",
@@ -12,11 +12,11 @@
   };
 
   function getRole() {
-    return localStorage.getItem(LS_ROLE) || "hr";
+    return (localStorage.getItem(LS_ROLE) || "hr").toString();
   }
 
   function setRole(role) {
-    localStorage.setItem(LS_ROLE, role);
+    localStorage.setItem(LS_ROLE, (role || "hr").toString());
   }
 
   function escapeHtml(s) {
@@ -68,7 +68,7 @@
           <button class="waIconBtn" id="waClose" title="Zavřít">✕</button>
         </div>
         <div class="waModal__body">
-          <p>Demo přihlášení. Zatím se role ukládá do localStorage a posílá se do backendu přes hlavičku <code>x-role</code>.</p>
+          <p>Role se ukládá do localStorage a posílá se do backendu přes hlavičku <code>x-role</code>.</p>
           <select id="waRoleSelect">
             <option value="hr">HR</option>
             <option value="security">Bezpečnost</option>
@@ -101,7 +101,6 @@
       const next = sel.value || "hr";
       setRole(next);
       close();
-      // refresh celé stránky, aby se znovu načetl /api/me a RBAC
       location.reload();
     });
 

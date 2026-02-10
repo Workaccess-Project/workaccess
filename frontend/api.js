@@ -1,9 +1,17 @@
-// frontend/js/api.js
+// frontend/api.js
 // Jedno místo pro volání backendu + automatické posílání x-role.
+// Používá WA_CONFIG.getApiBase() z frontend/js/wa_config.js
 (() => {
-  const ORIGIN = "http://localhost:3000";
+  function apiBase() {
+    // fallback kdyby WA_CONFIG nebyl načtený (ať to nespadne)
+    if (window.WA_CONFIG && typeof window.WA_CONFIG.getApiBase === "function") {
+      return window.WA_CONFIG.getApiBase(); // vrací už včetně /api
+    }
+    return "http://localhost:3000/api";
+  }
 
   function roleHeader() {
+    // MUSÍ sedět s wa_nav.js (tam je workaccess.role)
     const role = localStorage.getItem("workaccess.role") || "hr";
     return { "x-role": role };
   }
@@ -16,35 +24,39 @@
   }
 
   async function apiFetch(path, opts = {}) {
+    // path očekáváme jako "/me", "/items", ...
     const headers = {
       ...roleHeader(),
       ...(opts.headers || {}),
     };
-    const res = await fetch(ORIGIN + path, { ...opts, headers });
+
+    const res = await fetch(apiBase() + path, { ...opts, headers });
+
     if (!res.ok) {
       const body = await readJsonIfAny(res);
       const msg = body?.error || body?.message || `${res.status} ${res.statusText}`;
       throw new Error(msg);
     }
+
     return readJsonIfAny(res);
   }
 
   // --- endpoints ---
-  const getMe = () => apiFetch("/api/me");
+  const getMe = () => apiFetch("/me");
 
-  const getEmployees = () => apiFetch("/api/employees");
-  const getEmployee = (id) => apiFetch(`/api/employees/${encodeURIComponent(id)}`);
+  const getEmployees = () => apiFetch("/employees");
+  const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
 
-  const getItems = () => apiFetch("/api/items");
-  const addItem = (text) => apiFetch("/api/items", {
+  const getItems = () => apiFetch("/items");
+  const addItem = (text) => apiFetch("/items", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),
   });
-  const toggleItem = (id) => apiFetch(`/api/items/${encodeURIComponent(id)}`, { method: "PATCH" });
-  const deleteItem = (id) => apiFetch(`/api/items/${encodeURIComponent(id)}`, { method: "DELETE" });
-  const deleteDone = () => apiFetch("/api/items", { method: "DELETE" });
-  const updateItemText = (id, text) => apiFetch(`/api/items/${encodeURIComponent(id)}/text`, {
+  const toggleItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "PATCH" });
+  const deleteItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const deleteDone = () => apiFetch("/items", { method: "DELETE" });
+  const updateItemText = (id, text) => apiFetch(`/items/${encodeURIComponent(id)}/text`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ text }),

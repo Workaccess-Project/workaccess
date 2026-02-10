@@ -6,6 +6,7 @@ import {
   createEmployee,
   updateEmployee,
   deleteEmployee,
+  addTrainingToEmployee,
   deleteTrainingFromEmployee,
   updateTrainingInEmployee,
 } from "../data-employees.js";
@@ -121,33 +122,29 @@ router.post("/:id/trainings", requireWrite, async (req, res) => {
   const empBefore = await getEmployeeById(id);
   if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
 
-  const training = {
-    id: `tr_${Date.now()}_${Math.random().toString(16).slice(2)}`,
-    name: String(name),
-    validFrom: String(validFrom),
-    validTo: String(validTo),
-  };
+  try {
+    // ✅ sjednoceno: tvorba trainingu je v data layer (generuje trn_... id)
+    const updatedEmp = await addTrainingToEmployee(id, { name, validFrom, validTo });
+    if (!updatedEmp) return res.status(404).json({ error: "Employee not found", id });
 
-  const next = {
-    ...empBefore,
-    trainings: Array.isArray(empBefore.trainings) ? [...empBefore.trainings, training] : [training],
-    updatedAt: new Date().toISOString(),
-  };
+    const trainings = Array.isArray(updatedEmp.trainings) ? updatedEmp.trainings : [];
+    const createdTraining = trainings.length ? trainings[trainings.length - 1] : null;
 
-  const saved = await updateEmployee(id, next);
-  if (!saved) return res.status(500).json({ error: "Failed to save training" });
+    await auditLog({
+      actorRole: req.role,
+      action: "training.create",
+      entityType: "training",
+      entityId: createdTraining?.id ?? null,
+      meta: { employeeId: id, trainingId: createdTraining?.id ?? null },
+      before: null,
+      after: { employeeId: id, training: createdTraining },
+    });
 
-  await auditLog({
-    actorRole: req.role,
-    action: "training.create",
-    entityType: "training",
-    entityId: training.id,
-    meta: { employeeId: id, trainingId: training.id },
-    before: null,
-    after: { employeeId: id, training },
-  });
-
-  res.status(201).json(training);
+    // zachováme původní chování FE: vracíme training objekt
+    res.status(201).json(createdTraining || { ok: true });
+  } catch (err) {
+    return res.status(400).json({ error: err?.message || String(err) });
+  }
 });
 
 /**
@@ -159,8 +156,10 @@ router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const empBefore = await getEmployeeById(id);
   if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
 
-  const beforeTraining = (Array.isArray(empBefore.trainings) ? empBefore.trainings : [])
-    .find((t) => String(t?.id) === String(trainingId)) || null;
+  const beforeTraining =
+    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
+      (t) => String(t?.id) === String(trainingId)
+    ) || null;
 
   const result = await deleteTrainingFromEmployee(id, trainingId);
 
@@ -202,8 +201,10 @@ router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const empBefore = await getEmployeeById(id);
   if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
 
-  const beforeTraining = (Array.isArray(empBefore.trainings) ? empBefore.trainings : [])
-    .find((t) => String(t?.id) === String(trainingId)) || null;
+  const beforeTraining =
+    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
+      (t) => String(t?.id) === String(trainingId)
+    ) || null;
 
   try {
     const result = await updateTrainingInEmployee(id, trainingId, { name, validFrom, validTo });
@@ -216,8 +217,10 @@ router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
     }
 
     const empAfter = await getEmployeeById(id);
-    const afterTraining = (Array.isArray(empAfter?.trainings) ? empAfter.trainings : [])
-      .find((t) => String(t?.id) === String(trainingId)) || null;
+    const afterTraining =
+      (Array.isArray(empAfter?.trainings) ? empAfter.trainings : []).find(
+        (t) => String(t?.id) === String(trainingId)
+      ) || null;
 
     await auditLog({
       actorRole: req.role,

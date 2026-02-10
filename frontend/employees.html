@@ -392,8 +392,9 @@
 
   <script type="module">
     import { getRole, setRole, roleLabel, canWrite, headersWithRole } from "./js/wa_role.js";
+    import { getApiBase } from "./js/wa_config.js";
 
-    const API_BASE = "http://localhost:3000/api/employees";
+    const API = `${getApiBase()}/employees`;
 
     let role = getRole();
 
@@ -547,19 +548,19 @@
     }
 
     async function apiList() {
-      const res = await fetch(API_BASE, { headers: headersWithRole(role) });
+      const res = await fetch(API, { headers: headersWithRole(role) });
       if (!res.ok) throw new Error(`GET /employees failed (${res.status})`);
       return await res.json();
     }
 
     async function apiDetail(id) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}`, { headers: headersWithRole(role) });
+      const res = await fetch(`${API}/${encodeURIComponent(id)}`, { headers: headersWithRole(role) });
       if (!res.ok) throw new Error(`GET /employees/:id failed (${res.status})`);
       return await res.json();
     }
 
     async function apiAddTraining(id, payload) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(id)}/trainings`, {
+      const res = await fetch(`${API}/${encodeURIComponent(id)}/trainings`, {
         method: "POST",
         headers: headersWithRole(role),
         body: JSON.stringify(payload)
@@ -572,7 +573,7 @@
     }
 
     async function apiDeleteTraining(empId, trainingId) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+      const res = await fetch(`${API}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "DELETE",
         headers: headersWithRole(role),
       });
@@ -584,7 +585,7 @@
     }
 
     async function apiUpdateTraining(empId, trainingId, payload) {
-      const res = await fetch(`${API_BASE}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+      const res = await fetch(`${API}/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
         method: "PUT",
         headers: headersWithRole(role),
         body: JSON.stringify(payload),
