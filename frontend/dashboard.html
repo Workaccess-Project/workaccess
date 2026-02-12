@@ -4,227 +4,98 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Workaccess – Dashboard</title>
-
-  <style>
-    :root{
-      --bg:#0b1020;
-      --muted:#8aa0c6;
-      --text:#e8eeff;
-      --accent:#6ea8fe;
-      --danger:#ff6b6b;
-      --border:rgba(255,255,255,.08);
-      --shadow:0 10px 25px rgba(0,0,0,.35);
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0;
-      font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
-      background: radial-gradient(1200px 600px at 20% 0%, rgba(110,168,254,.25), transparent 60%),
-                  radial-gradient(1200px 600px at 80% 20%, rgba(99,230,190,.18), transparent 60%),
-                  var(--bg);
-      color:var(--text);
-      padding:24px;
-    }
-    .wrap{max-width:1100px;margin:0 auto}
-    .card{
-      background:linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.03));
-      border:1px solid var(--border);
-      border-radius:16px;
-      box-shadow:var(--shadow);
-      overflow:hidden;
-      position:relative;
-    }
-
-    .status{padding:12px 18px;color:var(--muted);font-size:12px;}
-
-    /* ✅ 3 sloupce když je audit vidět, jinak 2 */
-    .grid{
-      display:grid;
-      grid-template-columns: 1fr 1fr;
-      gap:12px;
-      padding:0 18px 18px;
-    }
-    .grid.withAudit{
-      grid-template-columns: 1fr 1fr 1fr;
-    }
-    @media (max-width: 1050px){
-      .grid.withAudit{grid-template-columns:1fr;}
-    }
-    @media (max-width: 900px){
-      .grid{grid-template-columns:1fr;}
-    }
-
-    .toolbar{
-      padding:14px 18px;
-      display:flex;
-      gap:10px;
-      align-items:center;
-      border-bottom:1px solid var(--border);
-      flex-wrap:wrap;
-    }
-    button, input{
-      padding:10px 12px;border-radius:12px;border:1px solid var(--border);
-      background:rgba(0,0,0,.18);color:var(--text);outline:none;
-    }
-    button{
-      background:rgba(255,255,255,.06);
-      cursor:pointer;
-      user-select:none;
-      white-space:nowrap;
-    }
-    button.primary{background:rgba(110,168,254,.18);border-color:rgba(110,168,254,.25)}
-    button:disabled{opacity:.45;cursor:not-allowed}
-
-    .box{
-      border:1px solid rgba(255,255,255,.10);
-      border-radius:14px;
-      background:rgba(0,0,0,.10);
-      overflow:hidden;
-    }
-    .boxHead{
-      padding:12px 12px;
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      border-bottom:1px solid rgba(255,255,255,.10);
-      color:var(--muted);
-      font-size:12px;
-      gap:10px;
-    }
-    .count{
-      font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
-      color:var(--muted);background:rgba(0,0,0,.12);
-      white-space:nowrap;
-    }
-
-    .row{
-      display:flex;
-      gap:10px;
-      align-items:flex-start;
-      padding:12px 12px;
-      border-bottom:1px solid rgba(255,255,255,.08);
-    }
-    .row:last-child{border-bottom:0}
-    .row:hover{background: rgba(110,168,254,.10);}
-
-    a.rowLink{
-      flex:1;
-      display:block;
-      color:var(--text);
-      text-decoration:none;
-      cursor:pointer;
-      min-width:0;
-    }
-
-    .title{
-      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-      font-size:13px;
-    }
-    .tag{
-      font-size:11px;padding:2px 8px;border-radius:999px;border:1px solid rgba(255,255,255,.12);
-      color:var(--muted);background:rgba(0,0,0,.12);
-    }
-    .tagDanger{border-color:rgba(255,107,107,.35);background:rgba(255,107,107,.10);color:#ffd1d1;}
-    .meta{margin-top:6px;font-size:12px;color:var(--muted);}
-
-    .btnSmall{
-      padding:6px 10px;
-      border-radius:999px;
-      font-size:12px;
-      border:1px solid rgba(99,230,190,.25);
-      background:rgba(99,230,190,.12);
-      height:32px;
-    }
-
-    /* ✅ audit */
-    .auditRow{
-      padding:12px 12px;
-      border-bottom:1px solid rgba(255,255,255,.08);
-    }
-    .auditRow:last-child{border-bottom:0}
-    .auditTop{
-      display:flex;gap:10px;align-items:center;flex-wrap:wrap;
-      font-size:13px;
-    }
-    .auditMeta{
-      margin-top:6px;
-      font-size:12px;
-      color:var(--muted);
-      line-height:1.35;
-      word-break:break-word;
-    }
-    .auditPill{
-      font-size:11px;
-      padding:2px 8px;
-      border-radius:999px;
-      border:1px solid rgba(255,255,255,.12);
-      color:var(--muted);
-      background:rgba(0,0,0,.12);
-      white-space:nowrap;
-    }
-    .auditAction{
-      border-color:rgba(110,168,254,.28);
-      background:rgba(110,168,254,.12);
-      color:rgba(232,238,255,.9);
-    }
-  </style>
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
   <div class="wrap">
     <div class="card">
-      <!-- společná navigace -->
       <div id="wa-nav"></div>
 
-      <div class="toolbar">
-        <div style="display:flex; flex-direction:column; gap:4px; min-width: 260px;">
-          <div style="font-size:18px; font-weight:700;">Dashboard – expirace školení</div>
-          <div style="font-size:12px; color:var(--muted);">GET /api/reports/trainings</div>
-        </div>
-
-        <label style="font-size:12px;color:var(--muted); margin-left:auto;">Dní dopředu:</label>
-        <input id="days" type="number" min="0" value="30" style="width:120px;" />
-        <button class="primary" id="btnLoad">Načíst</button>
-
-        <!-- audit refresh (jen když je audit vidět) -->
-        <span id="auditControls" style="display:none; gap:10px; align-items:center;">
-          <span style="font-size:12px;color:var(--muted);">Audit:</span>
-          <span class="auditPill auditAction" id="auditRoleHint">—</span>
-          <button id="btnAuditReload" title="Načíst audit znovu">Načíst audit</button>
-        </span>
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Dashboard – expirace školení</h1>
+        <div class="small">GET <code>/api/reports/trainings</code> • Audit v2: filtry + stránkování + export</div>
       </div>
 
-      <div class="status" id="status">—</div>
-
-      <div class="grid" id="grid">
-        <div class="box">
-          <div class="boxHead">
-            <strong style="color:var(--text);font-weight:700;">Propadlé</strong>
-            <span class="count" id="cExpired">0</span>
-          </div>
-          <div id="expired"></div>
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="days">Dní dopředu:</label>
+          <input id="days" type="number" min="1" max="365" value="30" style="width:90px;" />
+          <button class="waBtn--primary" id="btnLoad">Načíst</button>
         </div>
 
-        <div class="box">
-          <div class="boxHead">
-            <strong style="color:var(--text);font-weight:700;">Končí brzy</strong>
-            <span class="count" id="cExpiring">0</span>
-          </div>
-          <div id="expiring"></div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <span class="small">Audit:</span>
+          <span class="pill" id="auditRolePill">—</span>
+          <button id="btnAudit">Načíst audit</button>
+        </div>
+      </div>
+
+      <!-- audit filtry -->
+      <div class="section" id="auditFilters" style="display:none; border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="margin-bottom:8px;">Filtry auditu (v2)</div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <label class="small" for="audLimit">Limit:</label>
+          <input id="audLimit" type="number" min="1" max="200" value="20" style="width:90px;" />
+
+          <label class="small" for="audActor">Actor role:</label>
+          <select id="audActor" style="min-width:160px;">
+            <option value="">(vše)</option>
+            <option value="hr">hr</option>
+            <option value="manager">manager</option>
+            <option value="security">security</option>
+            <option value="external">external</option>
+          </select>
+
+          <label class="small" for="audAction">Action (prefix):</label>
+          <input id="audAction" type="text" placeholder="např. employee." style="min-width:220px;" />
+
+          <label class="small" for="audEntityType">Entity type:</label>
+          <input id="audEntityType" type="text" placeholder="employee / training / item" style="min-width:190px;" />
+
+          <label class="small" for="audEntityId">Entity id:</label>
+          <input id="audEntityId" type="text" placeholder="id…" style="min-width:190px;" />
         </div>
 
-        <!-- Audit panel (jen pro hr/manager/security) -->
-        <div class="box" id="auditBox" style="display:none;">
-          <div class="boxHead">
-            <strong style="color:var(--text);font-weight:700;">Poslední změny (audit)</strong>
-            <span class="count" id="cAudit">0</span>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+          <button class="waBtn--primary" id="btnAuditReload">Filtrovat</button>
+          <button id="btnAuditMore" disabled>Načíst další</button>
+          <button id="btnAuditExport">Export CSV</button>
+          <span class="small" id="audStatus" style="opacity:0.8;"></span>
+        </div>
+      </div>
+
+      <div class="section small" id="metaLine"></div>
+
+      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Propadlé</strong>
+            <span class="pill" id="cntExpired">0</span>
           </div>
-          <div id="audit"></div>
+          <div id="boxExpired" class="small" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Končí brzy</strong>
+            <span class="pill" id="cntSoon">0</span>
+          </div>
+          <div id="boxSoon" class="small" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Audit (poslední změny)</strong>
+            <span class="pill" id="cntAudit">0</span>
+          </div>
+          <div id="boxAudit" class="small" style="margin-top:10px;"></div>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- pořadí: config -> nav -> api -->
+  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
   <script src="./api.js"></script>
@@ -232,348 +103,232 @@
   <script>
     WA_NAV.renderNav("dashboard");
 
-    let role = WA_NAV.getRole(); // hr/security/manager/external
-
-    // UI
     const elDays = document.getElementById("days");
-    const btnLoad = document.getElementById("btnLoad");
-    const status = document.getElementById("status");
+    const elBtnLoad = document.getElementById("btnLoad");
+    const elBtnAudit = document.getElementById("btnAudit");
+    const elMetaLine = document.getElementById("metaLine");
 
-    const boxExpired = document.getElementById("expired");
-    const boxExpiring = document.getElementById("expiring");
-    const cExpired = document.getElementById("cExpired");
-    const cExpiring = document.getElementById("cExpiring");
+    const elAuditRolePill = document.getElementById("auditRolePill");
 
-    // audit UI
-    const grid = document.getElementById("grid");
-    const auditBox = document.getElementById("auditBox");
-    const auditList = document.getElementById("audit");
-    const cAudit = document.getElementById("cAudit");
+    const elCntExpired = document.getElementById("cntExpired");
+    const elCntSoon = document.getElementById("cntSoon");
+    const elCntAudit = document.getElementById("cntAudit");
 
-    const auditControls = document.getElementById("auditControls");
-    const auditRoleHint = document.getElementById("auditRoleHint");
-    const btnAuditReload = document.getElementById("btnAuditReload");
+    const elBoxExpired = document.getElementById("boxExpired");
+    const elBoxSoon = document.getElementById("boxSoon");
+    const elBoxAudit = document.getElementById("boxAudit");
 
-    function roleLabel(r){
-      const map = { hr:"HR", security:"Bezpečnost", manager:"Manažer", external:"Externista" };
-      return map[r] || r;
-    }
-    function canWrite(r){
-      // stejné jako dřív: externista ne
-      return r === "hr" || r === "manager" || r === "security";
-    }
+    // audit controls
+    const elAuditFilters = document.getElementById("auditFilters");
+    const elAudLimit = document.getElementById("audLimit");
+    const elAudActor = document.getElementById("audActor");
+    const elAudAction = document.getElementById("audAction");
+    const elAudEntityType = document.getElementById("audEntityType");
+    const elAudEntityId = document.getElementById("audEntityId");
 
-    function applyRoleUI() {
-      role = WA_NAV.getRole();
+    const elBtnAuditReload = document.getElementById("btnAuditReload");
+    const elBtnAuditMore = document.getElementById("btnAuditMore");
+    const elBtnAuditExport = document.getElementById("btnAuditExport");
+    const elAudStatus = document.getElementById("audStatus");
 
-      const canSeeAudit = role === "hr" || role === "manager" || role === "security";
+    let AUDIT_NEXT_CURSOR = null;
+    let AUDIT_LAST_PARAMS = null;
+    let AUDIT_ITEMS = [];
 
-      auditBox.style.display = canSeeAudit ? "block" : "none";
-      auditControls.style.display = canSeeAudit ? "inline-flex" : "none";
-      auditRoleHint.textContent = roleLabel(role);
-
-      if (canSeeAudit) grid.classList.add("withAudit");
-      else grid.classList.remove("withAudit");
-    }
-
-    function isIsoDateOnly(s) {
-      return /^\d{4}-\d{2}-\d{2}$/.test(String(s || ""));
-    }
-    function todayStrUtc() {
-      const d = new Date();
-      const yyyy = d.getUTCFullYear();
-      const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(d.getUTCDate()).padStart(2, "0");
-      return `${yyyy}-${mm}-${dd}`;
-    }
-    function addYearsToDateStr(yyyyMmDd, years) {
-      if (!isIsoDateOnly(yyyyMmDd)) return null;
-      const [y, m, d] = yyyyMmDd.split("-").map(n => Number(n));
-      const dt2 = new Date(Date.UTC(y + years, m - 1, d));
-      if (String(dt2) === "Invalid Date") return null;
-      const yy = dt2.getUTCFullYear();
-      const mm = String(dt2.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(dt2.getUTCDate()).padStart(2, "0");
-      return `${yy}-${mm}-${dd}`;
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
     }
 
-    async function apiUpdateTraining(empId, trainingId, payload) {
-      const res = await fetch(`${WA_CONFIG.getApiBase()}/employees/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(localStorage.getItem("workaccess.role") ? { "x-role": localStorage.getItem("workaccess.role") } : {})
-        },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`PUT /trainings failed (${res.status}) ${txt}`);
-      }
-      return await res.json().catch(() => ({}));
+    function roleLabel(roleKey) {
+      const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
+      return map[roleKey] || roleKey;
     }
 
-    function makeRow(it, kind) {
-      const row = document.createElement("div");
-      row.className = "row";
-
-      const a = document.createElement("a");
-      a.className = "rowLink";
-      a.href = `./employees.html#emp=${encodeURIComponent(it.employeeId)}`;
-      a.title = "Klikni pro otevření detailu zaměstnance";
-
-      const title = document.createElement("div");
-      title.className = "title";
-
-      const who = document.createElement("span");
-      who.textContent = `${it.employeeName} — ${it.trainingName}`;
-      title.appendChild(who);
-
-      const tag = document.createElement("span");
-      tag.className = "tag" + (kind === "expired" ? " tagDanger" : "");
-      tag.textContent = kind === "expired"
-        ? `propadlé (${it.daysLeft} dní)`
-        : `za ${it.daysLeft} dní`;
-      title.appendChild(tag);
-
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      meta.textContent = `Firma: ${it.company} • Pozice: ${it.position} • Platí do: ${it.validTo}`;
-
-      a.appendChild(title);
-      a.appendChild(meta);
-
-      row.appendChild(a);
-
-      if (canWrite(role)) {
-        const btn = document.createElement("button");
-        btn.className = "btnSmall";
-        btn.textContent = "Od dneška +1 rok";
-        btn.title = "Nastaví validFrom = dnes a validTo = dnes + 1 rok";
-
-        btn.addEventListener("click", async (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-
-          const empId = it.employeeId;
-          const trainingId = it.trainingId;
-
-          if (!trainingId) {
-            alert("Chybí trainingId v reportu. Pošli mi prosím jeden záznam z /api/reports/trainings (F12 → Network → Response).");
-            return;
-          }
-
-          const from = todayStrUtc();
-          const to = addYearsToDateStr(from, 1);
-
-          const ok = confirm(
-            `Nastavit od dneška +1 rok\n` +
-            `${it.employeeName} — ${it.trainingName}\n\n` +
-            `Platí od: ${from}\nPlatí do: ${to}\n\nPokračovat?`
-          );
-          if (!ok) return;
-
-          btn.disabled = true;
-          const oldText = btn.textContent;
-          btn.textContent = "Ukládám…";
-
-          try {
-            await apiUpdateTraining(empId, trainingId, {
-              name: String(it.trainingName || "—"),
-              validFrom: from,
-              validTo: to
-            });
-
-            await load();
-            await loadAudit();
-          } catch (err) {
-            console.error(err);
-            alert("Nepodařilo se uložit: " + (err?.message || err));
-          } finally {
-            btn.textContent = oldText;
-            btn.disabled = false;
-          }
-        });
-
-        row.appendChild(btn);
-      }
-
-      return row;
+    function setCounts(expired, soon, audit) {
+      elCntExpired.textContent = String(expired);
+      elCntSoon.textContent = String(soon);
+      elCntAudit.textContent = String(audit);
     }
 
-    function renderList(el, items, kind) {
-      el.innerHTML = "";
-      if (!items || items.length === 0) {
-        const d = document.createElement("div");
-        d.style.padding = "12px 12px";
-        d.style.color = "rgba(232,238,255,.55)";
-        d.textContent = "Nic.";
-        el.appendChild(d);
-        return;
-      }
-      for (const it of items) el.appendChild(makeRow(it, kind));
+    // placeholder (expirace)
+    function renderTrainingsStub(role) {
+      elBoxExpired.innerHTML = `<div class="pill">role: ${esc(role)}</div>`;
+      elBoxSoon.innerHTML = `Nic.`;
     }
 
-    function fmtTs(iso) {
-      if (!iso) return "—";
-      const d = new Date(iso);
-      if (String(d) === "Invalid Date") return String(iso);
-      return d.toLocaleString("cs-CZ");
+    function buildAuditParams(includeCursor) {
+      const limit = Math.max(1, Math.min(200, Number(elAudLimit.value || 20) || 20));
+      const actorRole = (elAudActor.value || "").trim();
+      const action = (elAudAction.value || "").trim();
+      const entityType = (elAudEntityType.value || "").trim();
+      const entityId = (elAudEntityId.value || "").trim();
+
+      const params = { limit };
+      if (actorRole) params.actorRole = actorRole;
+      if (action) params.action = action;
+      if (entityType) params.entityType = entityType;
+      if (entityId) params.entityId = entityId;
+      if (includeCursor && AUDIT_NEXT_CURSOR) params.cursor = AUDIT_NEXT_CURSOR;
+
+      return params;
     }
 
-    function summarizeAuditItem(a) {
-      const actor = a?.actorRole ? String(a.actorRole) : "—";
-      const action = a?.action ? String(a.action) : "—";
-      const ts = fmtTs(a?.ts);
+    function renderAuditList(list) {
+      elCntAudit.textContent = String(list.length);
 
-      const empId = a?.meta?.employeeId ? String(a.meta.employeeId) : null;
-
-      let what = "";
-      if (action.startsWith("training.")) what = "školení";
-      else if (action.startsWith("employee.")) what = "zaměstnanec";
-      else what = a?.entityType ? String(a.entityType) : "objekt";
-
-      return { ts, actor, action, what, empId };
+      elBoxAudit.innerHTML = list.length
+        ? list.slice(0, 50).map((x) => {
+            const ts = esc(x.ts || "");
+            const action = esc(x.action || "");
+            const role = esc(x.actorRole || "");
+            const entity = esc(x.entityType || "");
+            const id = esc(x.entityId || "");
+            return `
+              <div style="padding:8px 0; border-top:1px solid var(--border);">
+                <div>
+                  <span class="pill">${ts}</span>
+                  <span class="pill">${action}</span>
+                  <span class="pill">role: ${role}</span>
+                </div>
+                <div class="small">Změna: ${entity}${id ? " • " + id : ""}</div>
+              </div>
+            `;
+          }).join("")
+        : "Nic.";
     }
 
-    function renderAudit(items) {
-      auditList.innerHTML = "";
+    async function refreshMeAndUi() {
+      const role = WA_NAV.getRole();
+      elAuditRolePill.textContent = roleLabel(role);
 
-      const arr = Array.isArray(items) ? items : [];
-      cAudit.textContent = String(arr.length);
+      const me = await WA_API.getMe();
+      const backendRole = me?.role || role;
 
-      if (arr.length === 0) {
-        const d = document.createElement("div");
-        d.style.padding = "12px 12px";
-        d.style.color = "rgba(232,238,255,.55)";
-        d.textContent = "Zatím žádné změny.";
-        auditList.appendChild(d);
-        return;
-      }
+      elMetaLine.textContent =
+        `Dnes: ${new Date().toISOString().slice(0, 10)} • okno: ${Number(elDays.value || 30)} dní • role: ${roleLabel(backendRole)}`;
 
-      for (const a of arr) {
-        const s = summarizeAuditItem(a);
+      const canAudit = backendRole !== "external";
+      elBtnAudit.style.display = canAudit ? "" : "none";
+      elAuditFilters.style.display = canAudit ? "" : "none";
 
-        const row = document.createElement("div");
-        row.className = "auditRow";
-
-        const top = document.createElement("div");
-        top.className = "auditTop";
-
-        const ts = document.createElement("span");
-        ts.className = "auditPill";
-        ts.textContent = s.ts;
-
-        const act = document.createElement("span");
-        act.className = "auditPill auditAction";
-        act.textContent = s.action;
-
-        const who = document.createElement("span");
-        who.className = "auditPill";
-        who.textContent = `role: ${s.actor}`;
-
-        top.appendChild(ts);
-        top.appendChild(act);
-        top.appendChild(who);
-
-        const meta = document.createElement("div");
-        meta.className = "auditMeta";
-
-        if (s.empId) {
-          const link = document.createElement("a");
-          link.href = `./employees.html#emp=${encodeURIComponent(s.empId)}`;
-          link.style.color = "rgba(232,238,255,.92)";
-          link.style.textDecoration = "none";
-          link.textContent = `Otevřít zaměstnance (${s.empId})`;
-
-          const line = document.createElement("div");
-          line.appendChild(document.createTextNode(`Změna: ${s.what} • `));
-          line.appendChild(link);
-
-          meta.appendChild(line);
-        } else {
-          meta.textContent = `Změna: ${s.what}`;
-        }
-
-        row.appendChild(top);
-        row.appendChild(meta);
-
-        auditList.appendChild(row);
-      }
+      renderTrainingsStub(backendRole);
+      setCounts(0, 0, 0);
+      elBoxAudit.innerHTML = "—";
+      elAudStatus.textContent = "";
+      AUDIT_NEXT_CURSOR = null;
+      AUDIT_LAST_PARAMS = null;
+      AUDIT_ITEMS = [];
+      elBtnAuditMore.disabled = true;
     }
 
-    async function loadAudit() {
-      const canSeeAudit = role === "hr" || role === "manager" || role === "security";
-      if (!canSeeAudit) return;
-
-      cAudit.textContent = "…";
+    async function loadAuditFirstPage() {
+      elBtnAudit.disabled = true;
+      elBtnAuditReload.disabled = true;
+      elBtnAuditMore.disabled = true;
+      elBtnAuditExport.disabled = true;
+      elAudStatus.textContent = "Načítám…";
 
       try {
-        const res = await fetch(`${WA_CONFIG.getApiBase()}/audit?limit=50`, {
-          headers: { "x-role": (localStorage.getItem("workaccess.role") || "hr") }
-        });
+        AUDIT_NEXT_CURSOR = null;
+        AUDIT_ITEMS = [];
 
-        if (!res.ok) {
-          const txt = await res.text().catch(() => "");
-          throw new Error(`Audit API error ${res.status} ${txt}`);
-        }
-        const data = await res.json();
-        renderAudit(data?.items || []);
-      } catch (err) {
-        console.error(err);
-        auditList.innerHTML = "";
-        const d = document.createElement("div");
-        d.style.padding = "12px 12px";
-        d.style.color = "rgba(232,238,255,.55)";
-        d.textContent = "Audit se nepodařilo načíst.";
-        auditList.appendChild(d);
-        cAudit.textContent = "!";
+        const params = buildAuditParams(false);
+        AUDIT_LAST_PARAMS = { ...params };
+
+        const data = await WA_API.getAudit(params);
+        const items = Array.isArray(data?.items) ? data.items : [];
+
+        AUDIT_ITEMS = items;
+        AUDIT_NEXT_CURSOR = data?.nextCursor || null;
+
+        renderAuditList(AUDIT_ITEMS);
+
+        elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
+        elAudStatus.textContent = `Načteno: ${items.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
+      } catch (e) {
+        elBoxAudit.innerHTML = `<span class="pill">Chyba</span> ${esc(e?.message || e)}`;
+        elCntAudit.textContent = "0";
+        elAudStatus.textContent = "";
+      } finally {
+        elBtnAudit.disabled = false;
+        elBtnAuditReload.disabled = false;
+        elBtnAuditExport.disabled = false;
       }
     }
 
-    async function load() {
-      const days = Math.max(0, Number(elDays.value || 30) || 30);
-      status.textContent = "Načítám…";
+    async function loadAuditMore() {
+      if (!AUDIT_NEXT_CURSOR || !AUDIT_LAST_PARAMS) return;
+
+      elBtnAuditMore.disabled = true;
+      elAudStatus.textContent = "Načítám další…";
 
       try {
-        // přes WA_API – už to posílá roli automaticky
-        const data = await (async () => {
-          const res = await fetch(`${WA_CONFIG.getApiBase()}/reports/trainings?days=${encodeURIComponent(days)}`, {
-            headers: { "x-role": (localStorage.getItem("workaccess.role") || "hr") }
-          });
-          if (!res.ok) throw new Error("API error " + res.status);
-          return await res.json();
-        })();
+        const params = { ...AUDIT_LAST_PARAMS, cursor: AUDIT_NEXT_CURSOR };
+        const data = await WA_API.getAudit(params);
+        const items = Array.isArray(data?.items) ? data.items : [];
 
-        cExpired.textContent = String(data.expired?.length || 0);
-        cExpiring.textContent = String(data.expiring?.length || 0);
+        AUDIT_ITEMS = AUDIT_ITEMS.concat(items);
+        AUDIT_NEXT_CURSOR = data?.nextCursor || null;
 
-        status.textContent = `Dnes: ${data.today} • okno: ${data.days} dní • role: ${roleLabel(role)}`;
+        renderAuditList(AUDIT_ITEMS);
 
-        renderList(boxExpired, data.expired, "expired");
-        renderList(boxExpiring, data.expiring, "expiring");
-      } catch (err) {
-        console.error(err);
-        status.textContent = "Nepodařilo se načíst dashboard. Je backend spuštěný a existuje /api/reports/trainings?";
+        elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
+        elAudStatus.textContent = `Celkem: ${AUDIT_ITEMS.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
+      } catch (e) {
+        elAudStatus.textContent = `Chyba: ${esc(e?.message || e)}`;
       }
     }
 
-    // events
-    btnLoad.addEventListener("click", async () => {
-      applyRoleUI();
-      await load();
-      await loadAudit();
-    });
+    async function exportAuditCsv() {
+      if (!AUDIT_LAST_PARAMS) {
+        // export bez filtrů → vezmeme aktuální vstupy
+        AUDIT_LAST_PARAMS = buildAuditParams(false);
+      }
 
-    btnAuditReload.addEventListener("click", async () => {
-      applyRoleUI();
-      await loadAudit();
-    });
+      elBtnAuditExport.disabled = true;
+      elAudStatus.textContent = "Generuji CSV…";
 
-    // start
-    applyRoleUI();
-    load();
-    loadAudit();
+      try {
+        const blob = await WA_API.fetchAuditCsv(AUDIT_LAST_PARAMS);
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "audit.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        elAudStatus.textContent = "CSV staženo.";
+      } catch (e) {
+        elAudStatus.textContent = `Chyba exportu: ${esc(e?.message || e)}`;
+      } finally {
+        elBtnAuditExport.disabled = false;
+      }
+    }
+
+    elBtnLoad.addEventListener("click", refreshMeAndUi);
+
+    elBtnAudit.addEventListener("click", loadAuditFirstPage);
+    elBtnAuditReload.addEventListener("click", loadAuditFirstPage);
+    elBtnAuditMore.addEventListener("click", loadAuditMore);
+    elBtnAuditExport.addEventListener("click", exportAuditCsv);
+
+    // init
+    (async () => {
+      try {
+        await refreshMeAndUi();
+      } catch (e) {
+        console.error(e);
+        alert("Nepodařilo se inicializovat dashboard. Je backend spuštěný na http://localhost:3000 ?");
+      }
+    })();
   </script>
 </body>
 </html>

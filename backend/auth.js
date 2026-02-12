@@ -2,11 +2,46 @@
 
 const ROLES = ["hr", "manager", "security", "external"];
 
-export function getRole(req) {
+/**
+ * MODE:
+ * "demo"  → role z hlavičky x-role
+ * "auth"  → role z budoucí autentizace (JWT, session...)
+ */
+const AUTH_MODE = "demo"; // později přepneme na "auth"
+
+/**
+ * Získá roli z hlavičky (DEMO)
+ */
+function getRoleFromHeader(req) {
   const raw = (req.headers["x-role"] ?? "").toString().trim().toLowerCase();
   if (ROLES.includes(raw)) return raw;
-  // default (když chybí) – pro jednoduchost HR, protože jsi v interním toolu
-  return "hr";
+  return "external";
+}
+
+/**
+ * Hlavní middleware – nastaví req.auth
+ */
+export function authMiddleware(req, res, next) {
+  let role = "external";
+
+  if (AUTH_MODE === "demo") {
+    role = getRoleFromHeader(req);
+  }
+
+  // připraveno na budoucí:
+  // if (AUTH_MODE === "auth") {
+  //   role = req.user?.role ?? "external";
+  // }
+
+  req.auth = {
+    role,
+    userId: null,
+    companyId: null,
+  };
+
+  req.role = role; // zpětná kompatibilita
+
+  next();
 }
 
 /**
@@ -14,8 +49,7 @@ export function getRole(req) {
  */
 export function requireRole(allowedRoles = []) {
   return (req, res, next) => {
-    const role = getRole(req);
-    req.role = role;
+    const role = req.auth?.role ?? "external";
 
     if (!allowedRoles.includes(role)) {
       return res.status(403).json({
@@ -30,7 +64,4 @@ export function requireRole(allowedRoles = []) {
   };
 }
 
-/**
- * Helper: "write" akce povolíme jen HR + manager
- */
 export const requireWrite = requireRole(["hr", "manager"]);

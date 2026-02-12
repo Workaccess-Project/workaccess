@@ -22,3 +22,8 @@ Thumbs.db
 # build output (do budoucna)
 dist/
 build/
+# --- Workaccess local data (NEPOSÍLAT NA GITHUB) ---
+backend/data.json
+backend/employees.json
+backend/audit.json
+audit.csv

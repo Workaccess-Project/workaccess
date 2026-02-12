@@ -1,43 +1,40 @@
-// backend/routes/items.js
-
-import express from "express";
+// backend/services/items-service.js
 import { readData, writeData } from "../data.js";
 import { auditLog } from "../data-audit.js";
-import { requireWrite } from "../auth.js";
 
-const router = express.Router();
-
+// helper: porovnání id robustně (string vs number)
 function sameId(a, b) {
   return String(a) === String(b);
 }
 
+function normalizeText(v) {
+  return (v ?? "").toString().trim();
+}
+
 /**
- * GET /api/items
- * READ pro všechny role
+ * READ - list items
  */
-router.get("/", (req, res) => {
+export function listItems() {
   const items = readData();
-  res.json(items);
-});
+  return Array.isArray(items) ? items : [];
+}
 
 /**
- * POST /api/items
- * WRITE: hr, manager
+ * WRITE - create item
  */
-router.post("/", requireWrite, async (req, res) => {
-  const text = (req.body?.text ?? "").toString().trim();
+export async function createItem({ actorRole, text }) {
+  const items = listItems();
 
-  if (!text) {
+  const clean = normalizeText(text);
+  if (!clean) {
     const err = new Error("Text je povinný");
     err.status = 400;
     throw err;
   }
 
-  const items = readData();
-
   const newItem = {
     id: Date.now().toString(),
-    text,
+    text: clean,
     done: false,
   };
 
@@ -45,23 +42,23 @@ router.post("/", requireWrite, async (req, res) => {
   writeData(items);
 
   await auditLog({
-    actorRole: req.role,
+    actorRole,
     action: "item.create",
     entityType: "item",
     entityId: newItem.id,
+    meta: {},
     before: null,
     after: newItem,
   });
 
-  res.status(201).json(newItem);
-});
+  return newItem;
+}
 
 /**
- * PATCH /api/items/:id (toggle)
+ * WRITE - toggle done
  */
-router.patch("/:id", requireWrite, async (req, res) => {
-  const { id } = req.params;
-  const items = readData();
+export async function toggleItemDone({ actorRole, id }) {
+  const items = listItems();
 
   const idx = items.findIndex((it) => sameId(it.id, id));
   if (idx === -1) {
@@ -76,33 +73,32 @@ router.patch("/:id", requireWrite, async (req, res) => {
   writeData(items);
 
   await auditLog({
-    actorRole: req.role,
+    actorRole,
     action: "item.toggle",
     entityType: "item",
-    entityId: id,
+    entityId: String(id),
+    meta: {},
     before,
     after: items[idx],
   });
 
-  res.json(items[idx]);
-});
+  return items[idx];
+}
 
 /**
- * PATCH /api/items/:id/text
+ * WRITE - update text
  */
-router.patch("/:id/text", requireWrite, async (req, res) => {
-  const { id } = req.params;
-  const text = (req.body?.text ?? "").toString().trim();
+export async function updateItemText({ actorRole, id, text }) {
+  const items = listItems();
 
-  if (!text) {
+  const clean = normalizeText(text);
+  if (!clean) {
     const err = new Error("Text je povinný");
     err.status = 400;
     throw err;
   }
 
-  const items = readData();
   const idx = items.findIndex((it) => sameId(it.id, id));
-
   if (idx === -1) {
     const err = new Error("Položka nenalezena");
     err.status = 404;
@@ -111,70 +107,71 @@ router.patch("/:id/text", requireWrite, async (req, res) => {
 
   const before = { ...items[idx] };
 
-  items[idx].text = text;
+  items[idx].text = clean;
   writeData(items);
 
   await auditLog({
-    actorRole: req.role,
+    actorRole,
     action: "item.updateText",
     entityType: "item",
-    entityId: id,
+    entityId: String(id),
+    meta: {},
     before,
     after: items[idx],
   });
 
-  res.json(items[idx]);
-});
+  return items[idx];
+}
 
 /**
- * DELETE /api/items/:id
+ * WRITE - delete one item
  */
-router.delete("/:id", requireWrite, async (req, res) => {
-  const { id } = req.params;
-  const items = readData();
+export async function deleteItemById({ actorRole, id }) {
+  const items = listItems();
 
-  const before = items.find((it) => sameId(it.id, id));
-  if (!before) {
+  const before = items.find((it) => sameId(it.id, id)) || null;
+  const next = items.filter((it) => !sameId(it.id, id));
+
+  if (next.length === items.length) {
     const err = new Error("Položka nenalezena");
     err.status = 404;
     throw err;
   }
 
-  const next = items.filter((it) => !sameId(it.id, id));
   writeData(next);
 
   await auditLog({
-    actorRole: req.role,
+    actorRole,
     action: "item.delete",
     entityType: "item",
-    entityId: id,
+    entityId: String(id),
+    meta: {},
     before,
     after: null,
   });
 
-  res.json({ ok: true });
-});
+  return { ok: true };
+}
 
 /**
- * DELETE /api/items (delete done)
+ * WRITE - delete done items
  */
-router.delete("/", requireWrite, async (req, res) => {
-  const items = readData();
+export async function deleteDoneItems({ actorRole }) {
+  const items = listItems();
   const doneItems = items.filter((it) => !!it.done);
-
   const next = items.filter((it) => !it.done);
+
   writeData(next);
 
   await auditLog({
-    actorRole: req.role,
+    actorRole,
     action: "item.deleteDone",
     entityType: "item",
     entityId: null,
+    meta: { deleted: doneItems.length },
     before: doneItems,
     after: null,
   });
 
-  res.json({ ok: true, deleted: doneItems.length });
-});
-
-export default router;
+  return { ok: true, deleted: items.length - next.length };
+}

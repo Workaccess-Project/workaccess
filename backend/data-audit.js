@@ -44,14 +44,19 @@ async function writeAuditRaw(arr) {
   await fs.writeFile(AUDIT_PATH, JSON.stringify(arr, null, 2), "utf-8");
 }
 
+function safeString(v) {
+  return (v ?? "").toString();
+}
+
+function parseDateLike(v) {
+  if (!v) return null;
+  const d = new Date(String(v));
+  if (String(d) === "Invalid Date") return null;
+  return d;
+}
+
 /**
  * Přidá audit záznam.
- * actorRole: "hr" | "manager" | "security" | "external"
- * action: string (např. "employee.create", "training.update" ...)
- * entityType: string (např. "employee", "training", "item")
- * entityId: id entity
- * meta: objekt s doplňkovými info (např. employeeId, trainingId)
- * before/after: snapshoty před a po
  */
 export async function auditLog({
   actorRole = "unknown",
@@ -67,10 +72,10 @@ export async function auditLog({
   const entry = {
     id: makeId("aud"),
     ts: nowIso(),
-    actorRole: String(actorRole || "unknown"),
-    action: String(action || "unknown"),
-    entityType: String(entityType || "unknown"),
-    entityId: entityId == null ? null : String(entityId),
+    actorRole: safeString(actorRole || "unknown"),
+    action: safeString(action || "unknown"),
+    entityType: safeString(entityType || "unknown"),
+    entityId: entityId == null ? null : safeString(entityId),
     meta: meta && typeof meta === "object" ? meta : {},
     before,
     after,
@@ -78,19 +83,73 @@ export async function auditLog({
 
   arr.push(entry);
 
-  // udržujeme max velikost
   const trimmed = arr.length > MAX_AUDIT ? arr.slice(arr.length - MAX_AUDIT) : arr;
-
   await writeAuditRaw(trimmed);
+
   return entry;
 }
 
 /**
- * Vrátí audit záznamy (nejnovější první)
+ * Filtrované listování auditu (nejnovější první) + cursor stránkování.
+ *
+ * opts:
+ *  - limit (1..200) default 50
+ *  - cursor: vrací záznamy "před" daným cursorem (ts|id)
+ *  - actorRole, action, entityType, entityId
+ *  - from, to: date/time
  */
-export async function listAudit(limit = 200) {
-  const n = Math.max(1, Math.min(1000, Number(limit) || 200));
+export async function listAuditV2(opts = {}) {
+  const limit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
+
+  const actorRole = opts.actorRole ? safeString(opts.actorRole).toLowerCase() : null;
+  const action = opts.action ? safeString(opts.action) : null;
+  const entityType = opts.entityType ? safeString(opts.entityType) : null;
+  const entityId = opts.entityId != null ? safeString(opts.entityId) : null;
+
+  const from = parseDateLike(opts.from);
+  const to = parseDateLike(opts.to);
+
+  const cursor = opts.cursor ? safeString(opts.cursor) : null;
+
   const arr = await readAuditRaw();
-  const newestFirst = arr.slice().reverse();
-  return newestFirst.slice(0, n);
+
+  // newest first
+  let items = arr.slice().reverse();
+
+  // cursor: očekáváme formát "ts|id"
+  if (cursor && cursor.includes("|")) {
+    const [cTs, cId] = cursor.split("|");
+    items = items.filter((x) => {
+      const tsOk = safeString(x.ts) < safeString(cTs); // ISO string compare
+      if (tsOk) return true;
+      // stejné ts → porovnáme id
+      if (safeString(x.ts) === safeString(cTs)) return safeString(x.id) < safeString(cId);
+      return false;
+    });
+  }
+
+  // filtry
+  if (actorRole) items = items.filter((x) => safeString(x.actorRole).toLowerCase() === actorRole);
+  if (entityType) items = items.filter((x) => safeString(x.entityType) === entityType);
+  if (entityId != null) items = items.filter((x) => safeString(x.entityId) === entityId);
+
+  if (action) {
+    // prefix match: "employee." matchne "employee.create"
+    items = items.filter((x) => safeString(x.action).startsWith(action));
+  }
+
+  if (from) items = items.filter((x) => parseDateLike(x.ts)?.getTime() >= from.getTime());
+  if (to) items = items.filter((x) => parseDateLike(x.ts)?.getTime() <= to.getTime());
+
+  const page = items.slice(0, limit);
+  const last = page.length ? page[page.length - 1] : null;
+
+  const nextCursor = last ? `${safeString(last.ts)}|${safeString(last.id)}` : null;
+
+  return {
+    limit,
+    count: page.length,
+    nextCursor: page.length === limit ? nextCursor : null,
+    items: page,
+  };
 }

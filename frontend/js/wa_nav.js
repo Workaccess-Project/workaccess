@@ -19,6 +19,10 @@
     localStorage.setItem(LS_ROLE, (role || "hr").toString());
   }
 
+  function roleLabel(role = getRole()) {
+    return ROLE_LABELS[role] || role;
+  }
+
   function escapeHtml(s) {
     return String(s ?? "")
       .replaceAll("&", "&amp;")
@@ -30,8 +34,6 @@
 
   function renderNav(activeKey = "") {
     const role = getRole();
-    const roleLabel = ROLE_LABELS[role] || role;
-
     const el = document.getElementById("wa-nav");
     if (!el) return;
 
@@ -46,14 +48,13 @@
 
         <div class="waNav__right">
           <span class="waRoleLabel">Role:</span>
-          <span class="waRolePill" id="waRolePill">${escapeHtml(roleLabel)}</span>
-          <button class="waBtn" id="waBtnRole">Změnit roli</button>
+          <span class="waRolePill" id="waRolePill">${escapeHtml(roleLabel(role))}</span>
+          <button class="waBtn" id="waBtnRole" type="button">Změnit roli</button>
         </div>
       </div>
     `;
 
-    const btn = document.getElementById("waBtnRole");
-    btn?.addEventListener("click", () => openRoleModal());
+    document.getElementById("waBtnRole")?.addEventListener("click", openRoleModal);
   }
 
   function openRoleModal() {
@@ -62,10 +63,10 @@
     const back = document.createElement("div");
     back.className = "waModalBack";
     back.innerHTML = `
-      <div class="waModal">
+      <div class="waModal" role="dialog" aria-modal="true">
         <div class="waModal__head">
           <strong>Vyber roli (DEMO)</strong>
-          <button class="waIconBtn" id="waClose" title="Zavřít">✕</button>
+          <button class="waIconBtn" id="waClose" title="Zavřít" type="button">✕</button>
         </div>
         <div class="waModal__body">
           <p>Role se ukládá do localStorage a posílá se do backendu přes hlavičku <code>x-role</code>.</p>
@@ -77,8 +78,8 @@
           </select>
         </div>
         <div class="waModal__foot">
-          <button class="waBtn" id="waCancel">Zrušit</button>
-          <button class="waBtn waBtn--primary" id="waApply">Použít roli</button>
+          <button class="waBtn" id="waCancel" type="button">Zrušit</button>
+          <button class="waBtn waBtn--primary" id="waApply" type="button">Použít roli</button>
         </div>
       </div>
     `;
@@ -114,5 +115,5 @@
     document.addEventListener("keydown", onKey);
   }
 
-  window.WA_NAV = { renderNav, getRole, setRole };
+  window.WA_NAV = { renderNav, getRole, setRole, roleLabel };
 })();

@@ -1,5 +1,5 @@
 // frontend/js/wa_role.js
-// Sdílená logika pro roli (DEMO RBAC) – používá dashboard i employees
+// Sdílená logika pro roli (DEMO RBAC) – používá employees (module)
 
 export const LS_ROLE = "workaccess.portal.role";
 
@@ -25,7 +25,8 @@ export function roleLabel(role = getRole()) {
 }
 
 export function canWrite(role = getRole()) {
-  return role === "hr" || role === "manager";
+  // stejné jako backend audit + dashboard (external nemá)
+  return role === "hr" || role === "manager" || role === "security";
 }
 
 export function headersWithRole(role = getRole()) {

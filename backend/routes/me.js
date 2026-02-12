@@ -1,16 +1,15 @@
 // backend/routes/me.js
 import express from "express";
-import { getRole } from "../auth.js";
 
 const router = express.Router();
 
 /**
  * GET /api/me
  * Vrací info o aktuální roli + jednoduché perms pro UI.
- * (DEMO – role jde z hlavičky x-role)
+ * (DEMO – role je nastavena v authMiddleware do req.auth.role)
  */
 router.get("/", (req, res) => {
-  const role = getRole(req);
+  const role = req.auth?.role ?? "external";
 
   const canWrite = role === "hr" || role === "manager";
 

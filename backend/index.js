@@ -1,47 +1,47 @@
 // backend/index.js
+
 import express from "express";
 import cors from "cors";
 
+// ROUTES
 import itemsRouter from "./routes/items.js";
 import employeesRouter from "./routes/employees.js";
 import reportsRouter from "./routes/reports.js";
 import auditRouter from "./routes/audit.js";
 import meRouter from "./routes/me.js";
 
-import { getRole } from "./auth.js";
+// AUTH (middleware)
+import { authMiddleware } from "./auth.js";
+
+// ERROR HANDLER
+import { errorHandler } from "./middleware/error-handler.js";
 
 const app = express();
+const PORT = 3000;
 
-// middleware
+// --- Middlewares ---
 app.use(cors());
 app.use(express.json());
 
-// ✅ všem requestům doplníme roli (ať ji mají i READ endpointy)
-app.use((req, res, next) => {
-  req.role = getRole(req);
-  next();
-});
+// naše role middleware (nastaví req.role)
+app.use(authMiddleware);
 
-// healthcheck
+// --- Health check ---
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
 
-// ✅ me (role + perms pro UI)
-app.use("/api/me", meRouter);
-
-// routes
+// --- Routes ---
 app.use("/api/items", itemsRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
+app.use("/api/me", meRouter);
 
-// fallback 404
-app.use((req, res) => {
-  res.status(404).send(`Cannot ${req.method} ${req.path}`);
-});
+// --- Error handler MUSÍ být až po routes ---
+app.use(errorHandler);
 
-const PORT = 3000;
+// --- Start server ---
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
   console.log("Routes mounted:");

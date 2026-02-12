@@ -1,4 +1,5 @@
 // backend/routes/employees.js
+
 import express from "express";
 import {
   listEmployees,
@@ -17,7 +18,8 @@ import { auditLog } from "../data-audit.js";
 const router = express.Router();
 
 /**
- * GET /api/employees - list (READ pro všechny role)
+ * GET /api/employees
+ * READ pro všechny role
  */
 router.get("/", async (req, res) => {
   const items = await listEmployees();
@@ -25,18 +27,23 @@ router.get("/", async (req, res) => {
 });
 
 /**
- * GET /api/employees/:id - detail (READ pro všechny role)
+ * GET /api/employees/:id
  */
 router.get("/:id", async (req, res) => {
   const { id } = req.params;
   const item = await getEmployeeById(id);
 
-  if (!item) return res.status(404).json({ error: "Employee not found", id });
+  if (!item) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
+
   res.json(item);
 });
 
 /**
- * POST /api/employees - create (WRITE: hr, manager)
+ * POST /api/employees
  */
 router.post("/", requireWrite, async (req, res) => {
   const created = await createEmployee(req.body);
@@ -45,8 +52,8 @@ router.post("/", requireWrite, async (req, res) => {
     actorRole: req.role,
     action: "employee.create",
     entityType: "employee",
-    entityId: created?.id ?? null,
-    meta: { employeeId: created?.id ?? null },
+    entityId: created.id,
+    meta: { employeeId: created.id },
     before: null,
     after: created,
   });
@@ -55,16 +62,19 @@ router.post("/", requireWrite, async (req, res) => {
 });
 
 /**
- * PUT /api/employees/:id - update (WRITE: hr, manager)
+ * PUT /api/employees/:id
  */
 router.put("/:id", requireWrite, async (req, res) => {
   const { id } = req.params;
 
   const before = await getEmployeeById(id);
-  if (!before) return res.status(404).json({ error: "Employee not found", id });
+  if (!before) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
 
   const updated = await updateEmployee(id, req.body);
-  if (!updated) return res.status(404).json({ error: "Employee not found", id });
 
   await auditLog({
     actorRole: req.role,
@@ -80,16 +90,19 @@ router.put("/:id", requireWrite, async (req, res) => {
 });
 
 /**
- * DELETE /api/employees/:id - delete (WRITE: hr, manager)
+ * DELETE /api/employees/:id
  */
 router.delete("/:id", requireWrite, async (req, res) => {
   const { id } = req.params;
 
   const before = await getEmployeeById(id);
-  if (!before) return res.status(404).json({ error: "Employee not found", id });
+  if (!before) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
 
-  const ok = await deleteEmployee(id);
-  if (!ok) return res.status(404).json({ error: "Employee not found", id });
+  await deleteEmployee(id);
 
   await auditLog({
     actorRole: req.role,
@@ -105,69 +118,59 @@ router.delete("/:id", requireWrite, async (req, res) => {
 });
 
 /**
- * POST /api/employees/:id/trainings - add training (WRITE: hr, manager)
- * Body: { name, validFrom, validTo }
+ * POST training
  */
 router.post("/:id/trainings", requireWrite, async (req, res) => {
   const { id } = req.params;
-
   const { name, validFrom, validTo } = req.body || {};
+
   if (!name || !validFrom || !validTo) {
-    return res.status(400).json({
-      error: "Missing fields",
-      required: ["name", "validFrom", "validTo"],
-    });
+    const err = new Error("Missing fields");
+    err.status = 400;
+    throw err;
   }
 
-  const empBefore = await getEmployeeById(id);
-  if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
+  const updated = await addTrainingToEmployee(id, { name, validFrom, validTo });
 
-  try {
-    // ✅ sjednoceno: tvorba trainingu je v data layer (generuje trn_... id)
-    const updatedEmp = await addTrainingToEmployee(id, { name, validFrom, validTo });
-    if (!updatedEmp) return res.status(404).json({ error: "Employee not found", id });
-
-    const trainings = Array.isArray(updatedEmp.trainings) ? updatedEmp.trainings : [];
-    const createdTraining = trainings.length ? trainings[trainings.length - 1] : null;
-
-    await auditLog({
-      actorRole: req.role,
-      action: "training.create",
-      entityType: "training",
-      entityId: createdTraining?.id ?? null,
-      meta: { employeeId: id, trainingId: createdTraining?.id ?? null },
-      before: null,
-      after: { employeeId: id, training: createdTraining },
-    });
-
-    // zachováme původní chování FE: vracíme training objekt
-    res.status(201).json(createdTraining || { ok: true });
-  } catch (err) {
-    return res.status(400).json({ error: err?.message || String(err) });
+  if (!updated) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
   }
+
+  const createdTraining = updated.trainings.at(-1);
+
+  await auditLog({
+    actorRole: req.role,
+    action: "training.create",
+    entityType: "training",
+    entityId: createdTraining.id,
+    meta: { employeeId: id, trainingId: createdTraining.id },
+    before: null,
+    after: { employeeId: id, training: createdTraining },
+  });
+
+  res.status(201).json(createdTraining);
 });
 
 /**
- * DELETE /api/employees/:id/trainings/:trainingId - delete training (WRITE: hr, manager)
+ * DELETE training
  */
 router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const { id, trainingId } = req.params;
 
-  const empBefore = await getEmployeeById(id);
-  if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
-
-  const beforeTraining =
-    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
-      (t) => String(t?.id) === String(trainingId)
-    ) || null;
-
   const result = await deleteTrainingFromEmployee(id, trainingId);
 
   if (result === null) {
-    return res.status(404).json({ error: "Employee not found", id });
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
   }
+
   if (result === false) {
-    return res.status(404).json({ error: "Training not found", trainingId });
+    const err = new Error("Training not found");
+    err.status = 404;
+    throw err;
   }
 
   await auditLog({
@@ -176,7 +179,7 @@ router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
     entityType: "training",
     entityId: trainingId,
     meta: { employeeId: id, trainingId },
-    before: { employeeId: id, training: beforeTraining },
+    before: null,
     after: null,
   });
 
@@ -184,58 +187,45 @@ router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
 });
 
 /**
- * PUT /api/employees/:id/trainings/:trainingId - edit training (WRITE: hr, manager)
- * Body: { name, validFrom, validTo }
+ * PUT training
  */
 router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const { id, trainingId } = req.params;
-
   const { name, validFrom, validTo } = req.body || {};
+
   if (!name || !validFrom || !validTo) {
-    return res.status(400).json({
-      error: "Missing fields",
-      required: ["name", "validFrom", "validTo"],
-    });
+    const err = new Error("Missing fields");
+    err.status = 400;
+    throw err;
   }
 
-  const empBefore = await getEmployeeById(id);
-  if (!empBefore) return res.status(404).json({ error: "Employee not found", id });
+  const result = await updateTrainingInEmployee(id, trainingId, {
+    name,
+    validFrom,
+    validTo,
+  });
 
-  const beforeTraining =
-    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
-      (t) => String(t?.id) === String(trainingId)
-    ) || null;
-
-  try {
-    const result = await updateTrainingInEmployee(id, trainingId, { name, validFrom, validTo });
-
-    if (result === null) {
-      return res.status(404).json({ error: "Employee not found", id });
-    }
-    if (result === false) {
-      return res.status(404).json({ error: "Training not found", trainingId });
-    }
-
-    const empAfter = await getEmployeeById(id);
-    const afterTraining =
-      (Array.isArray(empAfter?.trainings) ? empAfter.trainings : []).find(
-        (t) => String(t?.id) === String(trainingId)
-      ) || null;
-
-    await auditLog({
-      actorRole: req.role,
-      action: "training.update",
-      entityType: "training",
-      entityId: trainingId,
-      meta: { employeeId: id, trainingId },
-      before: { employeeId: id, training: beforeTraining },
-      after: { employeeId: id, training: afterTraining },
-    });
-
-    res.json({ ok: true });
-  } catch (err) {
-    return res.status(400).json({ error: err?.message || String(err) });
+  if (result === null) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
   }
+
+  if (result === false) {
+    const err = new Error("Training not found");
+    err.status = 404;
+    throw err;
+  }
+
+  await auditLog({
+    actorRole: req.role,
+    action: "training.update",
+    entityType: "training",
+    entityId: trainingId,
+    meta: { employeeId: id, trainingId },
+  });
+
+  res.json({ ok: true });
 });
 
 export default router;
