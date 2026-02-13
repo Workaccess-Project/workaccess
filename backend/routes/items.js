@@ -1,11 +1,16 @@
 // backend/routes/items.js
 
 import express from "express";
-import { readData, writeData } from "../data.js";
 import { auditLog } from "../data-audit.js";
 import { requireWrite } from "../auth.js";
+import {
+  readTenantEntity,
+  writeTenantEntity,
+} from "../data/tenant-store.js";
 
 const router = express.Router();
+
+const ENTITY = "items";
 
 function sameId(a, b) {
   return String(a) === String(b);
@@ -13,18 +18,18 @@ function sameId(a, b) {
 
 /**
  * GET /api/items
- * READ pro všechny role
  */
-router.get("/", (req, res) => {
-  const items = readData();
+router.get("/", async (req, res) => {
+  const companyId = req.auth.companyId;
+  const items = await readTenantEntity(companyId, ENTITY);
   res.json(items);
 });
 
 /**
  * POST /api/items
- * WRITE: hr, manager
  */
 router.post("/", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const text = (req.body?.text ?? "").toString().trim();
 
   if (!text) {
@@ -33,7 +38,7 @@ router.post("/", requireWrite, async (req, res) => {
     throw err;
   }
 
-  const items = readData();
+  const items = await readTenantEntity(companyId, ENTITY);
 
   const newItem = {
     id: Date.now().toString(),
@@ -42,7 +47,7 @@ router.post("/", requireWrite, async (req, res) => {
   };
 
   items.push(newItem);
-  writeData(items);
+  await writeTenantEntity(companyId, ENTITY, items);
 
   await auditLog({
     actorRole: req.role,
@@ -60,8 +65,10 @@ router.post("/", requireWrite, async (req, res) => {
  * PATCH /api/items/:id (toggle)
  */
 router.patch("/:id", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
-  const items = readData();
+
+  const items = await readTenantEntity(companyId, ENTITY);
 
   const idx = items.findIndex((it) => sameId(it.id, id));
   if (idx === -1) {
@@ -73,7 +80,7 @@ router.patch("/:id", requireWrite, async (req, res) => {
   const before = { ...items[idx] };
 
   items[idx].done = !items[idx].done;
-  writeData(items);
+  await writeTenantEntity(companyId, ENTITY, items);
 
   await auditLog({
     actorRole: req.role,
@@ -88,50 +95,13 @@ router.patch("/:id", requireWrite, async (req, res) => {
 });
 
 /**
- * PATCH /api/items/:id/text
- */
-router.patch("/:id/text", requireWrite, async (req, res) => {
-  const { id } = req.params;
-  const text = (req.body?.text ?? "").toString().trim();
-
-  if (!text) {
-    const err = new Error("Text je povinný");
-    err.status = 400;
-    throw err;
-  }
-
-  const items = readData();
-  const idx = items.findIndex((it) => sameId(it.id, id));
-
-  if (idx === -1) {
-    const err = new Error("Položka nenalezena");
-    err.status = 404;
-    throw err;
-  }
-
-  const before = { ...items[idx] };
-
-  items[idx].text = text;
-  writeData(items);
-
-  await auditLog({
-    actorRole: req.role,
-    action: "item.updateText",
-    entityType: "item",
-    entityId: id,
-    before,
-    after: items[idx],
-  });
-
-  res.json(items[idx]);
-});
-
-/**
  * DELETE /api/items/:id
  */
 router.delete("/:id", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
-  const items = readData();
+
+  const items = await readTenantEntity(companyId, ENTITY);
 
   const before = items.find((it) => sameId(it.id, id));
   if (!before) {
@@ -141,7 +111,7 @@ router.delete("/:id", requireWrite, async (req, res) => {
   }
 
   const next = items.filter((it) => !sameId(it.id, id));
-  writeData(next);
+  await writeTenantEntity(companyId, ENTITY, next);
 
   await auditLog({
     actorRole: req.role,
@@ -153,28 +123,6 @@ router.delete("/:id", requireWrite, async (req, res) => {
   });
 
   res.json({ ok: true });
-});
-
-/**
- * DELETE /api/items (delete done)
- */
-router.delete("/", requireWrite, async (req, res) => {
-  const items = readData();
-  const doneItems = items.filter((it) => !!it.done);
-
-  const next = items.filter((it) => !it.done);
-  writeData(next);
-
-  await auditLog({
-    actorRole: req.role,
-    action: "item.deleteDone",
-    entityType: "item",
-    entityId: null,
-    before: doneItems,
-    after: null,
-  });
-
-  res.json({ ok: true, deleted: doneItems.length });
 });
 
 export default router;
