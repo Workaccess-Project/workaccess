@@ -1,25 +1,43 @@
 // frontend/api.js
-// Jedno místo pro volání backendu + automatické posílání x-role.
-// Používá WA_CONFIG.getApiBase() z frontend/js/wa_config.js
+// Jedno místo pro volání backendu.
+// - Pokud existuje JWT token → posílá Authorization: Bearer ...
+// - Jinak fallback na DEMO x-role
+
 (() => {
   function apiBase() {
     if (window.WA_CONFIG && typeof window.WA_CONFIG.getApiBase === "function") {
-      return window.WA_CONFIG.getApiBase(); // vrací už včetně /api
+      return window.WA_CONFIG.getApiBase();
     }
     return "http://localhost:3000/api";
   }
 
+  function getToken() {
+    return localStorage.getItem("wa_auth_token");
+  }
+
   function currentRole() {
-    // Preferujeme WA_NAV (jediný zdroj pravdy)
     if (window.WA_NAV && typeof window.WA_NAV.getRole === "function") {
       return window.WA_NAV.getRole();
     }
-    // fallback (kdyby nav nebyl načten)
-    return (localStorage.getItem("workaccess.portal.role") || "hr").toString();
+    return (localStorage.getItem("wa_role_key") || "external").toString();
   }
 
-  function roleHeader() {
-    return { "x-role": currentRole() };
+  function buildHeaders(extra = {}) {
+    const token = getToken();
+
+    // JWT má prioritu
+    if (token) {
+      return {
+        Authorization: `Bearer ${token}`,
+        ...extra,
+      };
+    }
+
+    // fallback DEMO režim
+    return {
+      "x-role": currentRole(),
+      ...extra,
+    };
   }
 
   async function readJsonIfAny(res) {
@@ -46,27 +64,39 @@
   }
 
   async function apiFetch(path, opts = {}) {
-    const headers = {
-      ...roleHeader(),
-      ...(opts.headers || {}),
-    };
-
+    const headers = buildHeaders(opts.headers || {});
     const res = await fetch(apiBase() + path, { ...opts, headers });
 
     if (!res.ok) {
       const body = await readJsonIfAny(res);
-      const msg = body?.error || body?.message || `${res.status} ${res.statusText}`;
+      const msg =
+        body?.error || body?.message || `${res.status} ${res.statusText}`;
       throw new Error(msg);
     }
 
     return readJsonIfAny(res);
   }
 
-  // --- endpoints ---
+  // --- AUTH ---
+  const login = async (email, password) =>
+    apiFetch("/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    });
+
+  const getAuthMe = () => apiFetch("/auth/me");
+
+  const logout = () => {
+    localStorage.removeItem("wa_auth_token");
+  };
+
+  // --- EXISTING ENDPOINTS ---
   const getMe = () => apiFetch("/me");
 
   const getEmployees = () => apiFetch("/employees");
-  const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
+  const getEmployee = (id) =>
+    apiFetch(`/employees/${encodeURIComponent(id)}`);
 
   const getItems = () => apiFetch("/items");
   const addItem = (text) =>
@@ -75,8 +105,10 @@
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
-  const toggleItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "PATCH" });
-  const deleteItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const toggleItem = (id) =>
+    apiFetch(`/items/${encodeURIComponent(id)}`, { method: "PATCH" });
+  const deleteItem = (id) =>
+    apiFetch(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
   const deleteDone = () => apiFetch("/items", { method: "DELETE" });
   const updateItemText = (id, text) =>
     apiFetch(`/items/${encodeURIComponent(id)}/text`, {
@@ -85,19 +117,21 @@
       body: JSON.stringify({ text }),
     });
 
-  // --- audit v2 ---
-  // params: { limit, cursor, actorRole, action, entityType, entityId, from, to }
-  const getAudit = (params = {}) => apiFetch(`/audit${buildQuery(params)}`);
+  const getAudit = (params = {}) =>
+    apiFetch(`/audit${buildQuery(params)}`);
 
-  // vrátí URL pro export CSV (role header se nedá přidat do <a>, proto použijeme fetchDownloadCsv)
-  const getAuditCsvUrl = (params = {}) => apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
+  const getAuditCsvUrl = (params = {}) =>
+    apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
 
   async function fetchAuditCsv(params = {}) {
-    const url = apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
-    const res = await fetch(url, { headers: { ...roleHeader() } });
+    const url =
+      apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
+
+    const res = await fetch(url, {
+      headers: buildHeaders(),
+    });
 
     if (!res.ok) {
-      // u CSV endpointu může být text, proto zkusíme JSON a pak fallback
       let msg = `${res.status} ${res.statusText}`;
       try {
         const ct = (res.headers.get("content-type") || "").toLowerCase();
@@ -109,11 +143,13 @@
       throw new Error(msg);
     }
 
-    const blob = await res.blob();
-    return blob;
+    return await res.blob();
   }
 
   window.WA_API = {
+    login,
+    getAuthMe,
+    logout,
     getMe,
     getEmployees,
     getEmployee,
