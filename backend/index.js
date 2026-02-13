@@ -14,6 +14,9 @@ import authRouter from "./routes/auth.js";
 // AUTH (middleware)
 import { authMiddleware } from "./auth.js";
 
+// TENANT ENFORCEMENT
+import { requireTenant } from "./middleware/require-tenant.js";
+
 // ERROR HANDLER
 import { errorHandler } from "./middleware/error-handler.js";
 
@@ -24,16 +27,21 @@ const PORT = 3000;
 app.use(cors());
 app.use(express.json());
 
-// naše auth middleware (JWT má přednost, jinak DEMO x-role)
-app.use(authMiddleware);
-
-// --- Health check ---
+// --- Health check (úplně veřejné: bez auth i tenant) ---
 app.get("/api/health", (req, res) => {
   res.json({ ok: true });
 });
 
+// --- Auth middleware až po health ---
+app.use(authMiddleware);
+
+// --- Auth routes (login musí fungovat bez tenant požadavku) ---
+app.use("/api/auth", authRouter);
+
+// --- Tenant enforcement pro VŠECHNO ostatní ---
+app.use(requireTenant);
+
 // --- Routes ---
-app.use("/api/auth", authRouter); // NEW
 app.use("/api/items", itemsRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/reports", reportsRouter);

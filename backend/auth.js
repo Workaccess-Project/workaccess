@@ -4,47 +4,55 @@ import { verifyAccessToken } from "./services/auth.service.js";
 
 const ROLES = ["hr", "manager", "security", "external"];
 
-/**
- * Získá roli z hlavičky (DEMO)
- */
 function getRoleFromHeader(req) {
   const raw = (req.headers["x-role"] ?? "").toString().trim().toLowerCase();
   if (ROLES.includes(raw)) return raw;
   return "external";
 }
 
+function getCompanyIdFromHeader(req) {
+  const raw = (req.headers["x-company-id"] ?? "").toString().trim();
+  if (!raw) return null;
+  return raw;
+}
+
 function getBearerToken(req) {
   const header = (req.headers["authorization"] ?? "").toString().trim();
   if (!header) return null;
-
   const [type, token] = header.split(" ");
   if (type?.toLowerCase() !== "bearer" || !token) return null;
-
   return token.trim();
 }
 
 /**
- * Hlavní middleware – nastaví req.auth + req.role + případně req.user
- * Pravidlo:
- * - pokud je Authorization Bearer token → použije JWT (produkční cesta)
- * - pokud není token → použije DEMO x-role (kompatibilita)
- * - pokud token je, ale je neplatný → 401 (žádné tiché fallbacky)
+ * authMiddleware:
+ * - pokud je Authorization Bearer token → JWT (produkční cesta)
+ * - pokud není token → DEMO x-role + x-company-id (fallback)
+ *
+ * BOX #3: companyId je povinné – žádné defaulty.
  */
 export function authMiddleware(req, res, next) {
   const token = getBearerToken(req);
 
-  // 1) JWT cesta (má přednost)
+  // 1) JWT cesta
   if (token) {
     try {
       const user = verifyAccessToken(token);
 
+      const role = user?.role ?? "external";
+      const userId = user?.id ?? user?.userId ?? null;
+      const companyId = user?.companyId ?? null;
+
+      if (!companyId) {
+        return res.status(401).json({
+          error: "Unauthorized",
+          message: "Token is missing companyId (tenant context required).",
+        });
+      }
+
       req.user = user;
-      req.auth = {
-        role: user.role ?? "external",
-        userId: user.id ?? null,
-        companyId: user.companyId ?? null,
-      };
-      req.role = req.auth.role; // zpětná kompatibilita
+      req.auth = { role, userId, companyId };
+      req.role = role;
 
       return next();
     } catch (err) {
@@ -55,23 +63,29 @@ export function authMiddleware(req, res, next) {
     }
   }
 
-  // 2) DEMO cesta (x-role)
+  // 2) DEMO cesta (bez JWT) – povinné x-company-id
   const role = getRoleFromHeader(req);
+  const companyId = getCompanyIdFromHeader(req);
+
+  if (!companyId) {
+    return res.status(400).json({
+      error: "BadRequest",
+      message:
+        "Missing companyId. Provide Authorization Bearer token OR DEMO header x-company-id.",
+    });
+  }
 
   req.user = null;
   req.auth = {
     role,
     userId: null,
-    companyId: null,
+    companyId,
   };
-  req.role = role; // zpětná kompatibilita
+  req.role = role;
 
   next();
 }
 
-/**
- * Middleware: povolí jen role, které jsou v allowedRoles.
- */
 export function requireRole(allowedRoles = []) {
   return (req, res, next) => {
     const role = req.auth?.role ?? "external";
