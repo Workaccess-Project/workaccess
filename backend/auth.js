@@ -1,13 +1,8 @@
 // backend/auth.js
 
-const ROLES = ["hr", "manager", "security", "external"];
+import { verifyAccessToken } from "./services/auth.service.js";
 
-/**
- * MODE:
- * "demo"  → role z hlavičky x-role
- * "auth"  → role z budoucí autentizace (JWT, session...)
- */
-const AUTH_MODE = "demo"; // později přepneme na "auth"
+const ROLES = ["hr", "manager", "security", "external"];
 
 /**
  * Získá roli z hlavičky (DEMO)
@@ -18,27 +13,57 @@ function getRoleFromHeader(req) {
   return "external";
 }
 
+function getBearerToken(req) {
+  const header = (req.headers["authorization"] ?? "").toString().trim();
+  if (!header) return null;
+
+  const [type, token] = header.split(" ");
+  if (type?.toLowerCase() !== "bearer" || !token) return null;
+
+  return token.trim();
+}
+
 /**
- * Hlavní middleware – nastaví req.auth
+ * Hlavní middleware – nastaví req.auth + req.role + případně req.user
+ * Pravidlo:
+ * - pokud je Authorization Bearer token → použije JWT (produkční cesta)
+ * - pokud není token → použije DEMO x-role (kompatibilita)
+ * - pokud token je, ale je neplatný → 401 (žádné tiché fallbacky)
  */
 export function authMiddleware(req, res, next) {
-  let role = "external";
+  const token = getBearerToken(req);
 
-  if (AUTH_MODE === "demo") {
-    role = getRoleFromHeader(req);
+  // 1) JWT cesta (má přednost)
+  if (token) {
+    try {
+      const user = verifyAccessToken(token);
+
+      req.user = user;
+      req.auth = {
+        role: user.role ?? "external",
+        userId: user.id ?? null,
+        companyId: user.companyId ?? null,
+      };
+      req.role = req.auth.role; // zpětná kompatibilita
+
+      return next();
+    } catch (err) {
+      return res.status(err.statusCode || 401).json({
+        error: "Unauthorized",
+        message: err.message || "Neplatný token.",
+      });
+    }
   }
 
-  // připraveno na budoucí:
-  // if (AUTH_MODE === "auth") {
-  //   role = req.user?.role ?? "external";
-  // }
+  // 2) DEMO cesta (x-role)
+  const role = getRoleFromHeader(req);
 
+  req.user = null;
   req.auth = {
     role,
     userId: null,
     companyId: null,
   };
-
   req.role = role; // zpětná kompatibilita
 
   next();
