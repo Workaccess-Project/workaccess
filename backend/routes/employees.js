@@ -19,10 +19,10 @@ const router = express.Router();
 
 /**
  * GET /api/employees
- * READ pro všechny role
  */
 router.get("/", async (req, res) => {
-  const items = await listEmployees();
+  const companyId = req.auth.companyId;
+  const items = await listEmployees(companyId);
   res.json(items);
 });
 
@@ -30,8 +30,10 @@ router.get("/", async (req, res) => {
  * GET /api/employees/:id
  */
 router.get("/:id", async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
-  const item = await getEmployeeById(id);
+
+  const item = await getEmployeeById(companyId, id);
 
   if (!item) {
     const err = new Error("Employee not found");
@@ -46,7 +48,9 @@ router.get("/:id", async (req, res) => {
  * POST /api/employees
  */
 router.post("/", requireWrite, async (req, res) => {
-  const created = await createEmployee(req.body);
+  const companyId = req.auth.companyId;
+
+  const created = await createEmployee(companyId, req.body);
 
   await auditLog({
     actorRole: req.role,
@@ -65,16 +69,17 @@ router.post("/", requireWrite, async (req, res) => {
  * PUT /api/employees/:id
  */
 router.put("/:id", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
 
-  const before = await getEmployeeById(id);
+  const before = await getEmployeeById(companyId, id);
   if (!before) {
     const err = new Error("Employee not found");
     err.status = 404;
     throw err;
   }
 
-  const updated = await updateEmployee(id, req.body);
+  const updated = await updateEmployee(companyId, id, req.body);
 
   await auditLog({
     actorRole: req.role,
@@ -93,16 +98,17 @@ router.put("/:id", requireWrite, async (req, res) => {
  * DELETE /api/employees/:id
  */
 router.delete("/:id", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
 
-  const before = await getEmployeeById(id);
+  const before = await getEmployeeById(companyId, id);
   if (!before) {
     const err = new Error("Employee not found");
     err.status = 404;
     throw err;
   }
 
-  await deleteEmployee(id);
+  await deleteEmployee(companyId, id);
 
   await auditLog({
     actorRole: req.role,
@@ -121,6 +127,7 @@ router.delete("/:id", requireWrite, async (req, res) => {
  * POST training
  */
 router.post("/:id/trainings", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id } = req.params;
   const { name, validFrom, validTo } = req.body || {};
 
@@ -130,7 +137,11 @@ router.post("/:id/trainings", requireWrite, async (req, res) => {
     throw err;
   }
 
-  const updated = await addTrainingToEmployee(id, { name, validFrom, validTo });
+  const updated = await addTrainingToEmployee(companyId, id, {
+    name,
+    validFrom,
+    validTo,
+  });
 
   if (!updated) {
     const err = new Error("Employee not found");
@@ -157,9 +168,10 @@ router.post("/:id/trainings", requireWrite, async (req, res) => {
  * DELETE training
  */
 router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id, trainingId } = req.params;
 
-  const result = await deleteTrainingFromEmployee(id, trainingId);
+  const result = await deleteTrainingFromEmployee(companyId, id, trainingId);
 
   if (result === null) {
     const err = new Error("Employee not found");
@@ -190,6 +202,7 @@ router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
  * PUT training
  */
 router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
+  const companyId = req.auth.companyId;
   const { id, trainingId } = req.params;
   const { name, validFrom, validTo } = req.body || {};
 
@@ -199,7 +212,7 @@ router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
     throw err;
   }
 
-  const result = await updateTrainingInEmployee(id, trainingId, {
+  const result = await updateTrainingInEmployee(companyId, id, trainingId, {
     name,
     validFrom,
     validTo,

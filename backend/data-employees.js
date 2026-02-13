@@ -1,32 +1,25 @@
 // backend/data-employees.js
-import { promises as fs } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ukládáme do backend/employees.json
-const DB_PATH = path.join(__dirname, "employees.json");
+import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
 
 function nowIso() {
   return new Date().toISOString();
 }
 
 function makeId(prefix = "emp") {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+  return `${prefix}_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
-async function writeDb(arr) {
-  await fs.writeFile(DB_PATH, JSON.stringify(arr, null, 2), "utf-8");
+async function writeDb(companyId, arr) {
+  await writeTenantEntity(companyId, "employees", arr);
 }
 
-async function readDb() {
-  const raw = await fs.readFile(DB_PATH, "utf-8");
-  const data = JSON.parse(raw);
+async function readDb(companyId) {
+  const data = await readTenantEntity(companyId, "employees");
   if (!Array.isArray(data)) throw new Error("employees.json must be an array");
 
-  // ✅ AUTO-MIGRACE: doplní id starým školením (když chybí), a jednou to uloží do JSON
+  // ✅ AUTO-MIGRACE: doplní id starým školením (když chybí) a jednou uloží do JSON
   let changed = false;
 
   for (const emp of data) {
@@ -44,23 +37,23 @@ async function readDb() {
   }
 
   if (changed) {
-    await writeDb(data);
+    await writeDb(companyId, data);
   }
 
   return data;
 }
 
-export async function listEmployees() {
-  return await readDb();
+export async function listEmployees(companyId) {
+  return await readDb(companyId);
 }
 
-export async function getEmployeeById(id) {
-  const arr = await readDb();
+export async function getEmployeeById(companyId, id) {
+  const arr = await readDb(companyId);
   return arr.find((x) => String(x.id) === String(id)) || null;
 }
 
-export async function createEmployee(body) {
-  const arr = await readDb();
+export async function createEmployee(companyId, body) {
+  const arr = await readDb(companyId);
 
   const item = {
     id: makeId("emp"),
@@ -74,12 +67,12 @@ export async function createEmployee(body) {
   };
 
   arr.push(item);
-  await writeDb(arr);
+  await writeDb(companyId, arr);
   return item;
 }
 
-export async function updateEmployee(id, body) {
-  const arr = await readDb();
+export async function updateEmployee(companyId, id, body) {
+  const arr = await readDb(companyId);
   const idx = arr.findIndex((x) => String(x.id) === String(id));
   if (idx === -1) return null;
 
@@ -87,33 +80,30 @@ export async function updateEmployee(id, body) {
 
   const next = {
     ...prev,
-    name: (body?.name ?? prev.name),
-    email: (body?.email ?? prev.email),
-    company: (body?.company ?? prev.company),
-    position: (body?.position ?? prev.position),
-    trainings: Array.isArray(body?.trainings) ? body.trainings : (prev.trainings ?? []),
+    name: body?.name ?? prev.name,
+    email: body?.email ?? prev.email,
+    company: body?.company ?? prev.company,
+    position: body?.position ?? prev.position,
+    trainings: Array.isArray(body?.trainings) ? body.trainings : prev.trainings ?? [],
     updatedAt: nowIso(),
   };
 
   arr[idx] = next;
-  await writeDb(arr);
+  await writeDb(companyId, arr);
   return next;
 }
 
-export async function deleteEmployee(id) {
-  const arr = await readDb();
+export async function deleteEmployee(companyId, id) {
+  const arr = await readDb(companyId);
   const before = arr.length;
   const next = arr.filter((x) => String(x.id) !== String(id));
   if (next.length === before) return false;
-  await writeDb(next);
+  await writeDb(companyId, next);
   return true;
 }
 
-/**
- * ✅ Přidání školení zaměstnanci
- * body: { name, validFrom, validTo }
- */
-export async function addTrainingToEmployee(employeeId, body) {
+// --- TRAININGS ---
+export async function addTrainingToEmployee(companyId, employeeId, body) {
   const name = (body?.name ?? "").toString().trim();
   const validFrom = (body?.validFrom ?? "").toString().trim();
   const validTo = (body?.validTo ?? "").toString().trim();
@@ -122,7 +112,7 @@ export async function addTrainingToEmployee(employeeId, body) {
   if (!validFrom) throw new Error("Missing validFrom");
   if (!validTo) throw new Error("Missing validTo");
 
-  const arr = await readDb();
+  const arr = await readDb(companyId);
   const idx = arr.findIndex((x) => String(x.id) === String(employeeId));
   if (idx === -1) return null;
 
@@ -143,17 +133,12 @@ export async function addTrainingToEmployee(employeeId, body) {
   };
 
   arr[idx] = updated;
-  await writeDb(arr);
+  await writeDb(companyId, arr);
   return updated;
 }
 
-/**
- * ✅ Smazání školení zaměstnanci
- * vrací updated employee nebo null (když employee neexistuje)
- * vrací false (když training neexistuje)
- */
-export async function deleteTrainingFromEmployee(employeeId, trainingId) {
-  const arr = await readDb();
+export async function deleteTrainingFromEmployee(companyId, employeeId, trainingId) {
+  const arr = await readDb(companyId);
   const idx = arr.findIndex((x) => String(x.id) === String(employeeId));
   if (idx === -1) return null;
 
@@ -171,17 +156,11 @@ export async function deleteTrainingFromEmployee(employeeId, trainingId) {
   };
 
   arr[idx] = updated;
-  await writeDb(arr);
+  await writeDb(companyId, arr);
   return updated;
 }
 
-/**
- * ✅ Editace školení zaměstnanci
- * body: { name, validFrom, validTo }
- * vrací updated employee nebo null (když employee neexistuje)
- * vrací false (když training neexistuje)
- */
-export async function updateTrainingInEmployee(employeeId, trainingId, body) {
+export async function updateTrainingInEmployee(companyId, employeeId, trainingId, body) {
   const name = (body?.name ?? "").toString().trim();
   const validFrom = (body?.validFrom ?? "").toString().trim();
   const validTo = (body?.validTo ?? "").toString().trim();
@@ -189,11 +168,9 @@ export async function updateTrainingInEmployee(employeeId, trainingId, body) {
   if (!name) throw new Error("Missing training name");
   if (!validFrom) throw new Error("Missing validFrom");
   if (!validTo) throw new Error("Missing validTo");
-
-  // jednoduchá validace dat (string YYYY-MM-DD funguje pro porovnání)
   if (validTo < validFrom) throw new Error("validTo must be >= validFrom");
 
-  const arr = await readDb();
+  const arr = await readDb(companyId);
   const idx = arr.findIndex((x) => String(x.id) === String(employeeId));
   if (idx === -1) return null;
 
@@ -222,6 +199,6 @@ export async function updateTrainingInEmployee(employeeId, trainingId, body) {
   };
 
   arr[idx] = updated;
-  await writeDb(arr);
+  await writeDb(companyId, arr);
   return updated;
 }
