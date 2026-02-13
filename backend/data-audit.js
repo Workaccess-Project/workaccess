@@ -1,7 +1,7 @@
 // backend/data-audit.js
 import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
 
-// kolik záznamů max držíme v souboru (aby to nerostlo do nekonečna)
+const ENTITY = "audit";
 const MAX_AUDIT = 5000;
 
 function nowIso() {
@@ -25,17 +25,9 @@ function parseDateLike(v) {
   return d;
 }
 
-async function readAuditRaw(companyId) {
-  const data = await readTenantEntity(companyId, "audit");
-  return Array.isArray(data) ? data : [];
-}
-
-async function writeAuditRaw(companyId, arr) {
-  await writeTenantEntity(companyId, "audit", arr);
-}
-
 /**
- * Přidá audit záznam (TENANT SCOPED).
+ * Přidá audit záznam (HARD TENANT)
+ * companyId je POVINNÉ
  */
 export async function auditLog({
   companyId,
@@ -47,17 +39,19 @@ export async function auditLog({
   before = null,
   after = null,
 } = {}) {
-  if (!companyId) {
-    const e = new Error("Missing companyId (auditLog)");
+  const cid = safeString(companyId).trim();
+  if (!cid) {
+    const e = new Error("Missing companyId for auditLog()");
     e.status = 400;
     throw e;
   }
 
-  const arr = await readAuditRaw(companyId);
+  const arr = await readTenantEntity(cid, ENTITY);
 
   const entry = {
     id: makeId("aud"),
     ts: nowIso(),
+    companyId: cid,
     actorRole: safeString(actorRole || "unknown"),
     action: safeString(action || "unknown"),
     entityType: safeString(entityType || "unknown"),
@@ -70,17 +64,25 @@ export async function auditLog({
   arr.push(entry);
 
   const trimmed = arr.length > MAX_AUDIT ? arr.slice(arr.length - MAX_AUDIT) : arr;
-  await writeAuditRaw(companyId, trimmed);
+  await writeTenantEntity(cid, ENTITY, trimmed);
 
   return entry;
 }
 
 /**
- * Filtrované listování auditu (nejnovější první) + cursor stránkování (TENANT SCOPED).
+ * List audit (HARD TENANT) + filtry + cursor paging
+ *
+ * opts:
+ *  - companyId (POVINNÉ)
+ *  - limit (1..200) default 50
+ *  - cursor: "ts|id" (vrací záznamy "před" kurzorem)
+ *  - actorRole, action(prefix), entityType, entityId
+ *  - from, to: date/time
  */
-export async function listAuditV2(companyId, opts = {}) {
-  if (!companyId) {
-    const e = new Error("Missing companyId (listAuditV2)");
+export async function listAuditV2(opts = {}) {
+  const cid = safeString(opts.companyId).trim();
+  if (!cid) {
+    const e = new Error("Missing companyId for listAuditV2()");
     e.status = 400;
     throw e;
   }
@@ -97,16 +99,16 @@ export async function listAuditV2(companyId, opts = {}) {
 
   const cursor = opts.cursor ? safeString(opts.cursor) : null;
 
-  const arr = await readAuditRaw(companyId);
+  const arr = await readTenantEntity(cid, ENTITY);
 
   // newest first
   let items = arr.slice().reverse();
 
-  // cursor: očekáváme formát "ts|id"
+  // cursor: "ts|id"
   if (cursor && cursor.includes("|")) {
     const [cTs, cId] = cursor.split("|");
     items = items.filter((x) => {
-      const tsOk = safeString(x.ts) < safeString(cTs); // ISO string compare
+      const tsOk = safeString(x.ts) < safeString(cTs);
       if (tsOk) return true;
       if (safeString(x.ts) === safeString(cTs)) return safeString(x.id) < safeString(cId);
       return false;
@@ -118,20 +120,17 @@ export async function listAuditV2(companyId, opts = {}) {
   if (entityType) items = items.filter((x) => safeString(x.entityType) === entityType);
   if (entityId != null) items = items.filter((x) => safeString(x.entityId) === entityId);
 
-  if (action) {
-    // prefix match: "employee." matchne "employee.create"
-    items = items.filter((x) => safeString(x.action).startsWith(action));
-  }
+  if (action) items = items.filter((x) => safeString(x.action).startsWith(action));
 
   if (from) items = items.filter((x) => parseDateLike(x.ts)?.getTime() >= from.getTime());
   if (to) items = items.filter((x) => parseDateLike(x.ts)?.getTime() <= to.getTime());
 
   const page = items.slice(0, limit);
   const last = page.length ? page[page.length - 1] : null;
-
   const nextCursor = last ? `${safeString(last.ts)}|${safeString(last.id)}` : null;
 
   return {
+    companyId: cid,
     limit,
     count: page.length,
     nextCursor: page.length === limit ? nextCursor : null,

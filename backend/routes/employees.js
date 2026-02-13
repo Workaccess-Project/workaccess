@@ -1,28 +1,26 @@
 // backend/routes/employees.js
-
 import express from "express";
+import { requireWrite } from "../auth.js";
 import {
   listEmployees,
   getEmployeeById,
   createEmployee,
   updateEmployee,
   deleteEmployee,
-  addTrainingToEmployee,
-  deleteTrainingFromEmployee,
-  updateTrainingInEmployee,
-} from "../data-employees.js";
-
-import { requireWrite } from "../auth.js";
-import { auditLog } from "../data-audit.js";
+  addTraining,
+  deleteTraining,
+  updateTraining,
+} from "../services/employees-service.js";
 
 const router = express.Router();
 
 /**
  * GET /api/employees
+ * READ pro všechny role
  */
 router.get("/", async (req, res) => {
   const companyId = req.auth.companyId;
-  const items = await listEmployees(companyId);
+  const items = await listEmployees({ companyId });
   res.json(items);
 });
 
@@ -33,8 +31,7 @@ router.get("/:id", async (req, res) => {
   const companyId = req.auth.companyId;
   const { id } = req.params;
 
-  const item = await getEmployeeById(companyId, id);
-
+  const item = await getEmployeeById({ companyId, id });
   if (!item) {
     const err = new Error("Employee not found");
     err.status = 404;
@@ -50,16 +47,10 @@ router.get("/:id", async (req, res) => {
 router.post("/", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
 
-  const created = await createEmployee(companyId, req.body);
-
-  await auditLog({
+  const created = await createEmployee({
+    companyId,
     actorRole: req.role,
-    action: "employee.create",
-    entityType: "employee",
-    entityId: created.id,
-    meta: { employeeId: created.id },
-    before: null,
-    after: created,
+    body: req.body,
   });
 
   res.status(201).json(created);
@@ -72,23 +63,11 @@ router.put("/:id", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
   const { id } = req.params;
 
-  const before = await getEmployeeById(companyId, id);
-  if (!before) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
-  }
-
-  const updated = await updateEmployee(companyId, id, req.body);
-
-  await auditLog({
+  const updated = await updateEmployee({
+    companyId,
     actorRole: req.role,
-    action: "employee.update",
-    entityType: "employee",
-    entityId: id,
-    meta: { employeeId: id },
-    before,
-    after: updated,
+    id,
+    body: req.body,
   });
 
   res.json(updated);
@@ -101,144 +80,66 @@ router.delete("/:id", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
   const { id } = req.params;
 
-  const before = await getEmployeeById(companyId, id);
-  if (!before) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
-  }
-
-  await deleteEmployee(companyId, id);
-
-  await auditLog({
+  await deleteEmployee({
+    companyId,
     actorRole: req.role,
-    action: "employee.delete",
-    entityType: "employee",
-    entityId: id,
-    meta: { employeeId: id },
-    before,
-    after: null,
+    id,
   });
 
   res.json({ ok: true });
 });
 
 /**
- * POST training
+ * POST /api/employees/:id/trainings
+ * vrací created training objekt (kompatibilní s FE)
  */
 router.post("/:id/trainings", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
   const { id } = req.params;
-  const { name, validFrom, validTo } = req.body || {};
 
-  if (!name || !validFrom || !validTo) {
-    const err = new Error("Missing fields");
-    err.status = 400;
-    throw err;
-  }
-
-  const updated = await addTrainingToEmployee(companyId, id, {
-    name,
-    validFrom,
-    validTo,
-  });
-
-  if (!updated) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
-  }
-
-  const createdTraining = updated.trainings.at(-1);
-
-  await auditLog({
+  const createdTraining = await addTraining({
+    companyId,
     actorRole: req.role,
-    action: "training.create",
-    entityType: "training",
-    entityId: createdTraining.id,
-    meta: { employeeId: id, trainingId: createdTraining.id },
-    before: null,
-    after: { employeeId: id, training: createdTraining },
+    employeeId: id,
+    body: req.body,
   });
 
   res.status(201).json(createdTraining);
 });
 
 /**
- * DELETE training
+ * DELETE /api/employees/:id/trainings/:trainingId
  */
 router.delete("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
   const { id, trainingId } = req.params;
 
-  const result = await deleteTrainingFromEmployee(companyId, id, trainingId);
-
-  if (result === null) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
-  }
-
-  if (result === false) {
-    const err = new Error("Training not found");
-    err.status = 404;
-    throw err;
-  }
-
-  await auditLog({
+  const result = await deleteTraining({
+    companyId,
     actorRole: req.role,
-    action: "training.delete",
-    entityType: "training",
-    entityId: trainingId,
-    meta: { employeeId: id, trainingId },
-    before: null,
-    after: null,
+    employeeId: id,
+    trainingId,
   });
 
-  res.json({ ok: true });
+  res.json(result);
 });
 
 /**
- * PUT training
+ * PUT /api/employees/:id/trainings/:trainingId
  */
 router.put("/:id/trainings/:trainingId", requireWrite, async (req, res) => {
   const companyId = req.auth.companyId;
   const { id, trainingId } = req.params;
-  const { name, validFrom, validTo } = req.body || {};
 
-  if (!name || !validFrom || !validTo) {
-    const err = new Error("Missing fields");
-    err.status = 400;
-    throw err;
-  }
-
-  const result = await updateTrainingInEmployee(companyId, id, trainingId, {
-    name,
-    validFrom,
-    validTo,
-  });
-
-  if (result === null) {
-    const err = new Error("Employee not found");
-    err.status = 404;
-    throw err;
-  }
-
-  if (result === false) {
-    const err = new Error("Training not found");
-    err.status = 404;
-    throw err;
-  }
-
-  await auditLog({
+  const result = await updateTraining({
+    companyId,
     actorRole: req.role,
-    action: "training.update",
-    entityType: "training",
-    entityId: trainingId,
-    meta: { employeeId: id, trainingId },
+    employeeId: id,
+    trainingId,
+    body: req.body,
   });
 
-  res.json({ ok: true });
+  res.json(result);
 });
 
 export default router;

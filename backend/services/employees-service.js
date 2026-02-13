@@ -1,79 +1,175 @@
 // backend/services/employees-service.js
-import {
-  listEmployees as dataListEmployees,
-  getEmployeeById as dataGetEmployeeById,
-  createEmployee as dataCreateEmployee,
-  updateEmployee as dataUpdateEmployee,
-  deleteEmployee as dataDeleteEmployee,
-  addTrainingToEmployee as dataAddTrainingToEmployee,
-  deleteTrainingFromEmployee as dataDeleteTrainingFromEmployee,
-  updateTrainingInEmployee as dataUpdateTrainingInEmployee,
-} from "../data-employees.js";
-
+import { readTenantEntity, writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
 
-function err(status, message) {
-  const e = new Error(message);
-  e.status = status;
-  return e;
+const ENTITY = "employees";
+
+function nowIso() {
+  return new Date().toISOString();
 }
 
-// --- READ ---
-export async function listEmployees() {
-  const items = await dataListEmployees();
-  return Array.isArray(items) ? items : [];
+function makeId(prefix = "emp") {
+  return `${prefix}_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
-export async function getEmployeeById(id) {
-  const item = await dataGetEmployeeById(id);
-  return item || null;
+function requireCompanyId(companyId) {
+  const c = (companyId ?? "").toString().trim();
+  if (!c) {
+    const err = new Error("Missing companyId (tenant context).");
+    err.status = 400;
+    throw err;
+  }
+  return c;
 }
 
-// --- WRITE ---
-export async function createEmployee({ actorRole, body }) {
-  const created = await dataCreateEmployee(body);
+function asArray(v) {
+  return Array.isArray(v) ? v : [];
+}
+
+function normalizeEmployeeBody(body = {}) {
+  return {
+    name: (body?.name ?? body?.username ?? "").toString().trim() || "—",
+    email: (body?.email ?? "").toString().trim() || "",
+    company: (body?.company ?? body?.department ?? "").toString().trim() || "—",
+    position: (body?.position ?? body?.role ?? "").toString().trim() || "—",
+  };
+}
+
+function ensureTrainingIds(employees) {
+  let changed = false;
+
+  for (const emp of employees) {
+    const trainings = asArray(emp?.trainings);
+    for (const t of trainings) {
+      if (!t.id) {
+        t.id = makeId("trn");
+        changed = true;
+      }
+      if (t.name != null) t.name = String(t.name);
+      if (t.validFrom != null) t.validFrom = String(t.validFrom);
+      if (t.validTo != null) t.validTo = String(t.validTo);
+    }
+    if (emp.trainings !== trainings) {
+      emp.trainings = trainings;
+      changed = true;
+    }
+  }
+
+  return { changed, employees };
+}
+
+async function readEmployees(companyId) {
+  const cid = requireCompanyId(companyId);
+  const arr = await readTenantEntity(cid, ENTITY);
+  const employees = asArray(arr);
+
+  const { changed } = ensureTrainingIds(employees);
+  if (changed) await writeTenantEntity(cid, ENTITY, employees);
+
+  return employees;
+}
+
+async function writeEmployees(companyId, employees) {
+  const cid = requireCompanyId(companyId);
+  await writeTenantEntity(cid, ENTITY, employees);
+}
+
+function findById(arr, id) {
+  return arr.find((x) => String(x.id) === String(id)) || null;
+}
+
+// --- API ---
+
+export async function listEmployees({ companyId }) {
+  return await readEmployees(companyId);
+}
+
+export async function getEmployeeById({ companyId, id }) {
+  const employees = await readEmployees(companyId);
+  return findById(employees, id);
+}
+
+export async function createEmployee({ companyId, actorRole, body }) {
+  const employees = await readEmployees(companyId);
+  const base = normalizeEmployeeBody(body);
+
+  const item = {
+    id: makeId("emp"),
+    ...base,
+    trainings: [],
+    updatedAt: nowIso(),
+    createdAt: nowIso(),
+  };
+
+  employees.push(item);
+  await writeEmployees(companyId, employees);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "employee.create",
     entityType: "employee",
-    entityId: created?.id ?? null,
-    meta: { employeeId: created?.id ?? null },
+    entityId: String(item.id),
+    meta: { employeeId: String(item.id) },
     before: null,
-    after: created,
+    after: item,
   });
 
-  return created;
+  return item;
 }
 
-export async function updateEmployee({ actorRole, id, body }) {
-  const before = await dataGetEmployeeById(id);
-  if (!before) throw err(404, "Employee not found");
+export async function updateEmployee({ companyId, actorRole, id, body }) {
+  const employees = await readEmployees(companyId);
+  const idx = employees.findIndex((x) => String(x.id) === String(id));
+  if (idx === -1) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
 
-  const updated = await dataUpdateEmployee(id, body);
-  if (!updated) throw err(404, "Employee not found");
+  const before = { ...employees[idx] };
+  const patch = normalizeEmployeeBody({ ...before, ...body });
+
+  const next = {
+    ...employees[idx],
+    ...patch,
+    trainings: asArray(body?.trainings) ? body.trainings : asArray(employees[idx].trainings),
+    updatedAt: nowIso(),
+  };
+
+  employees[idx] = next;
+  await writeEmployees(companyId, employees);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "employee.update",
     entityType: "employee",
     entityId: String(id),
     meta: { employeeId: String(id) },
     before,
-    after: updated,
+    after: next,
   });
 
-  return updated;
+  return next;
 }
 
-export async function deleteEmployee({ actorRole, id }) {
-  const before = await dataGetEmployeeById(id);
-  if (!before) throw err(404, "Employee not found");
+export async function deleteEmployee({ companyId, actorRole, id }) {
+  const employees = await readEmployees(companyId);
+  const before = findById(employees, id);
+  if (!before) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
 
-  const ok = await dataDeleteEmployee(id);
-  if (!ok) throw err(404, "Employee not found");
+  const next = employees.filter((x) => String(x.id) !== String(id));
+  await writeEmployees(companyId, next);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "employee.delete",
     entityType: "employee",
@@ -87,65 +183,83 @@ export async function deleteEmployee({ actorRole, id }) {
 }
 
 // --- TRAININGS ---
+
 function requireTrainingFields(body) {
   const { name, validFrom, validTo } = body || {};
   if (!name || !validFrom || !validTo) {
-    const e = err(400, "Missing fields");
+    const e = new Error("Missing fields");
+    e.status = 400;
     e.payload = { required: ["name", "validFrom", "validTo"] };
     throw e;
   }
-  return { name, validFrom, validTo };
+  if (String(validTo) < String(validFrom)) {
+    const e = new Error("validTo must be >= validFrom");
+    e.status = 400;
+    throw e;
+  }
+  return { name: String(name).trim(), validFrom: String(validFrom).trim(), validTo: String(validTo).trim() };
 }
 
-/**
- * Přidat školení: zachováme FE chování -> vrací training objekt
- */
-export async function addTraining({ actorRole, employeeId, body }) {
+export async function addTraining({ companyId, actorRole, employeeId, body }) {
   const { name, validFrom, validTo } = requireTrainingFields(body);
 
-  const empBefore = await dataGetEmployeeById(employeeId);
-  if (!empBefore) throw err(404, "Employee not found");
-
-  let updatedEmp;
-  try {
-    updatedEmp = await dataAddTrainingToEmployee(employeeId, { name, validFrom, validTo });
-  } catch (e) {
-    throw err(400, e?.message || String(e));
+  const employees = await readEmployees(companyId);
+  const idx = employees.findIndex((x) => String(x.id) === String(employeeId));
+  if (idx === -1) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
   }
 
-  if (!updatedEmp) throw err(404, "Employee not found");
+  const empBefore = { ...employees[idx] };
+  const trainings = asArray(employees[idx].trainings);
 
-  const trainings = Array.isArray(updatedEmp.trainings) ? updatedEmp.trainings : [];
-  const createdTraining = trainings.length ? trainings[trainings.length - 1] : null;
+  const createdTraining = { id: makeId("trn"), name, validFrom, validTo };
+  trainings.push(createdTraining);
+
+  const updatedEmp = { ...employees[idx], trainings, updatedAt: nowIso() };
+  employees[idx] = updatedEmp;
+  await writeEmployees(companyId, employees);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "training.create",
     entityType: "training",
-    entityId: createdTraining?.id ?? null,
-    meta: { employeeId: String(employeeId), trainingId: createdTraining?.id ?? null },
+    entityId: String(createdTraining.id),
+    meta: { employeeId: String(employeeId), trainingId: String(createdTraining.id) },
     before: null,
     after: { employeeId: String(employeeId), training: createdTraining },
   });
 
-  return createdTraining || { ok: true };
+  return createdTraining;
 }
 
-export async function deleteTraining({ actorRole, employeeId, trainingId }) {
-  const empBefore = await dataGetEmployeeById(employeeId);
-  if (!empBefore) throw err(404, "Employee not found");
+export async function deleteTraining({ companyId, actorRole, employeeId, trainingId }) {
+  const employees = await readEmployees(companyId);
+  const idx = employees.findIndex((x) => String(x.id) === String(employeeId));
+  if (idx === -1) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
+  }
 
-  const beforeTraining =
-    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
-      (t) => String(t?.id) === String(trainingId)
-    ) || null;
+  const trainings = asArray(employees[idx].trainings);
+  const beforeTraining = trainings.find((t) => String(t.id) === String(trainingId)) || null;
 
-  const result = await dataDeleteTrainingFromEmployee(employeeId, trainingId);
+  const nextTrainings = trainings.filter((t) => String(t.id) !== String(trainingId));
+  if (nextTrainings.length === trainings.length) {
+    const err = new Error("Training not found");
+    err.status = 404;
+    throw err;
+  }
 
-  if (result === null) throw err(404, "Employee not found");
-  if (result === false) throw err(404, "Training not found");
+  const updatedEmp = { ...employees[idx], trainings: nextTrainings, updatedAt: nowIso() };
+  employees[idx] = updatedEmp;
+  await writeEmployees(companyId, employees);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "training.delete",
     entityType: "training",
@@ -158,41 +272,43 @@ export async function deleteTraining({ actorRole, employeeId, trainingId }) {
   return { ok: true };
 }
 
-export async function updateTraining({ actorRole, employeeId, trainingId, body }) {
+export async function updateTraining({ companyId, actorRole, employeeId, trainingId, body }) {
   const { name, validFrom, validTo } = requireTrainingFields(body);
 
-  const empBefore = await dataGetEmployeeById(employeeId);
-  if (!empBefore) throw err(404, "Employee not found");
-
-  const beforeTraining =
-    (Array.isArray(empBefore.trainings) ? empBefore.trainings : []).find(
-      (t) => String(t?.id) === String(trainingId)
-    ) || null;
-
-  let result;
-  try {
-    result = await dataUpdateTrainingInEmployee(employeeId, trainingId, { name, validFrom, validTo });
-  } catch (e) {
-    throw err(400, e?.message || String(e));
+  const employees = await readEmployees(companyId);
+  const idx = employees.findIndex((x) => String(x.id) === String(employeeId));
+  if (idx === -1) {
+    const err = new Error("Employee not found");
+    err.status = 404;
+    throw err;
   }
 
-  if (result === null) throw err(404, "Employee not found");
-  if (result === false) throw err(404, "Training not found");
+  const trainings = asArray(employees[idx].trainings);
+  const tIdx = trainings.findIndex((t) => String(t.id) === String(trainingId));
+  if (tIdx === -1) {
+    const err = new Error("Training not found");
+    err.status = 404;
+    throw err;
+  }
 
-  const empAfter = await dataGetEmployeeById(employeeId);
-  const afterTraining =
-    (Array.isArray(empAfter?.trainings) ? empAfter.trainings : []).find(
-      (t) => String(t?.id) === String(trainingId)
-    ) || null;
+  const beforeTraining = { ...trainings[tIdx] };
+
+  const nextTrainings = trainings.slice();
+  nextTrainings[tIdx] = { ...beforeTraining, name, validFrom, validTo };
+
+  const updatedEmp = { ...employees[idx], trainings: nextTrainings, updatedAt: nowIso() };
+  employees[idx] = updatedEmp;
+  await writeEmployees(companyId, employees);
 
   await auditLog({
+    companyId,
     actorRole,
     action: "training.update",
     entityType: "training",
     entityId: String(trainingId),
     meta: { employeeId: String(employeeId), trainingId: String(trainingId) },
     before: { employeeId: String(employeeId), training: beforeTraining },
-    after: { employeeId: String(employeeId), training: afterTraining },
+    after: { employeeId: String(employeeId), training: nextTrainings[tIdx] },
   });
 
   return { ok: true };

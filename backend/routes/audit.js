@@ -12,11 +12,12 @@ function toCsvValue(v) {
 }
 
 function toCsv(rows) {
-  const header = ["ts", "id", "actorRole", "action", "entityType", "entityId"].join(",");
+  const header = ["ts", "id", "companyId", "actorRole", "action", "entityType", "entityId"].join(",");
   const lines = rows.map((x) =>
     [
       toCsvValue(x.ts),
       toCsvValue(x.id),
+      toCsvValue(x.companyId),
       toCsvValue(x.actorRole),
       toCsvValue(x.action),
       toCsvValue(x.entityType),
@@ -41,22 +42,12 @@ function toCsv(rows) {
  *  - format=json|csv
  */
 router.get("/", requireRole(["hr", "manager", "security"]), async (req, res) => {
-  const {
-    limit,
-    cursor,
-    actorRole,
-    action,
-    entityType,
-    entityId,
-    from,
-    to,
-    format,
-  } = req.query || {};
+  const companyId = req.auth?.companyId;
 
-  // ✅ TENANT SCOPE
-  const companyId = req.auth?.companyId || null;
+  const { limit, cursor, actorRole, action, entityType, entityId, from, to, format } = req.query || {};
 
-  const result = await listAuditV2(companyId, {
+  const result = await listAuditV2({
+    companyId,
     limit,
     cursor,
     actorRole,
