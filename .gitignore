@@ -27,3 +27,6 @@ backend/data.json
 backend/employees.json
 backend/audit.json
 audit.csv
+# tenant runtime data (BOX #3)
+backend/data/tenants/
+

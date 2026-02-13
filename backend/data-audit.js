@@ -1,13 +1,5 @@
 // backend/data-audit.js
-import { promises as fs } from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ukládáme do backend/audit.json
-const AUDIT_PATH = path.join(__dirname, "audit.json");
+import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
 
 // kolik záznamů max držíme v souboru (aby to nerostlo do nekonečna)
 const MAX_AUDIT = 5000;
@@ -17,31 +9,9 @@ function nowIso() {
 }
 
 function makeId(prefix = "aud") {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-async function ensureFile() {
-  try {
-    await fs.access(AUDIT_PATH);
-  } catch {
-    await fs.writeFile(AUDIT_PATH, "[]", "utf-8");
-  }
-}
-
-async function readAuditRaw() {
-  await ensureFile();
-  const raw = await fs.readFile(AUDIT_PATH, "utf-8");
-  try {
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
-}
-
-async function writeAuditRaw(arr) {
-  await ensureFile();
-  await fs.writeFile(AUDIT_PATH, JSON.stringify(arr, null, 2), "utf-8");
+  return `${prefix}_${Date.now().toString(36)}_${Math.random()
+    .toString(36)
+    .slice(2, 8)}`;
 }
 
 function safeString(v) {
@@ -55,10 +25,20 @@ function parseDateLike(v) {
   return d;
 }
 
+async function readAuditRaw(companyId) {
+  const data = await readTenantEntity(companyId, "audit");
+  return Array.isArray(data) ? data : [];
+}
+
+async function writeAuditRaw(companyId, arr) {
+  await writeTenantEntity(companyId, "audit", arr);
+}
+
 /**
- * Přidá audit záznam.
+ * Přidá audit záznam (TENANT SCOPED).
  */
 export async function auditLog({
+  companyId,
   actorRole = "unknown",
   action = "unknown",
   entityType = "unknown",
@@ -67,7 +47,13 @@ export async function auditLog({
   before = null,
   after = null,
 } = {}) {
-  const arr = await readAuditRaw();
+  if (!companyId) {
+    const e = new Error("Missing companyId (auditLog)");
+    e.status = 400;
+    throw e;
+  }
+
+  const arr = await readAuditRaw(companyId);
 
   const entry = {
     id: makeId("aud"),
@@ -84,21 +70,21 @@ export async function auditLog({
   arr.push(entry);
 
   const trimmed = arr.length > MAX_AUDIT ? arr.slice(arr.length - MAX_AUDIT) : arr;
-  await writeAuditRaw(trimmed);
+  await writeAuditRaw(companyId, trimmed);
 
   return entry;
 }
 
 /**
- * Filtrované listování auditu (nejnovější první) + cursor stránkování.
- *
- * opts:
- *  - limit (1..200) default 50
- *  - cursor: vrací záznamy "před" daným cursorem (ts|id)
- *  - actorRole, action, entityType, entityId
- *  - from, to: date/time
+ * Filtrované listování auditu (nejnovější první) + cursor stránkování (TENANT SCOPED).
  */
-export async function listAuditV2(opts = {}) {
+export async function listAuditV2(companyId, opts = {}) {
+  if (!companyId) {
+    const e = new Error("Missing companyId (listAuditV2)");
+    e.status = 400;
+    throw e;
+  }
+
   const limit = Math.max(1, Math.min(200, Number(opts.limit) || 50));
 
   const actorRole = opts.actorRole ? safeString(opts.actorRole).toLowerCase() : null;
@@ -111,7 +97,7 @@ export async function listAuditV2(opts = {}) {
 
   const cursor = opts.cursor ? safeString(opts.cursor) : null;
 
-  const arr = await readAuditRaw();
+  const arr = await readAuditRaw(companyId);
 
   // newest first
   let items = arr.slice().reverse();
@@ -122,7 +108,6 @@ export async function listAuditV2(opts = {}) {
     items = items.filter((x) => {
       const tsOk = safeString(x.ts) < safeString(cTs); // ISO string compare
       if (tsOk) return true;
-      // stejné ts → porovnáme id
       if (safeString(x.ts) === safeString(cTs)) return safeString(x.id) < safeString(cId);
       return false;
     });

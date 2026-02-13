@@ -53,7 +53,10 @@ router.get("/", requireRole(["hr", "manager", "security"]), async (req, res) => 
     format,
   } = req.query || {};
 
-  const result = await listAuditV2({
+  // ✅ TENANT SCOPE
+  const companyId = req.auth?.companyId || null;
+
+  const result = await listAuditV2(companyId, {
     limit,
     cursor,
     actorRole,

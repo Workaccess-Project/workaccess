@@ -1,31 +1,28 @@
-import fs from "fs";
-import path from "path";
-import { fileURLToPath } from "url";
+// backend/data.js
+// Tenant-scoped storage for TODO items via tenant-store (hard isolation)
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
 
-// vždy míříme na: backend/data.json
-const DATA_FILE = path.join(__dirname, "data.json");
+const ENTITY = "items";
 
-function ensureFile() {
-  if (!fs.existsSync(DATA_FILE)) {
-    fs.writeFileSync(DATA_FILE, "[]", "utf8");
+function requireCompanyId(companyId) {
+  const cid = (companyId ?? "").toString().trim();
+  if (!cid) {
+    const err = new Error("Missing companyId");
+    err.status = 400;
+    throw err;
   }
+  return cid;
 }
 
-export function readData() {
-  ensureFile();
-  const raw = fs.readFileSync(DATA_FILE, "utf8");
-  try {
-    const data = JSON.parse(raw);
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+export async function readData(companyId) {
+  const cid = requireCompanyId(companyId);
+  const data = await readTenantEntity(cid, ENTITY);
+  return Array.isArray(data) ? data : [];
 }
 
-export function writeData(items) {
-  ensureFile();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(items, null, 2), "utf8");
+export async function writeData(companyId, items) {
+  const cid = requireCompanyId(companyId);
+  const arr = Array.isArray(items) ? items : [];
+  await writeTenantEntity(cid, ENTITY, arr);
 }

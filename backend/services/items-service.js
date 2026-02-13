@@ -2,7 +2,6 @@
 import { readData, writeData } from "../data.js";
 import { auditLog } from "../data-audit.js";
 
-// helper: porovnání id robustně (string vs number)
 function sameId(a, b) {
   return String(a) === String(b);
 }
@@ -11,19 +10,31 @@ function normalizeText(v) {
   return (v ?? "").toString().trim();
 }
 
+function requireCompanyId(companyId) {
+  const cid = (companyId ?? "").toString().trim();
+  if (!cid) {
+    const err = new Error("Missing companyId");
+    err.status = 400;
+    throw err;
+  }
+  return cid;
+}
+
 /**
  * READ - list items
  */
-export function listItems() {
-  const items = readData();
+export async function listItems({ companyId }) {
+  const cid = requireCompanyId(companyId);
+  const items = await readData(cid);
   return Array.isArray(items) ? items : [];
 }
 
 /**
  * WRITE - create item
  */
-export async function createItem({ actorRole, text }) {
-  const items = listItems();
+export async function createItem({ companyId, actorRole, text }) {
+  const cid = requireCompanyId(companyId);
+  const items = await listItems({ companyId: cid });
 
   const clean = normalizeText(text);
   if (!clean) {
@@ -39,9 +50,10 @@ export async function createItem({ actorRole, text }) {
   };
 
   items.push(newItem);
-  writeData(items);
+  await writeData(cid, items);
 
   await auditLog({
+    companyId: cid,
     actorRole,
     action: "item.create",
     entityType: "item",
@@ -54,11 +66,9 @@ export async function createItem({ actorRole, text }) {
   return newItem;
 }
 
-/**
- * WRITE - toggle done
- */
-export async function toggleItemDone({ actorRole, id }) {
-  const items = listItems();
+export async function toggleItemDone({ companyId, actorRole, id }) {
+  const cid = requireCompanyId(companyId);
+  const items = await listItems({ companyId: cid });
 
   const idx = items.findIndex((it) => sameId(it.id, id));
   if (idx === -1) {
@@ -70,9 +80,10 @@ export async function toggleItemDone({ actorRole, id }) {
   const before = { ...items[idx] };
 
   items[idx].done = !items[idx].done;
-  writeData(items);
+  await writeData(cid, items);
 
   await auditLog({
+    companyId: cid,
     actorRole,
     action: "item.toggle",
     entityType: "item",
@@ -85,11 +96,9 @@ export async function toggleItemDone({ actorRole, id }) {
   return items[idx];
 }
 
-/**
- * WRITE - update text
- */
-export async function updateItemText({ actorRole, id, text }) {
-  const items = listItems();
+export async function updateItemText({ companyId, actorRole, id, text }) {
+  const cid = requireCompanyId(companyId);
+  const items = await listItems({ companyId: cid });
 
   const clean = normalizeText(text);
   if (!clean) {
@@ -108,9 +117,10 @@ export async function updateItemText({ actorRole, id, text }) {
   const before = { ...items[idx] };
 
   items[idx].text = clean;
-  writeData(items);
+  await writeData(cid, items);
 
   await auditLog({
+    companyId: cid,
     actorRole,
     action: "item.updateText",
     entityType: "item",
@@ -123,11 +133,9 @@ export async function updateItemText({ actorRole, id, text }) {
   return items[idx];
 }
 
-/**
- * WRITE - delete one item
- */
-export async function deleteItemById({ actorRole, id }) {
-  const items = listItems();
+export async function deleteItemById({ companyId, actorRole, id }) {
+  const cid = requireCompanyId(companyId);
+  const items = await listItems({ companyId: cid });
 
   const before = items.find((it) => sameId(it.id, id)) || null;
   const next = items.filter((it) => !sameId(it.id, id));
@@ -138,9 +146,10 @@ export async function deleteItemById({ actorRole, id }) {
     throw err;
   }
 
-  writeData(next);
+  await writeData(cid, next);
 
   await auditLog({
+    companyId: cid,
     actorRole,
     action: "item.delete",
     entityType: "item",
@@ -153,17 +162,17 @@ export async function deleteItemById({ actorRole, id }) {
   return { ok: true };
 }
 
-/**
- * WRITE - delete done items
- */
-export async function deleteDoneItems({ actorRole }) {
-  const items = listItems();
+export async function deleteDoneItems({ companyId, actorRole }) {
+  const cid = requireCompanyId(companyId);
+  const items = await listItems({ companyId: cid });
+
   const doneItems = items.filter((it) => !!it.done);
   const next = items.filter((it) => !it.done);
 
-  writeData(next);
+  await writeData(cid, next);
 
   await auditLog({
+    companyId: cid,
     actorRole,
     action: "item.deleteDone",
     entityType: "item",
