@@ -12,6 +12,8 @@ import meRouter from "./routes/me.js";
 import authRouter from "./routes/auth.js";
 import documentsRouter from "./routes/documents.js";
 import sendRouter from "./routes/send.js";
+import companyRouter from "./routes/company.js";
+import contactsRouter from "./routes/contacts.js";
 
 // AUTH (middleware)
 import { authMiddleware } from "./auth.js";
@@ -53,6 +55,8 @@ app.use("/api/items", itemsRouter);
 app.use("/api/employees", employeesRouter);
 app.use("/api/documents", documentsRouter);
 app.use("/api/send", sendRouter);
+app.use("/api/company", companyRouter);
+app.use("/api/contacts", contactsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/me", meRouter);
@@ -72,6 +76,8 @@ app.listen(PORT, () => {
   console.log("  *    /api/employees");
   console.log("  *    /api/documents");
   console.log("  *    /api/send");
+  console.log("  *    /api/company");
+  console.log("  *    /api/contacts");
   console.log("  *    /api/reports");
   console.log("  GET  /api/audit");
   console.log("  GET  /api/me (compat)");
