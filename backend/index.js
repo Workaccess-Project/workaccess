@@ -10,6 +10,7 @@ import reportsRouter from "./routes/reports.js";
 import auditRouter from "./routes/audit.js";
 import meRouter from "./routes/me.js";
 import authRouter from "./routes/auth.js";
+import documentsRouter from "./routes/documents.js";
 
 // AUTH (middleware)
 import { authMiddleware } from "./auth.js";
@@ -49,6 +50,7 @@ app.use(requireTenant);
 // --- Routes ---
 app.use("/api/items", itemsRouter);
 app.use("/api/employees", employeesRouter);
+app.use("/api/documents", documentsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/audit", auditRouter);
 app.use("/api/me", meRouter);
@@ -66,6 +68,7 @@ app.listen(PORT, () => {
   console.log("  GET  /api/auth/me");
   console.log("  *    /api/items");
   console.log("  *    /api/employees");
+  console.log("  *    /api/documents");
   console.log("  *    /api/reports");
   console.log("  GET  /api/audit");
   console.log("  GET  /api/me (compat)");
