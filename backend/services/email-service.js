@@ -2,8 +2,17 @@
 import nodemailer from "nodemailer";
 
 import { auditLog } from "../data-audit.js";
+import { addOutboxEntry } from "../data-outbox.js";
 import { downloadDocumentService } from "./documents.service.js";
-import { EMAIL_FROM, HAS_SMTP, SMTP_HOST, SMTP_PASS, SMTP_PORT, SMTP_SECURE, SMTP_USER } from "../config/email.js";
+import {
+  EMAIL_FROM,
+  HAS_SMTP,
+  SMTP_HOST,
+  SMTP_PASS,
+  SMTP_PORT,
+  SMTP_SECURE,
+  SMTP_USER,
+} from "../config/email.js";
 
 function safeString(v) {
   return (v ?? "").toString();
@@ -21,7 +30,6 @@ function requireCompanyId(companyId) {
 
 function requireEmailLike(v, fieldName = "to") {
   const s = safeString(v).trim();
-  // jednoduchá validace (pro v1 stačí)
   if (!s || !s.includes("@") || s.length < 5) {
     const err = new Error(`Invalid '${fieldName}' email.`);
     err.status = 400;
@@ -31,12 +39,17 @@ function requireEmailLike(v, fieldName = "to") {
   return s;
 }
 
+function clip(s, n = 160) {
+  const x = safeString(s);
+  return x.length <= n ? x : x.slice(0, n) + "…";
+}
+
 function buildTransport() {
   if (HAS_SMTP) {
     const transport = nodemailer.createTransport({
       host: SMTP_HOST,
       port: SMTP_PORT,
-      secure: SMTP_SECURE, // true jen pokud používáš 465
+      secure: SMTP_SECURE,
       auth: {
         user: SMTP_USER,
         pass: SMTP_PASS,
@@ -46,7 +59,6 @@ function buildTransport() {
     return { transport, mode: "smtp" };
   }
 
-  // DEV fallback: nic reálně neposílá, ale vrací ok a dá se testovat
   const transport = nodemailer.createTransport({
     streamTransport: true,
     newline: "unix",
@@ -56,11 +68,6 @@ function buildTransport() {
   return { transport, mode: "stream" };
 }
 
-/**
- * sendDocumentEmailService:
- * - tenant-safe: documentId se hledá v tenant storage (documents.json + files/)
- * - audit: email.send
- */
 export async function sendDocumentEmailService({
   companyId,
   actorRole,
@@ -83,7 +90,7 @@ export async function sendDocumentEmailService({
     throw err;
   }
 
-  // Najdeme tenant dokument + fullPath (a zároveň to zaloguje audit document.download)
+  // Document lookup + disk path (tenant-safe) + audit document.download
   const { doc, fullPath } = await downloadDocumentService({
     companyId: cid,
     actorRole,
@@ -108,7 +115,6 @@ export async function sendDocumentEmailService({
 
   const info = await transport.sendMail(mail);
 
-  // DEV stream transport: vypíšeme preview do konzole (užitečné pro test)
   if (mode === "stream") {
     const raw = info?.message;
     const preview =
@@ -118,6 +124,18 @@ export async function sendDocumentEmailService({
     console.log("---- END EMAIL ----");
   }
 
+  // OUTBOX write (tenant scoped)
+  const outboxEntry = await addOutboxEntry({
+    companyId: cid,
+    to: toEmail,
+    subject: subj,
+    messagePreview: clip(msg, 200),
+    documentId: doc.id,
+    filename: doc.originalName,
+    transport: mode,
+    messageId: safeString(info?.messageId || ""),
+  });
+
   await auditLog({
     companyId: cid,
     actorRole,
@@ -125,6 +143,7 @@ export async function sendDocumentEmailService({
     entityType: "email",
     entityId: safeString(info?.messageId || ""),
     meta: {
+      outboxId: outboxEntry.id,
       to: toEmail,
       subject: subj,
       documentId: doc.id,
@@ -139,5 +158,6 @@ export async function sendDocumentEmailService({
     ok: true,
     transport: mode,
     messageId: safeString(info?.messageId || ""),
+    outboxId: outboxEntry.id,
   };
 }
