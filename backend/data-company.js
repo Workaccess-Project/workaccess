@@ -21,6 +21,13 @@ function requireCompanyId(companyId) {
   return cid;
 }
 
+function defaultAlerts() {
+  return {
+    expirationsDays: 30,
+    digestEmail: "",
+  };
+}
+
 function defaultCompany(companyId) {
   return {
     companyId: safeString(companyId),
@@ -33,12 +40,28 @@ function defaultCompany(companyId) {
     country: "CZ",
     email: "",
     phone: "",
+    alerts: defaultAlerts(),
     updatedAt: nowIso(),
     createdAt: nowIso(),
   };
 }
 
+function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
+  const daysRaw = body?.expirationsDays ?? prev.expirationsDays ?? 30;
+  const daysNum = Number(daysRaw);
+  const expirationsDays = Number.isFinite(daysNum)
+    ? Math.max(1, Math.min(365, Math.floor(daysNum)))
+    : 30;
+
+  return {
+    expirationsDays,
+    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
+  };
+}
+
 function normalizeCompanyBody(body = {}, prev = {}) {
+  const prevAlerts = prev?.alerts && typeof prev.alerts === "object" ? prev.alerts : defaultAlerts();
+
   return {
     ...prev,
     name: safeString(body.name ?? prev.name),
@@ -50,6 +73,7 @@ function normalizeCompanyBody(body = {}, prev = {}) {
     country: safeString(body.country ?? prev.country) || "CZ",
     email: safeString(body.email ?? prev.email),
     phone: safeString(body.phone ?? prev.phone),
+    alerts: normalizeAlertsBody(body.alerts ?? body, prevAlerts),
   };
 }
 
@@ -70,15 +94,18 @@ export async function getCompanyProfile(companyId) {
     return def;
   }
 
-  // doplníme missing fields (jemná migrace)
+  // jemná migrace: doplníme missing fields včetně alerts
   const def = defaultCompany(cid);
   const merged = { ...def, ...data };
 
-  // pokud chybí timestamps, doplníme
+  // alerts merge zvlášť (aby se doplnily nové fields)
+  const aDef = defaultAlerts();
+  const aData = merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
+  merged.alerts = { ...aDef, ...aData };
+
   if (!merged.createdAt) merged.createdAt = def.createdAt;
   merged.updatedAt = merged.updatedAt || def.updatedAt;
 
-  // ulož jen pokud se něco opravilo
   const changed = JSON.stringify(merged) !== JSON.stringify(data);
   if (changed) await writeTenantEntity(cid, ENTITY, merged);
 
