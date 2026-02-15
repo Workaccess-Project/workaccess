@@ -25,6 +25,7 @@ function defaultAlerts() {
   return {
     expirationsDays: 30,
     digestEmail: "",
+    lastDigestSentOn: "", // YYYY-MM-DD
   };
 }
 
@@ -53,14 +54,19 @@ function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
     ? Math.max(1, Math.min(365, Math.floor(daysNum)))
     : 30;
 
+  // lastDigestSentOn: ukládáme jako string (očekáváme YYYY-MM-DD)
+  const lastDigestSentOn = safeString(body?.lastDigestSentOn ?? prev.lastDigestSentOn);
+
   return {
     expirationsDays,
     digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
+    lastDigestSentOn,
   };
 }
 
 function normalizeCompanyBody(body = {}, prev = {}) {
-  const prevAlerts = prev?.alerts && typeof prev.alerts === "object" ? prev.alerts : defaultAlerts();
+  const prevAlerts =
+    prev?.alerts && typeof prev.alerts === "object" ? prev.alerts : defaultAlerts();
 
   return {
     ...prev,
@@ -73,6 +79,8 @@ function normalizeCompanyBody(body = {}, prev = {}) {
     country: safeString(body.country ?? prev.country) || "CZ",
     email: safeString(body.email ?? prev.email),
     phone: safeString(body.phone ?? prev.phone),
+
+    // alerts může přijít buď jako body.alerts, nebo přímo v body (kvůli kompatibilitě)
     alerts: normalizeAlertsBody(body.alerts ?? body, prevAlerts),
   };
 }

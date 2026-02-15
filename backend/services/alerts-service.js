@@ -40,7 +40,6 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
   }
 
   const windowDays = parseDays(days, 30);
-
   const employees = await listEmployees({ companyId: cid });
 
   const now = new Date();
@@ -71,7 +70,12 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
     }
   }
 
-  items.sort((a, b) => a.daysLeft - b.daysLeft);
+  const rank = (sev) => (sev === "expired" ? 0 : 1);
+  items.sort((a, b) => {
+    const r = rank(a.severity) - rank(b.severity);
+    if (r !== 0) return r;
+    return a.daysLeft - b.daysLeft;
+  });
 
   return {
     companyId: cid,
@@ -89,19 +93,18 @@ export async function getAlertsConfigService({ companyId } = {}) {
     companyId,
     expirationsDays: parseDays(alerts.expirationsDays, 30),
     digestEmail: safeString(alerts.digestEmail).trim(),
+    lastDigestSentOn: safeString(alerts.lastDigestSentOn).trim(),
   };
 }
 
-export async function updateAlertsConfigService({
-  companyId,
-  actorRole,
-  body,
-} = {}) {
+export async function updateAlertsConfigService({ companyId, actorRole, body } = {}) {
   const prev = await getAlertsConfigService({ companyId });
 
   const next = {
     expirationsDays: parseDays(body?.expirationsDays ?? prev.expirationsDays),
-    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
+    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail).trim(),
+    // lastDigestSentOn necháváme beze změny při ručním updatu configu
+    lastDigestSentOn: prev.lastDigestSentOn,
   };
 
   await updateCompanyService({
@@ -143,15 +146,13 @@ function formatDigestText(result) {
   return lines.join("\n");
 }
 
-export async function sendAlertsDigestNowService({
-  companyId,
-  actorRole,
-} = {}) {
+export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) {
   const cfg = await getAlertsConfigService({ companyId });
 
   if (!cfg.digestEmail) {
     const err = new Error("Digest email not configured.");
     err.status = 400;
+    err.payload = { field: "digestEmail" };
     throw err;
   }
 
@@ -163,7 +164,7 @@ export async function sendAlertsDigestNowService({
   const subject = `Workaccess – Expirace školení (${expirations.count})`;
   const text = formatDigestText(expirations);
 
-  const result = await sendPlainEmailService({
+  const sent = await sendPlainEmailService({
     companyId,
     actorRole,
     to: cfg.digestEmail,
@@ -176,11 +177,11 @@ export async function sendAlertsDigestNowService({
     actorRole,
     action: "alerts.digest.send",
     entityType: "alerts",
-    entityId: result.outboxId,
+    entityId: sent.outboxId,
     meta: {
-      outboxId: result.outboxId,
-      transport: result.transport,
-      messageId: result.messageId,
+      outboxId: sent.outboxId,
+      transport: sent.transport,
+      messageId: sent.messageId,
       expirationsCount: expirations.count,
     },
     before: null,
@@ -189,7 +190,7 @@ export async function sendAlertsDigestNowService({
 
   return {
     ok: true,
-    ...result,
+    ...sent,
     expirationsCount: expirations.count,
   };
 }

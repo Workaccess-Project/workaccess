@@ -26,6 +26,9 @@ import { requireTenant } from "./middleware/require-tenant.js";
 // ERROR HANDLER
 import { errorHandler } from "./middleware/error-handler.js";
 
+// SCHEDULER
+import { startDigestScheduler } from "./services/digest-scheduler.js";
+
 const app = express();
 const PORT = 3000;
 
@@ -45,7 +48,7 @@ app.get("/api/health", (req, res) => {
 // --- Auth middleware after health ---
 app.use(authMiddleware);
 
-// --- Auth routes (login must work without tenant enforcement) ---
+// --- Auth routes ---
 app.use("/api/auth", authRouter);
 
 // --- Tenant enforcement for everything else ---
@@ -80,8 +83,11 @@ app.listen(PORT, () => {
   console.log("  *    /api/send");
   console.log("  *    /api/company");
   console.log("  *    /api/contacts");
-  console.log("  GET  /api/alerts/expirations");
+  console.log("  *    /api/alerts");
   console.log("  *    /api/reports");
   console.log("  GET  /api/audit");
   console.log("  GET  /api/me (compat)");
 });
+
+// start scheduler AFTER server is up
+startDigestScheduler();
