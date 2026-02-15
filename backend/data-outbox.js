@@ -34,6 +34,8 @@ export async function addOutboxEntry({
   filename,
   transport,
   messageId,
+  contactId = null,
+  toSource = "raw", // "raw" | "contact"
 } = {}) {
   const cid = safeString(companyId).trim();
   if (!cid) {
@@ -49,6 +51,8 @@ export async function addOutboxEntry({
     ts: nowIso(),
     companyId: cid,
     to: safeString(to),
+    toSource: safeString(toSource) || "raw",
+    contactId: contactId == null ? null : safeString(contactId),
     subject: safeString(subject),
     messagePreview: safeString(messagePreview),
     documentId: safeString(documentId),
@@ -71,9 +75,10 @@ export async function addOutboxEntry({
  * opts:
  *  - companyId (required)
  *  - limit (1..200) default 50
- *  - cursor: "ts|id" (returns entries "before" cursor)
+ *  - cursor: "ts|id"
  *  - to (substring match)
  *  - documentId (exact)
+ *  - contactId (exact)
  *  - from, toDate (date/time)
  */
 export async function listOutbox(opts = {}) {
@@ -89,6 +94,7 @@ export async function listOutbox(opts = {}) {
 
   const toFilter = opts.to ? safeString(opts.to).toLowerCase() : null;
   const documentId = opts.documentId ? safeString(opts.documentId) : null;
+  const contactId = opts.contactId ? safeString(opts.contactId) : null;
 
   const from = parseDateLike(opts.from);
   const toDate = parseDateLike(opts.toDate);
@@ -111,6 +117,7 @@ export async function listOutbox(opts = {}) {
 
   if (toFilter) items = items.filter((x) => safeString(x.to).toLowerCase().includes(toFilter));
   if (documentId) items = items.filter((x) => safeString(x.documentId) === documentId);
+  if (contactId) items = items.filter((x) => safeString(x.contactId) === contactId);
 
   if (from) items = items.filter((x) => parseDateLike(x.ts)?.getTime() >= from.getTime());
   if (toDate) items = items.filter((x) => parseDateLike(x.ts)?.getTime() <= toDate.getTime());

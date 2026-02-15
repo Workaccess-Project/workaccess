@@ -4,6 +4,7 @@ import nodemailer from "nodemailer";
 import { auditLog } from "../data-audit.js";
 import { addOutboxEntry } from "../data-outbox.js";
 import { downloadDocumentService } from "./documents.service.js";
+import { getContactByIdService } from "./contacts-service.js";
 import {
   EMAIL_FROM,
   HAS_SMTP,
@@ -68,17 +69,45 @@ function buildTransport() {
   return { transport, mode: "stream" };
 }
 
+async function resolveRecipient({ companyId, to, contactId }) {
+  const rawTo = safeString(to).trim();
+  const rawContactId = safeString(contactId).trim();
+
+  if (rawContactId) {
+    const c = await getContactByIdService({ companyId, id: rawContactId });
+    const email = safeString(c.email).trim();
+    if (!email) {
+      const err = new Error("Contact has no email");
+      err.status = 400;
+      err.payload = { field: "contactId", contactId: rawContactId };
+      throw err;
+    }
+    return { toEmail: requireEmailLike(email, "contact.email"), contactId: rawContactId, toSource: "contact" };
+  }
+
+  if (!rawTo) {
+    const err = new Error("Missing recipient: provide 'to' or 'contactId'");
+    err.status = 400;
+    err.payload = { requiredOneOf: ["to", "contactId"] };
+    throw err;
+  }
+
+  return { toEmail: requireEmailLike(rawTo, "to"), contactId: null, toSource: "raw" };
+}
+
 export async function sendDocumentEmailService({
   companyId,
   actorRole,
   to,
+  contactId,
   subject,
   message,
   documentId,
 } = {}) {
   const cid = requireCompanyId(companyId);
 
-  const toEmail = requireEmailLike(to, "to");
+  const recipient = await resolveRecipient({ companyId: cid, to, contactId });
+
   const subj = safeString(subject).trim() || "Workaccess document";
   const msg = safeString(message);
 
@@ -101,7 +130,7 @@ export async function sendDocumentEmailService({
 
   const mail = {
     from: EMAIL_FROM,
-    to: toEmail,
+    to: recipient.toEmail,
     subject: subj,
     text: msg || "",
     attachments: [
@@ -127,7 +156,9 @@ export async function sendDocumentEmailService({
   // OUTBOX write (tenant scoped)
   const outboxEntry = await addOutboxEntry({
     companyId: cid,
-    to: toEmail,
+    to: recipient.toEmail,
+    toSource: recipient.toSource,
+    contactId: recipient.contactId,
     subject: subj,
     messagePreview: clip(msg, 200),
     documentId: doc.id,
@@ -144,7 +175,9 @@ export async function sendDocumentEmailService({
     entityId: safeString(info?.messageId || ""),
     meta: {
       outboxId: outboxEntry.id,
-      to: toEmail,
+      to: recipient.toEmail,
+      toSource: recipient.toSource,
+      contactId: recipient.contactId,
       subject: subj,
       documentId: doc.id,
       filename: doc.originalName,
@@ -159,5 +192,8 @@ export async function sendDocumentEmailService({
     transport: mode,
     messageId: safeString(info?.messageId || ""),
     outboxId: outboxEntry.id,
+    to: recipient.toEmail,
+    toSource: recipient.toSource,
+    contactId: recipient.contactId,
   };
 }

@@ -8,18 +8,19 @@ const router = express.Router();
 
 /**
  * POST /api/send/email
- * body: { to, subject, message, documentId }
+ * body: { to?, contactId?, subject, message, documentId }
  * WRITE: hr/manager
  */
 router.post("/email", requireWrite, async (req, res, next) => {
   try {
     const companyId = req.auth.companyId;
-    const { to, subject, message, documentId } = req.body ?? {};
+    const { to, contactId, subject, message, documentId } = req.body ?? {};
 
     const result = await sendDocumentEmailService({
       companyId,
       actorRole: req.role,
       to,
+      contactId,
       subject,
       message,
       documentId,
@@ -39,6 +40,7 @@ router.post("/email", requireWrite, async (req, res, next) => {
  *  - limit, cursor
  *  - to (substring)
  *  - documentId
+ *  - contactId
  *  - from, toDate
  */
 router.get("/outbox", requireRole(["hr", "manager", "security"]), async (req, res) => {
