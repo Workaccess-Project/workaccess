@@ -4,7 +4,6 @@ import nodemailer from "nodemailer";
 import { auditLog } from "../data-audit.js";
 import { addOutboxEntry } from "../data-outbox.js";
 import { downloadDocumentService } from "./documents.service.js";
-import { getContactByIdService } from "./contacts-service.js";
 import {
   EMAIL_FROM,
   HAS_SMTP,
@@ -56,7 +55,6 @@ function buildTransport() {
         pass: SMTP_PASS,
       },
     });
-
     return { transport, mode: "smtp" };
   }
 
@@ -69,45 +67,97 @@ function buildTransport() {
   return { transport, mode: "stream" };
 }
 
-async function resolveRecipient({ companyId, to, contactId }) {
-  const rawTo = safeString(to).trim();
-  const rawContactId = safeString(contactId).trim();
+/* ============================================================
+   1) SEND PLAIN EMAIL (NOVÉ)
+   ============================================================ */
 
-  if (rawContactId) {
-    const c = await getContactByIdService({ companyId, id: rawContactId });
-    const email = safeString(c.email).trim();
-    if (!email) {
-      const err = new Error("Contact has no email");
-      err.status = 400;
-      err.payload = { field: "contactId", contactId: rawContactId };
-      throw err;
-    }
-    return { toEmail: requireEmailLike(email, "contact.email"), contactId: rawContactId, toSource: "contact" };
+export async function sendPlainEmailService({
+  companyId,
+  actorRole,
+  to,
+  subject,
+  message,
+} = {}) {
+  const cid = requireCompanyId(companyId);
+
+  const toEmail = requireEmailLike(to, "to");
+  const subj = safeString(subject).trim() || "Workaccess notification";
+  const msg = safeString(message);
+
+  const { transport, mode } = buildTransport();
+
+  const mail = {
+    from: EMAIL_FROM,
+    to: toEmail,
+    subject: subj,
+    text: msg || "",
+  };
+
+  const info = await transport.sendMail(mail);
+
+  if (mode === "stream") {
+    const raw = info?.message;
+    const preview =
+      Buffer.isBuffer(raw) ? raw.toString("utf8") : safeString(raw);
+    console.log("---- EMAIL (DEV stream transport) ----");
+    console.log(preview);
+    console.log("---- END EMAIL ----");
   }
 
-  if (!rawTo) {
-    const err = new Error("Missing recipient: provide 'to' or 'contactId'");
-    err.status = 400;
-    err.payload = { requiredOneOf: ["to", "contactId"] };
-    throw err;
-  }
+  const messageId = safeString(info?.messageId || "");
 
-  return { toEmail: requireEmailLike(rawTo, "to"), contactId: null, toSource: "raw" };
+  const outboxEntry = await addOutboxEntry({
+    companyId: cid,
+    to: toEmail,
+    toSource: "raw",
+    contactId: null,
+    subject: subj,
+    messagePreview: clip(msg, 200),
+    documentId: "",
+    filename: "",
+    transport: mode,
+    messageId,
+  });
+
+  await auditLog({
+    companyId: cid,
+    actorRole,
+    action: "email.send",
+    entityType: "email",
+    entityId: messageId,
+    meta: {
+      outboxId: outboxEntry.id,
+      to: toEmail,
+      subject: subj,
+      transport: mode,
+    },
+    before: null,
+    after: { ok: true, transport: mode, messageId },
+  });
+
+  return {
+    ok: true,
+    transport: mode,
+    messageId,
+    outboxId: outboxEntry.id,
+  };
 }
+
+/* ============================================================
+   2) SEND DOCUMENT EMAIL (PŮVODNÍ)
+   ============================================================ */
 
 export async function sendDocumentEmailService({
   companyId,
   actorRole,
   to,
-  contactId,
   subject,
   message,
   documentId,
 } = {}) {
   const cid = requireCompanyId(companyId);
 
-  const recipient = await resolveRecipient({ companyId: cid, to, contactId });
-
+  const toEmail = requireEmailLike(to, "to");
   const subj = safeString(subject).trim() || "Workaccess document";
   const msg = safeString(message);
 
@@ -119,7 +169,6 @@ export async function sendDocumentEmailService({
     throw err;
   }
 
-  // Document lookup + disk path (tenant-safe) + audit document.download
   const { doc, fullPath } = await downloadDocumentService({
     companyId: cid,
     actorRole,
@@ -130,7 +179,7 @@ export async function sendDocumentEmailService({
 
   const mail = {
     from: EMAIL_FROM,
-    to: recipient.toEmail,
+    to: toEmail,
     subject: subj,
     text: msg || "",
     attachments: [
@@ -153,18 +202,19 @@ export async function sendDocumentEmailService({
     console.log("---- END EMAIL ----");
   }
 
-  // OUTBOX write (tenant scoped)
+  const messageId = safeString(info?.messageId || "");
+
   const outboxEntry = await addOutboxEntry({
     companyId: cid,
-    to: recipient.toEmail,
-    toSource: recipient.toSource,
-    contactId: recipient.contactId,
+    to: toEmail,
+    toSource: "raw",
+    contactId: null,
     subject: subj,
     messagePreview: clip(msg, 200),
     documentId: doc.id,
     filename: doc.originalName,
     transport: mode,
-    messageId: safeString(info?.messageId || ""),
+    messageId,
   });
 
   await auditLog({
@@ -172,28 +222,23 @@ export async function sendDocumentEmailService({
     actorRole,
     action: "email.send",
     entityType: "email",
-    entityId: safeString(info?.messageId || ""),
+    entityId: messageId,
     meta: {
       outboxId: outboxEntry.id,
-      to: recipient.toEmail,
-      toSource: recipient.toSource,
-      contactId: recipient.contactId,
+      to: toEmail,
       subject: subj,
       documentId: doc.id,
       filename: doc.originalName,
       transport: mode,
     },
     before: null,
-    after: { ok: true, transport: mode, messageId: safeString(info?.messageId || "") },
+    after: { ok: true, transport: mode, messageId },
   });
 
   return {
     ok: true,
     transport: mode,
-    messageId: safeString(info?.messageId || ""),
+    messageId,
     outboxId: outboxEntry.id,
-    to: recipient.toEmail,
-    toSource: recipient.toSource,
-    contactId: recipient.contactId,
   };
 }

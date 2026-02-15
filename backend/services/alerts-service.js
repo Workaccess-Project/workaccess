@@ -2,8 +2,7 @@
 import { listEmployees } from "./employees-service.js";
 import { getCompanyService, updateCompanyService } from "./company-service.js";
 import { auditLog } from "../data-audit.js";
-import { sendDocumentEmailService } from "./email-service.js";
-import { addOutboxEntry } from "../data-outbox.js";
+import { sendPlainEmailService } from "./email-service.js";
 
 function safeString(v) {
   return (v ?? "").toString();
@@ -32,11 +31,10 @@ function severityForDaysLeft(daysLeft) {
   return "soon";
 }
 
-// --- EXPIRATIONS (BOX #10) ---
 export async function listExpirationsService({ companyId, days = 30 } = {}) {
   const cid = safeString(companyId).trim();
   if (!cid) {
-    const err = new Error("Missing companyId (tenant context).");
+    const err = new Error("Missing companyId");
     err.status = 400;
     throw err;
   }
@@ -50,13 +48,12 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
 
   const items = [];
 
-  for (const emp of Array.isArray(employees) ? employees : []) {
+  for (const emp of employees || []) {
     const trainings = Array.isArray(emp.trainings) ? emp.trainings : [];
 
     for (const t of trainings) {
       const validTo = parseDateOnly(t?.validTo);
       if (!validTo) continue;
-
       if (validTo.getTime() > cutoff.getTime()) continue;
 
       const daysLeft = daysBetween(now, validTo);
@@ -70,17 +67,11 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
         trainingId: safeString(t.id),
         trainingName: safeString(t.name),
         validTo: safeString(t.validTo),
-        validFrom: safeString(t.validFrom),
       });
     }
   }
 
-  const rank = (sev) => (sev === "expired" ? 0 : 1);
-  items.sort((a, b) => {
-    const r = rank(a.severity) - rank(b.severity);
-    if (r !== 0) return r;
-    return a.daysLeft - b.daysLeft;
-  });
+  items.sort((a, b) => a.daysLeft - b.daysLeft);
 
   return {
     companyId: cid,
@@ -90,75 +81,55 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
   };
 }
 
-// --- CONFIG ---
 export async function getAlertsConfigService({ companyId } = {}) {
   const profile = await getCompanyService({ companyId });
+  const alerts = profile?.alerts || {};
 
-  const alerts = profile?.alerts && typeof profile.alerts === "object" ? profile.alerts : {};
   return {
-    companyId: safeString(companyId),
+    companyId,
     expirationsDays: parseDays(alerts.expirationsDays, 30),
     digestEmail: safeString(alerts.digestEmail).trim(),
   };
 }
 
-export async function updateAlertsConfigService({ companyId, actorRole, body } = {}) {
-  const cid = safeString(companyId).trim();
-  if (!cid) {
-    const err = new Error("Missing companyId");
-    err.status = 400;
-    throw err;
-  }
-
-  const prev = await getAlertsConfigService({ companyId: cid });
+export async function updateAlertsConfigService({
+  companyId,
+  actorRole,
+  body,
+} = {}) {
+  const prev = await getAlertsConfigService({ companyId });
 
   const next = {
-    expirationsDays: parseDays(body?.expirationsDays ?? prev.expirationsDays, 30),
-    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail).trim(),
+    expirationsDays: parseDays(body?.expirationsDays ?? prev.expirationsDays),
+    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
   };
 
-  // uložíme do company profilu jako alerts: {...}
   await updateCompanyService({
-    companyId: cid,
+    companyId,
     actorRole,
     body: { alerts: next },
   });
 
   await auditLog({
-    companyId: cid,
+    companyId,
     actorRole,
     action: "alerts.config.update",
     entityType: "alerts",
     entityId: "config",
-    meta: {},
     before: prev,
     after: next,
   });
 
-  return { companyId: cid, ...next };
-}
-
-// --- DIGEST SEND-NOW ---
-// Pozn.: používáme existující email sending, ale bez dokumentu.
-// Proto uděláme "plain email" jako outbox entry (bez attachmentu) *v tomto BOXu*.
-function requireEmailLike(v, fieldName = "digestEmail") {
-  const s = safeString(v).trim();
-  if (!s || !s.includes("@") || s.length < 5) {
-    const err = new Error(`Invalid '${fieldName}' email.`);
-    err.status = 400;
-    err.payload = { field: fieldName };
-    throw err;
-  }
-  return s;
+  return next;
 }
 
 function formatDigestText(result) {
   const lines = [];
-  lines.push(`Workaccess – Expirace školení (okno ${result.windowDays} dní)`);
-  lines.push(`Firma: ${result.companyId}`);
+  lines.push(`Workaccess – Expirace školení (${result.windowDays} dní)`);
   lines.push("");
+
   if (!result.items.length) {
-    lines.push("Žádné expirace v daném okně.");
+    lines.push("Žádné expirace.");
     return lines.join("\n");
   }
 
@@ -168,52 +139,57 @@ function formatDigestText(result) {
       `- [${sev}] ${it.employeeName} – ${it.trainingName} (validTo ${it.validTo}, za ${it.daysLeft} dní)`
     );
   }
+
   return lines.join("\n");
 }
 
-export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) {
-  const cid = safeString(companyId).trim();
-  if (!cid) {
-    const err = new Error("Missing companyId");
+export async function sendAlertsDigestNowService({
+  companyId,
+  actorRole,
+} = {}) {
+  const cfg = await getAlertsConfigService({ companyId });
+
+  if (!cfg.digestEmail) {
+    const err = new Error("Digest email not configured.");
     err.status = 400;
     throw err;
   }
 
-  const cfg = await getAlertsConfigService({ companyId: cid });
-  const to = requireEmailLike(cfg.digestEmail, "digestEmail");
+  const expirations = await listExpirationsService({
+    companyId,
+    days: cfg.expirationsDays,
+  });
 
-  const expirations = await listExpirationsService({ companyId: cid, days: cfg.expirationsDays });
   const subject = `Workaccess – Expirace školení (${expirations.count})`;
   const text = formatDigestText(expirations);
 
-  // Pošleme email BEZ attachmentu: použijeme nodemailer přes sendDocumentEmailService neumíme,
-  // takže v BOX #11 uděláme jednoduchý "email-only" přes outbox+audit a stream mode.
-  // Abychom nezasahovali do email-service, pošleme přes /api/send/email bez dokumentu nejde.
-  // Proto posíláme pouze "evidence" (outbox+audit) bez reálného odeslání.
-  // (V BOX #12 doplníme obecný sendPlainEmailService.)
-  const outboxEntry = await addOutboxEntry({
-    companyId: cid,
-    to,
-    toSource: "raw",
-    contactId: null,
+  const result = await sendPlainEmailService({
+    companyId,
+    actorRole,
+    to: cfg.digestEmail,
     subject,
-    messagePreview: text.slice(0, 200),
-    documentId: "",
-    filename: "",
-    transport: "digest",
-    messageId: "",
+    message: text,
   });
 
   await auditLog({
-    companyId: cid,
+    companyId,
     actorRole,
     action: "alerts.digest.send",
     entityType: "alerts",
-    entityId: outboxEntry.id,
-    meta: { outboxId: outboxEntry.id, to, expirationsCount: expirations.count },
+    entityId: result.outboxId,
+    meta: {
+      outboxId: result.outboxId,
+      transport: result.transport,
+      messageId: result.messageId,
+      expirationsCount: expirations.count,
+    },
     before: null,
-    after: { ok: true, outboxId: outboxEntry.id },
+    after: { ok: true },
   });
 
-  return { ok: true, outboxId: outboxEntry.id, to, expirationsCount: expirations.count };
+  return {
+    ok: true,
+    ...result,
+    expirationsCount: expirations.count,
+  };
 }
