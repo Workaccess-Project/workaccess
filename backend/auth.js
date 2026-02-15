@@ -1,6 +1,7 @@
 // backend/auth.js
 
 import { verifyAccessToken } from "./services/auth.service.js";
+import { IS_JWT_ONLY, AUTH_MODE } from "./config/auth-mode.js";
 
 const ROLES = ["hr", "manager", "security", "external"];
 
@@ -19,22 +20,26 @@ function getCompanyIdFromHeader(req) {
 function getBearerToken(req) {
   const header = (req.headers["authorization"] ?? "").toString().trim();
   if (!header) return null;
+
   const [type, token] = header.split(" ");
   if (type?.toLowerCase() !== "bearer" || !token) return null;
+
   return token.trim();
 }
 
 /**
  * authMiddleware:
- * - pokud je Authorization Bearer token → JWT (produkční cesta)
- * - pokud není token → DEMO x-role + x-company-id (fallback)
+ * - If Authorization Bearer token is present -> JWT path
+ * - If token is missing:
+ *    - DEV: DEMO headers fallback (x-role + x-company-id)
+ *    - JWT_ONLY: reject with 401
  *
- * BOX #3: companyId je povinné – žádné defaulty.
+ * companyId is mandatory (tenant context).
  */
 export function authMiddleware(req, res, next) {
   const token = getBearerToken(req);
 
-  // 1) JWT cesta
+  // 1) JWT path
   if (token) {
     try {
       const user = verifyAccessToken(token);
@@ -63,7 +68,17 @@ export function authMiddleware(req, res, next) {
     }
   }
 
-  // 2) DEMO cesta (bez JWT) – povinné x-company-id
+  // 2) No token present
+  if (IS_JWT_ONLY) {
+    return res.status(401).json({
+      error: "Unauthorized",
+      message:
+        "JWT-only mode is enabled. Provide Authorization: Bearer [token].",
+      mode: AUTH_MODE,
+    });
+  }
+
+  // 3) DEV DEMO fallback (no JWT) – x-company-id required
   const role = getRoleFromHeader(req);
   const companyId = getCompanyIdFromHeader(req);
 
@@ -72,6 +87,7 @@ export function authMiddleware(req, res, next) {
       error: "BadRequest",
       message:
         "Missing companyId. Provide Authorization Bearer token OR DEMO header x-company-id.",
+      mode: AUTH_MODE,
     });
   }
 
