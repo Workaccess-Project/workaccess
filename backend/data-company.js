@@ -48,6 +48,13 @@ function defaultCompany(companyId) {
     trialStart: "",
     trialEnd: "",
 
+    // Subscription skeleton (ISO strings)
+    subscriptionStatus: "none", // none | active | past_due | canceled
+    plan: "free", // free | basic | pro
+    paymentProvider: "", // e.g. "manual"
+    subscriptionStart: "",
+    subscriptionEnd: "",
+
     updatedAt: nowIso(),
     createdAt: nowIso(),
   };
@@ -68,23 +75,37 @@ function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
     ? Math.max(1, Math.min(365, Math.floor(daysNum)))
     : 30;
 
-  const lastDigestSentOn = safeString(
-    body?.lastDigestSentOn ?? prev.lastDigestSentOn
-  );
+  const lastDigestSentOn = safeString(body?.lastDigestSentOn ?? prev.lastDigestSentOn);
 
   return {
     expirationsDays,
     digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
-    digestRecipientContactId: safeString(
-      body?.digestRecipientContactId ?? prev.digestRecipientContactId
-    ),
+    digestRecipientContactId: safeString(body?.digestRecipientContactId ?? prev.digestRecipientContactId),
     lastDigestSentOn,
+  };
+}
+
+function normalizeSubscriptionBody(body = {}, prev = {}) {
+  // Pozor: subscription měníme explicitně (billing endpointy),
+  // ale chceme umožnit i bezpečnou migraci a případný interní patch přes updateCompanyProfile.
+  const status = safeString(body.subscriptionStatus ?? prev.subscriptionStatus) || "none";
+  const plan = safeString(body.plan ?? prev.plan) || "free";
+  const paymentProvider = safeString(body.paymentProvider ?? prev.paymentProvider);
+
+  return {
+    subscriptionStatus: status,
+    plan,
+    paymentProvider,
+    subscriptionStart: normalizeIsoDateString(body.subscriptionStart ?? prev.subscriptionStart),
+    subscriptionEnd: normalizeIsoDateString(body.subscriptionEnd ?? prev.subscriptionEnd),
   };
 }
 
 function normalizeCompanyBody(body = {}, prev = {}) {
   const prevAlerts =
     prev?.alerts && typeof prev.alerts === "object" ? prev.alerts : defaultAlerts();
+
+  const prevSub = prev && typeof prev === "object" ? prev : {};
 
   return {
     ...prev,
@@ -101,6 +122,9 @@ function normalizeCompanyBody(body = {}, prev = {}) {
     // trial fields (keep if not provided)
     trialStart: normalizeIsoDateString(body.trialStart ?? prev.trialStart),
     trialEnd: normalizeIsoDateString(body.trialEnd ?? prev.trialEnd),
+
+    // subscription fields (keep if not provided)
+    ...normalizeSubscriptionBody(body, prevSub),
 
     // alerts může přijít buď jako body.alerts, nebo přímo v body (kompatibilita)
     alerts: normalizeAlertsBody(body.alerts ?? body, prevAlerts),
@@ -124,18 +148,25 @@ export async function getCompanyProfile(companyId) {
     return def;
   }
 
-  // jemná migrace: doplníme missing fields včetně trial + alerts
+  // jemná migrace: doplníme missing fields včetně trial + alerts + subscription
   const def = defaultCompany(cid);
   const merged = { ...def, ...data };
 
   const aDef = defaultAlerts();
-  const aData =
-    merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
+  const aData = merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
   merged.alerts = { ...aDef, ...aData };
 
   // trial normalize
   merged.trialStart = normalizeIsoDateString(merged.trialStart);
   merged.trialEnd = normalizeIsoDateString(merged.trialEnd);
+
+  // subscription normalize
+  const sub = normalizeSubscriptionBody(merged, merged);
+  merged.subscriptionStatus = sub.subscriptionStatus;
+  merged.plan = sub.plan;
+  merged.paymentProvider = sub.paymentProvider;
+  merged.subscriptionStart = sub.subscriptionStart;
+  merged.subscriptionEnd = sub.subscriptionEnd;
 
   if (!merged.createdAt) merged.createdAt = def.createdAt;
   merged.updatedAt = merged.updatedAt || def.updatedAt;
