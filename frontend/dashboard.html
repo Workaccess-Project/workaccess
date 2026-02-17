@@ -11,6 +11,20 @@
     <div class="card">
       <div id="wa-nav"></div>
 
+      <!-- Billing / Trial banner -->
+      <div class="section" id="billingBanner" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;" id="billingBannerTitle">—</div>
+            <div class="small" id="billingBannerText" style="opacity:0.9;"></div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="waBtn--primary" id="btnBillingActivate" style="display:none;">Aktivovat tarif (demo)</button>
+            <button id="btnBillingRefresh">Obnovit</button>
+          </div>
+        </div>
+      </div>
+
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Dashboard – expirace školení</h1>
         <div class="small">GET <code>/api/reports/trainings</code> • Audit v2: filtry + stránkování + export</div>
@@ -118,6 +132,13 @@
     const elBoxSoon = document.getElementById("boxSoon");
     const elBoxAudit = document.getElementById("boxAudit");
 
+    // billing banner
+    const elBillingBanner = document.getElementById("billingBanner");
+    const elBillingBannerTitle = document.getElementById("billingBannerTitle");
+    const elBillingBannerText = document.getElementById("billingBannerText");
+    const elBtnBillingActivate = document.getElementById("btnBillingActivate");
+    const elBtnBillingRefresh = document.getElementById("btnBillingRefresh");
+
     // audit controls
     const elAuditFilters = document.getElementById("auditFilters");
     const elAudLimit = document.getElementById("audLimit");
@@ -147,6 +168,46 @@
     function roleLabel(roleKey) {
       const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
       return map[roleKey] || roleKey;
+    }
+
+    function fmtDate(iso) {
+      const s = String(iso || "").trim();
+      if (!s) return "";
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return s;
+      return d.toISOString().slice(0, 10);
+    }
+
+    function daysLeft(untilIso) {
+      const s = String(untilIso || "").trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return null;
+      const diffMs = d.getTime() - Date.now();
+      return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+    }
+
+    function showBanner({ title, text, kind = "info", showActivate = false } = {}) {
+      elBillingBanner.style.display = "";
+      elBillingBannerTitle.textContent = title || "—";
+      elBillingBannerText.textContent = text || "";
+
+      const border =
+        kind === "error" ? "#b42318" :
+        kind === "warn" ? "#b54708" :
+        kind === "ok" ? "#067647" :
+        "var(--border)";
+
+      const bg =
+        kind === "error" ? "rgba(180,35,24,0.06)" :
+        kind === "warn" ? "rgba(181,71,8,0.06)" :
+        kind === "ok" ? "rgba(6,118,71,0.06)" :
+        "rgba(0,0,0,0.02)";
+
+      elBillingBanner.style.borderColor = border;
+      elBillingBanner.style.background = bg;
+
+      elBtnBillingActivate.style.display = showActivate ? "" : "none";
     }
 
     function setCounts(expired, soon, audit) {
@@ -202,28 +263,112 @@
         : "Nic.";
     }
 
+    function isTrialExpiredError(e) {
+      return e && (e.status === 402 || e.code === "TrialExpired" || String(e.message || "").includes("TrialExpired"));
+    }
+
+    async function refreshBillingBanner() {
+      try {
+        const s = await WA_API.getBillingStatus();
+
+        const trialEnd = s?.trial?.end || "";
+        const trialExpired = !!s?.trial?.expired;
+
+        const subActive = !!s?.subscription?.active;
+        const subEnd = s?.subscription?.end || "";
+        const plan = s?.subscription?.plan || "";
+
+        if (subActive) {
+          showBanner({
+            kind: "ok",
+            title: "Tarif aktivní",
+            text: `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`,
+            showActivate: false,
+          });
+          return;
+        }
+
+        if (trialExpired) {
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`,
+            showActivate: true,
+          });
+          return;
+        }
+
+        const left = daysLeft(trialEnd);
+        if (left != null) {
+          const kind = left <= 3 ? "warn" : "info";
+          showBanner({
+            kind,
+            title: "Trial běží",
+            text: `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dní).`,
+            showActivate: false,
+          });
+          return;
+        }
+
+        // fallback
+        elBillingBanner.style.display = "none";
+      } catch (e) {
+        // pokud billing status selže, ukážeme pouze informaci
+        showBanner({
+          kind: "warn",
+          title: "Nelze načíst billing status",
+          text: `Chyba: ${esc(e?.message || e)}`,
+          showActivate: false,
+        });
+      }
+    }
+
     async function refreshMeAndUi() {
+      await refreshBillingBanner();
+
       const role = WA_NAV.getRole();
       elAuditRolePill.textContent = roleLabel(role);
 
-      const me = await WA_API.getMe();
-      const backendRole = me?.role || role;
+      try {
+        const me = await WA_API.getMe();
+        const backendRole = me?.role || role;
 
-      elMetaLine.textContent =
-        `Dnes: ${new Date().toISOString().slice(0, 10)} • okno: ${Number(elDays.value || 30)} dní • role: ${roleLabel(backendRole)}`;
+        elMetaLine.textContent =
+          `Dnes: ${new Date().toISOString().slice(0, 10)} • okno: ${Number(elDays.value || 30)} dní • role: ${roleLabel(backendRole)}`;
 
-      const canAudit = backendRole !== "external";
-      elBtnAudit.style.display = canAudit ? "" : "none";
-      elAuditFilters.style.display = canAudit ? "" : "none";
+        const canAudit = backendRole !== "external";
+        elBtnAudit.style.display = canAudit ? "" : "none";
+        elAuditFilters.style.display = canAudit ? "" : "none";
 
-      renderTrainingsStub(backendRole);
-      setCounts(0, 0, 0);
-      elBoxAudit.innerHTML = "—";
-      elAudStatus.textContent = "";
-      AUDIT_NEXT_CURSOR = null;
-      AUDIT_LAST_PARAMS = null;
-      AUDIT_ITEMS = [];
-      elBtnAuditMore.disabled = true;
+        renderTrainingsStub(backendRole);
+        setCounts(0, 0, 0);
+        elBoxAudit.innerHTML = "—";
+        elAudStatus.textContent = "";
+        AUDIT_NEXT_CURSOR = null;
+        AUDIT_LAST_PARAMS = null;
+        AUDIT_ITEMS = [];
+        elBtnAuditMore.disabled = true;
+      } catch (e) {
+        if (isTrialExpiredError(e)) {
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: "Pro pokračování aktivujte tarif (demo tlačítko nahoře).",
+            showActivate: true,
+          });
+
+          elMetaLine.textContent = "Trial vypršel – část funkcí je uzamčená.";
+          elBtnAudit.style.display = "none";
+          elAuditFilters.style.display = "none";
+          elBoxExpired.innerHTML = "—";
+          elBoxSoon.innerHTML = "—";
+          elBoxAudit.innerHTML = "—";
+          setCounts(0, 0, 0);
+          return;
+        }
+
+        throw e;
+      }
     }
 
     async function loadAuditFirstPage() {
@@ -251,6 +396,17 @@
         elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
         elAudStatus.textContent = `Načteno: ${items.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
       } catch (e) {
+        if (isTrialExpiredError(e)) {
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: "Audit je uzamčený – aktivujte tarif.",
+            showActivate: true,
+          });
+          elAudStatus.textContent = "Trial vypršel.";
+          return;
+        }
+
         elBoxAudit.innerHTML = `<span class="pill">Chyba</span> ${esc(e?.message || e)}`;
         elCntAudit.textContent = "0";
         elAudStatus.textContent = "";
@@ -280,13 +436,23 @@
         elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
         elAudStatus.textContent = `Celkem: ${AUDIT_ITEMS.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
       } catch (e) {
+        if (isTrialExpiredError(e)) {
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: "Audit je uzamčený – aktivujte tarif.",
+            showActivate: true,
+          });
+          elAudStatus.textContent = "Trial vypršel.";
+          return;
+        }
+
         elAudStatus.textContent = `Chyba: ${esc(e?.message || e)}`;
       }
     }
 
     async function exportAuditCsv() {
       if (!AUDIT_LAST_PARAMS) {
-        // export bez filtrů → vezmeme aktuální vstupy
         AUDIT_LAST_PARAMS = buildAuditParams(false);
       }
 
@@ -307,6 +473,17 @@
 
         elAudStatus.textContent = "CSV staženo.";
       } catch (e) {
+        if (isTrialExpiredError(e)) {
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: "Export je uzamčený – aktivujte tarif.",
+            showActivate: true,
+          });
+          elAudStatus.textContent = "Trial vypršel.";
+          return;
+        }
+
         elAudStatus.textContent = `Chyba exportu: ${esc(e?.message || e)}`;
       } finally {
         elBtnAuditExport.disabled = false;
@@ -319,6 +496,20 @@
     elBtnAuditReload.addEventListener("click", loadAuditFirstPage);
     elBtnAuditMore.addEventListener("click", loadAuditMore);
     elBtnAuditExport.addEventListener("click", exportAuditCsv);
+
+    elBtnBillingRefresh.addEventListener("click", refreshMeAndUi);
+
+    elBtnBillingActivate.addEventListener("click", async () => {
+      elBtnBillingActivate.disabled = true;
+      try {
+        await WA_API.billingActivate("basic", 30);
+        await refreshMeAndUi();
+      } catch (e) {
+        alert(`Aktivace se nepovedla: ${e?.message || e}`);
+      } finally {
+        elBtnBillingActivate.disabled = false;
+      }
+    });
 
     // init
     (async () => {
