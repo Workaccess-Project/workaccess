@@ -24,7 +24,13 @@ function requireCompanyId(companyId) {
 function defaultAlerts() {
   return {
     expirationsDays: 30,
+
+    // legacy fallback (kompatibilita)
     digestEmail: "",
+
+    // nový preferovaný recipient přes Contacts
+    digestRecipientContactId: "",
+
     lastDigestSentOn: "", // YYYY-MM-DD
   };
 }
@@ -59,7 +65,15 @@ function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
 
   return {
     expirationsDays,
+
+    // legacy
     digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
+
+    // new
+    digestRecipientContactId: safeString(
+      body?.digestRecipientContactId ?? prev.digestRecipientContactId
+    ),
+
     lastDigestSentOn,
   };
 }

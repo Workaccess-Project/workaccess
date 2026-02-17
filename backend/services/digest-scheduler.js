@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 
 import { getCompanyProfile, updateCompanyProfile } from "../data-company.js";
 import { sendAlertsDigestNowService } from "./alerts-service.js";
+import { getContactById } from "../data-contacts.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -36,18 +37,34 @@ async function listTenants() {
   }
 }
 
+async function resolveRecipientEmailFromProfile(companyId, profile) {
+  const alerts = profile?.alerts && typeof profile.alerts === "object" ? profile.alerts : {};
+
+  const contactId = safeString(alerts.digestRecipientContactId);
+  if (contactId) {
+    const contact = await getContactById(companyId, contactId);
+    const email = safeString(contact?.email);
+    if (email) return email;
+    return "";
+  }
+
+  // legacy fallback
+  return safeString(alerts.digestEmail);
+}
+
 async function shouldSendToday(companyId) {
   const profile = await getCompanyProfile(companyId);
-  const alerts = profile?.alerts && typeof profile.alerts === "object" ? profile.alerts : {};
-  const digestEmail = safeString(alerts.digestEmail);
-  if (!digestEmail) return { ok: false, reason: "no_digest_email" };
 
+  const recipientEmail = safeString(await resolveRecipientEmailFromProfile(companyId, profile));
+  if (!recipientEmail) return { ok: false, reason: "no_digest_recipient" };
+
+  const alerts = profile?.alerts && typeof profile.alerts === "object" ? profile.alerts : {};
   const lastKey = safeString(alerts.lastDigestSentOn);
   const today = todayKeyPrague();
 
   if (lastKey === today) return { ok: false, reason: "already_sent_today" };
 
-  return { ok: true, digestEmail, today };
+  return { ok: true, today };
 }
 
 async function markSentToday(companyId, today) {
@@ -84,6 +101,8 @@ export async function runDailyDigestJob({ actorRole = "system" } = {}) {
         transport: sent.transport,
         messageId: sent.messageId,
         expirationsCount: sent.expirationsCount,
+        to: sent.to,
+        recipient: sent.recipient,
       });
     } catch (err) {
       results.push({

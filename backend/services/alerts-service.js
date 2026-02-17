@@ -3,6 +3,7 @@ import { listEmployees } from "./employees-service.js";
 import { getCompanyService, updateCompanyService } from "./company-service.js";
 import { auditLog } from "../data-audit.js";
 import { sendPlainEmailService } from "./email-service.js";
+import { getContactById } from "../data-contacts.js";
 
 function safeString(v) {
   return (v ?? "").toString();
@@ -92,7 +93,13 @@ export async function getAlertsConfigService({ companyId } = {}) {
   return {
     companyId,
     expirationsDays: parseDays(alerts.expirationsDays, 30),
+
+    // legacy fallback
     digestEmail: safeString(alerts.digestEmail).trim(),
+
+    // new
+    digestRecipientContactId: safeString(alerts.digestRecipientContactId).trim(),
+
     lastDigestSentOn: safeString(alerts.lastDigestSentOn).trim(),
   };
 }
@@ -102,7 +109,15 @@ export async function updateAlertsConfigService({ companyId, actorRole, body } =
 
   const next = {
     expirationsDays: parseDays(body?.expirationsDays ?? prev.expirationsDays),
+
+    // legacy fallback (necháváme, dokud nepřejdeme všude na contactId)
     digestEmail: safeString(body?.digestEmail ?? prev.digestEmail).trim(),
+
+    // new preferred recipient
+    digestRecipientContactId: safeString(
+      body?.digestRecipientContactId ?? prev.digestRecipientContactId
+    ).trim(),
+
     // lastDigestSentOn necháváme beze změny při ručním updatu configu
     lastDigestSentOn: prev.lastDigestSentOn,
   };
@@ -128,7 +143,7 @@ export async function updateAlertsConfigService({ companyId, actorRole, body } =
 
 function formatDigestText(result) {
   const lines = [];
-  lines.push(`Workaccess – Expirace školení (${result.windowDays} dní)`);
+  lines.push(`Workaccess – Expirace školení (${result.windowDays} dnů)`);
   lines.push("");
 
   if (!result.items.length) {
@@ -139,22 +154,51 @@ function formatDigestText(result) {
   for (const it of result.items) {
     const sev = it.severity === "expired" ? "PROŠLÉ" : "BRZY";
     lines.push(
-      `- [${sev}] ${it.employeeName} – ${it.trainingName} (validTo ${it.validTo}, za ${it.daysLeft} dní)`
+      `- [${sev}] ${it.employeeName} – ${it.trainingName} (validTo ${it.validTo}, za ${it.daysLeft} dnů)`
     );
   }
 
   return lines.join("\n");
 }
 
+async function resolveDigestRecipient({ companyId, cfg }) {
+  const contactId = safeString(cfg?.digestRecipientContactId).trim();
+  if (contactId) {
+    const contact = await getContactById(companyId, contactId);
+    if (!contact) {
+      const err = new Error("Digest recipient contact not found.");
+      err.status = 400;
+      err.payload = { field: "digestRecipientContactId" };
+      throw err;
+    }
+    const email = safeString(contact.email).trim();
+    if (!email) {
+      const err = new Error("Digest recipient contact has no email.");
+      err.status = 400;
+      err.payload = { field: "digestRecipientContactId" };
+      throw err;
+    }
+    return {
+      to: email,
+      recipient: { mode: "contact", contactId, contactName: safeString(contact.name).trim() },
+    };
+  }
+
+  const legacyEmail = safeString(cfg?.digestEmail).trim();
+  if (legacyEmail) {
+    return { to: legacyEmail, recipient: { mode: "email", email: legacyEmail } };
+  }
+
+  const err = new Error("Digest recipient not configured.");
+  err.status = 400;
+  err.payload = { field: "digestRecipientContactId" };
+  throw err;
+}
+
 export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) {
   const cfg = await getAlertsConfigService({ companyId });
 
-  if (!cfg.digestEmail) {
-    const err = new Error("Digest email not configured.");
-    err.status = 400;
-    err.payload = { field: "digestEmail" };
-    throw err;
-  }
+  const resolved = await resolveDigestRecipient({ companyId, cfg });
 
   const expirations = await listExpirationsService({
     companyId,
@@ -167,7 +211,7 @@ export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) 
   const sent = await sendPlainEmailService({
     companyId,
     actorRole,
-    to: cfg.digestEmail,
+    to: resolved.to,
     subject,
     message: text,
   });
@@ -183,6 +227,8 @@ export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) 
       transport: sent.transport,
       messageId: sent.messageId,
       expirationsCount: expirations.count,
+      recipient: resolved.recipient,
+      to: resolved.to,
     },
     before: null,
     after: { ok: true },
@@ -192,5 +238,7 @@ export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) 
     ok: true,
     ...sent,
     expirationsCount: expirations.count,
+    to: resolved.to,
+    recipient: resolved.recipient,
   };
 }
