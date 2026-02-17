@@ -24,13 +24,8 @@ function requireCompanyId(companyId) {
 function defaultAlerts() {
   return {
     expirationsDays: 30,
-
-    // legacy fallback (kompatibilita)
     digestEmail: "",
-
-    // nový preferovaný recipient přes Contacts
     digestRecipientContactId: "",
-
     lastDigestSentOn: "", // YYYY-MM-DD
   };
 }
@@ -48,9 +43,22 @@ function defaultCompany(companyId) {
     email: "",
     phone: "",
     alerts: defaultAlerts(),
+
+    // SaaS trial (ISO strings)
+    trialStart: "",
+    trialEnd: "",
+
     updatedAt: nowIso(),
     createdAt: nowIso(),
   };
+}
+
+function normalizeIsoDateString(v) {
+  const s = safeString(v);
+  if (!s) return "";
+  const d = new Date(s);
+  if (String(d) === "Invalid Date") return "";
+  return d.toISOString();
 }
 
 function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
@@ -60,20 +68,16 @@ function normalizeAlertsBody(body = {}, prev = defaultAlerts()) {
     ? Math.max(1, Math.min(365, Math.floor(daysNum)))
     : 30;
 
-  // lastDigestSentOn: ukládáme jako string (očekáváme YYYY-MM-DD)
-  const lastDigestSentOn = safeString(body?.lastDigestSentOn ?? prev.lastDigestSentOn);
+  const lastDigestSentOn = safeString(
+    body?.lastDigestSentOn ?? prev.lastDigestSentOn
+  );
 
   return {
     expirationsDays,
-
-    // legacy
     digestEmail: safeString(body?.digestEmail ?? prev.digestEmail),
-
-    // new
     digestRecipientContactId: safeString(
       body?.digestRecipientContactId ?? prev.digestRecipientContactId
     ),
-
     lastDigestSentOn,
   };
 }
@@ -94,7 +98,11 @@ function normalizeCompanyBody(body = {}, prev = {}) {
     email: safeString(body.email ?? prev.email),
     phone: safeString(body.phone ?? prev.phone),
 
-    // alerts může přijít buď jako body.alerts, nebo přímo v body (kvůli kompatibilitě)
+    // trial fields (keep if not provided)
+    trialStart: normalizeIsoDateString(body.trialStart ?? prev.trialStart),
+    trialEnd: normalizeIsoDateString(body.trialEnd ?? prev.trialEnd),
+
+    // alerts může přijít buď jako body.alerts, nebo přímo v body (kompatibilita)
     alerts: normalizeAlertsBody(body.alerts ?? body, prevAlerts),
   };
 }
@@ -116,14 +124,18 @@ export async function getCompanyProfile(companyId) {
     return def;
   }
 
-  // jemná migrace: doplníme missing fields včetně alerts
+  // jemná migrace: doplníme missing fields včetně trial + alerts
   const def = defaultCompany(cid);
   const merged = { ...def, ...data };
 
-  // alerts merge zvlášť (aby se doplnily nové fields)
   const aDef = defaultAlerts();
-  const aData = merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
+  const aData =
+    merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
   merged.alerts = { ...aDef, ...aData };
+
+  // trial normalize
+  merged.trialStart = normalizeIsoDateString(merged.trialStart);
+  merged.trialEnd = normalizeIsoDateString(merged.trialEnd);
 
   if (!merged.createdAt) merged.createdAt = def.createdAt;
   merged.updatedAt = merged.updatedAt || def.updatedAt;

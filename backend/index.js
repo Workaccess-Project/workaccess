@@ -24,6 +24,9 @@ import { AUTH_MODE, IS_JWT_ONLY } from "./config/auth-mode.js";
 // TENANT ENFORCEMENT
 import { requireTenant } from "./middleware/require-tenant.js";
 
+// TRIAL GUARD
+import { trialGuard } from "./middleware/trial-guard.js";
+
 // ERROR HANDLER
 import { errorHandler } from "./middleware/error-handler.js";
 
@@ -57,6 +60,9 @@ app.use("/api/auth", authRouter);
 
 // --- Tenant enforcement for everything else ---
 app.use(requireTenant);
+
+// --- Trial guard (blocks expired trial except allowlisted paths) ---
+app.use(trialGuard);
 
 // --- Routes ---
 app.use("/api/items", itemsRouter);
