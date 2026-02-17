@@ -27,17 +27,32 @@ function getBearerToken(req) {
   return token.trim();
 }
 
+function isPublicAuthLogin(req) {
+  // authMiddleware je globální, takže tady musí projít login i bez companyId
+  const url = (req.originalUrl ?? req.url ?? "").toString();
+  return req.method === "POST" && url.startsWith("/api/auth/login");
+}
+
 /**
  * authMiddleware:
  * - If Authorization Bearer token is present -> JWT path
  * - If token is missing:
+ *    - Allow POST /api/auth/login as public (even in JWT_ONLY)
  *    - DEV: DEMO headers fallback (x-role + x-company-id)
  *    - JWT_ONLY: reject with 401
  *
- * companyId is mandatory (tenant context).
+ * companyId is mandatory for tenant-scoped APIs (except public/login routes).
  */
 export function authMiddleware(req, res, next) {
   const token = getBearerToken(req);
+
+  // 0) Public login must pass without token/companyId
+  if (!token && isPublicAuthLogin(req)) {
+    req.user = null;
+    req.auth = { role: "external", userId: null, companyId: null };
+    req.role = "external";
+    return next();
+  }
 
   // 1) JWT path
   if (token) {

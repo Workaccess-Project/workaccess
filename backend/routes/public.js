@@ -9,9 +9,12 @@ const router = express.Router();
  * Body:
  *  - name: string (required)
  *  - companyId: string (required)  (slugified)
+ *  - adminEmail: string (required)
+ *  - adminPassword: string (required)
+ *  - adminName: string (optional)
  *
  * Response:
- *  { ok: true, companyId, trialStart, trialEnd }
+ *  { ok: true, companyId, trialStart, trialEnd, token, user }
  */
 router.post("/register-company", async (req, res, next) => {
   try {

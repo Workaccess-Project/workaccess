@@ -3,7 +3,10 @@
 import { promises as fs } from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+
 import { getCompanyProfile, updateCompanyProfile } from "../data-company.js";
+import { createUser } from "../data-users.js";
+import { signAccessToken } from "./auth.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,6 +23,10 @@ function slugifyCompanyId(v) {
     .replace(/[^a-z0-9]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
+}
+
+function normalizeEmail(v) {
+  return safeString(v).toLowerCase();
 }
 
 function trialDates() {
@@ -39,7 +46,6 @@ async function tenantExists(companyId) {
     return st.isDirectory();
   } catch (err) {
     if (err && err.code === "ENOENT") return false;
-    // jiná chyba než "neexistuje" je reálný problém
     throw err;
   }
 }
@@ -47,6 +53,10 @@ async function tenantExists(companyId) {
 export async function registerCompanyService(body = {}) {
   const name = safeString(body.name);
   const rawCompanyId = safeString(body.companyId);
+
+  const adminEmail = normalizeEmail(body.adminEmail);
+  const adminPassword = safeString(body.adminPassword);
+  const adminName = safeString(body.adminName);
 
   if (!name) {
     const err = new Error("Missing field: name");
@@ -56,6 +66,18 @@ export async function registerCompanyService(body = {}) {
 
   if (!rawCompanyId) {
     const err = new Error("Missing field: companyId");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!adminEmail) {
+    const err = new Error("Missing field: adminEmail");
+    err.status = 400;
+    throw err;
+  }
+
+  if (!adminPassword) {
+    const err = new Error("Missing field: adminPassword");
     err.status = 400;
     throw err;
   }
@@ -80,23 +102,34 @@ export async function registerCompanyService(body = {}) {
   const tenantPath = path.join(TENANTS_DIR, companyId);
   await fs.mkdir(tenantPath, { recursive: true });
 
-  // 3) initialize company profile via tenant-store (správná cesta, bez ručního fs.writeFile)
-  // getCompanyProfile zajistí default strukturu
+  // 3) initialize default company profile via tenant-store
   await getCompanyProfile(companyId);
 
   const trial = trialDates();
 
-  // updateCompanyProfile provede merge + zápis do company.json přes tenant-store
   await updateCompanyProfile(companyId, {
     name,
     trialStart: trial.trialStart,
     trialEnd: trial.trialEnd,
   });
 
+  // 4) create first admin user (manager)
+  const createdUser = await createUser(companyId, {
+    email: adminEmail,
+    password: adminPassword,
+    name: adminName,
+    role: "manager",
+  });
+
+  // 5) return token (auto-login)
+  const token = signAccessToken(createdUser);
+
   return {
     ok: true,
     companyId,
     trialStart: trial.trialStart,
     trialEnd: trial.trialEnd,
+    token,
+    user: createdUser,
   };
 }
