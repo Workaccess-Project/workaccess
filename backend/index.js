@@ -4,6 +4,7 @@ import express from "express";
 import cors from "cors";
 
 // ROUTES
+import publicRouter from "./routes/public.js";
 import itemsRouter from "./routes/items.js";
 import employeesRouter from "./routes/employees.js";
 import reportsRouter from "./routes/reports.js";
@@ -45,7 +46,10 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// --- Auth middleware after health ---
+// --- Public routes (no auth, no tenant) ---
+app.use("/api/public", publicRouter);
+
+// --- Auth middleware after public + health ---
 app.use(authMiddleware);
 
 // --- Auth routes ---
@@ -75,6 +79,7 @@ app.listen(PORT, () => {
   console.log(`AUTH_MODE=${AUTH_MODE} (jwtOnly=${IS_JWT_ONLY})`);
   console.log("Routes mounted:");
   console.log("  GET  /api/health");
+  console.log("  *    /api/public");
   console.log("  POST /api/auth/login");
   console.log("  GET  /api/auth/me");
   console.log("  *    /api/items");
