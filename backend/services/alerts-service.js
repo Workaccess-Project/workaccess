@@ -4,9 +4,14 @@ import { getCompanyService, updateCompanyService } from "./company-service.js";
 import { auditLog } from "../data-audit.js";
 import { sendPlainEmailService } from "./email-service.js";
 import { getContactById } from "../data-contacts.js";
+import { readTenantEntity } from "../data/tenant-store.js";
 
 function safeString(v) {
   return (v ?? "").toString();
+}
+
+function safeTrim(v) {
+  return safeString(v).trim();
 }
 
 function parseDays(v, fallback = 30) {
@@ -32,8 +37,17 @@ function severityForDaysLeft(daysLeft) {
   return "soon";
 }
 
+function rankSeverity(sev) {
+  return sev === "expired" ? 0 : 1;
+}
+
+async function readCompanyComplianceDocuments(companyId) {
+  const arr = await readTenantEntity(companyId, "companyComplianceDocuments");
+  return Array.isArray(arr) ? arr : [];
+}
+
 export async function listExpirationsService({ companyId, days = 30 } = {}) {
-  const cid = safeString(companyId).trim();
+  const cid = safeTrim(companyId);
   if (!cid) {
     const err = new Error("Missing companyId");
     err.status = 400;
@@ -41,12 +55,14 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
   }
 
   const windowDays = parseDays(days, 30);
-  const employees = await listEmployees({ companyId: cid });
 
   const now = new Date();
   const cutoff = new Date(now.getTime() + windowDays * 24 * 60 * 60 * 1000);
 
   const items = [];
+
+  // 1) Employee trainings expirations (existing)
+  const employees = await listEmployees({ companyId: cid });
 
   for (const emp of employees || []) {
     const trainings = Array.isArray(emp.trainings) ? emp.trainings : [];
@@ -71,9 +87,46 @@ export async function listExpirationsService({ companyId, days = 30 } = {}) {
     }
   }
 
-  const rank = (sev) => (sev === "expired" ? 0 : 1);
+  // 2) Company compliance documents expirations (NEW)
+  const complianceDocs = await readCompanyComplianceDocuments(cid);
+
+  for (const d of complianceDocs || []) {
+    const hasExpiration = !!d?.hasExpiration;
+    const expiresAt = parseDateOnly(d?.expiresAt);
+
+    if (!hasExpiration) continue;
+    if (!expiresAt) continue;
+
+    // only within global window
+    if (expiresAt.getTime() > cutoff.getTime()) continue;
+
+    const daysLeft = daysBetween(now, expiresAt);
+
+    // respect per-document notifyBeforeDays (fallback 30 if missing)
+    const notifyBeforeDays = Number.isFinite(Number(d?.notifyBeforeDays))
+      ? Math.max(0, Math.floor(Number(d.notifyBeforeDays)))
+      : 30;
+
+    // if not expired and not yet within notify window, skip
+    if (daysLeft > 0 && daysLeft > notifyBeforeDays) continue;
+
+    items.push({
+      type: "companyComplianceDocument",
+      severity: severityForDaysLeft(daysLeft),
+      daysLeft,
+      complianceDocumentId: safeString(d?.id),
+      templateId: safeString(d?.templateId),
+      name: safeString(d?.name),
+      description: safeString(d?.description),
+      issuedAt: safeString(d?.issuedAt),
+      expiresAt: safeString(d?.expiresAt),
+      notifyBeforeDays,
+      status: safeString(d?.status) || "active",
+    });
+  }
+
   items.sort((a, b) => {
-    const r = rank(a.severity) - rank(b.severity);
+    const r = rankSeverity(a.severity) - rankSeverity(b.severity);
     if (r !== 0) return r;
     return a.daysLeft - b.daysLeft;
   });
@@ -95,12 +148,12 @@ export async function getAlertsConfigService({ companyId } = {}) {
     expirationsDays: parseDays(alerts.expirationsDays, 30),
 
     // legacy fallback
-    digestEmail: safeString(alerts.digestEmail).trim(),
+    digestEmail: safeTrim(alerts.digestEmail),
 
     // new
-    digestRecipientContactId: safeString(alerts.digestRecipientContactId).trim(),
+    digestRecipientContactId: safeTrim(alerts.digestRecipientContactId),
 
-    lastDigestSentOn: safeString(alerts.lastDigestSentOn).trim(),
+    lastDigestSentOn: safeTrim(alerts.lastDigestSentOn),
   };
 }
 
@@ -111,12 +164,12 @@ export async function updateAlertsConfigService({ companyId, actorRole, body } =
     expirationsDays: parseDays(body?.expirationsDays ?? prev.expirationsDays),
 
     // legacy fallback (necháváme, dokud nepřejdeme všude na contactId)
-    digestEmail: safeString(body?.digestEmail ?? prev.digestEmail).trim(),
+    digestEmail: safeTrim(body?.digestEmail ?? prev.digestEmail),
 
     // new preferred recipient
-    digestRecipientContactId: safeString(
+    digestRecipientContactId: safeTrim(
       body?.digestRecipientContactId ?? prev.digestRecipientContactId
-    ).trim(),
+    ),
 
     // lastDigestSentOn necháváme beze změny při ručním updatu configu
     lastDigestSentOn: prev.lastDigestSentOn,
@@ -143,7 +196,7 @@ export async function updateAlertsConfigService({ companyId, actorRole, body } =
 
 function formatDigestText(result) {
   const lines = [];
-  lines.push(`Workaccess – Expirace školení (${result.windowDays} dnů)`);
+  lines.push(`Workaccess - Expirace (${result.windowDays} dnů)`);
   lines.push("");
 
   if (!result.items.length) {
@@ -153,16 +206,30 @@ function formatDigestText(result) {
 
   for (const it of result.items) {
     const sev = it.severity === "expired" ? "PROŠLÉ" : "BRZY";
-    lines.push(
-      `- [${sev}] ${it.employeeName} – ${it.trainingName} (validTo ${it.validTo}, za ${it.daysLeft} dnů)`
-    );
+
+    if (it.type === "training") {
+      lines.push(
+        `- [${sev}] ${it.employeeName} - ${it.trainingName} (validTo ${it.validTo}, za ${it.daysLeft} dnů)`
+      );
+      continue;
+    }
+
+    if (it.type === "companyComplianceDocument") {
+      lines.push(
+        `- [${sev}] Firma - ${it.name} (expiresAt ${it.expiresAt}, za ${it.daysLeft} dnů)`
+      );
+      continue;
+    }
+
+    // fallback
+    lines.push(`- [${sev}] ${it.type} (za ${it.daysLeft} dnů)`);
   }
 
   return lines.join("\n");
 }
 
 async function resolveDigestRecipient({ companyId, cfg }) {
-  const contactId = safeString(cfg?.digestRecipientContactId).trim();
+  const contactId = safeTrim(cfg?.digestRecipientContactId);
   if (contactId) {
     const contact = await getContactById(companyId, contactId);
     if (!contact) {
@@ -171,7 +238,7 @@ async function resolveDigestRecipient({ companyId, cfg }) {
       err.payload = { field: "digestRecipientContactId" };
       throw err;
     }
-    const email = safeString(contact.email).trim();
+    const email = safeTrim(contact.email);
     if (!email) {
       const err = new Error("Digest recipient contact has no email.");
       err.status = 400;
@@ -180,11 +247,15 @@ async function resolveDigestRecipient({ companyId, cfg }) {
     }
     return {
       to: email,
-      recipient: { mode: "contact", contactId, contactName: safeString(contact.name).trim() },
+      recipient: {
+        mode: "contact",
+        contactId,
+        contactName: safeTrim(contact.name),
+      },
     };
   }
 
-  const legacyEmail = safeString(cfg?.digestEmail).trim();
+  const legacyEmail = safeTrim(cfg?.digestEmail);
   if (legacyEmail) {
     return { to: legacyEmail, recipient: { mode: "email", email: legacyEmail } };
   }
@@ -205,7 +276,7 @@ export async function sendAlertsDigestNowService({ companyId, actorRole } = {}) 
     days: cfg.expirationsDays,
   });
 
-  const subject = `Workaccess – Expirace školení (${expirations.count})`;
+  const subject = `Workaccess - Expirace (${expirations.count})`;
   const text = formatDigestText(expirations);
 
   const sent = await sendPlainEmailService({
