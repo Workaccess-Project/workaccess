@@ -32,18 +32,25 @@
       .replaceAll("'", "&#039;");
   }
 
+  function link(label, href, key, activeKey) {
+    return `<a class="waLink ${activeKey === key ? "isActive" : ""}" href="${href}">${label}</a>`;
+  }
+
   function renderNav(activeKey = "") {
     const role = getRole();
     const el = document.getElementById("wa-nav");
     if (!el) return;
 
+    const canSeeBilling = role !== "external";
+
     el.innerHTML = `
       <div class="waNav">
         <div class="waNav__left">
           <div class="waBrand">WORKACCESS</div>
-          <a class="waLink ${activeKey === "dashboard" ? "isActive" : ""}" href="./dashboard.html">Dashboard</a>
-          <a class="waLink ${activeKey === "employees" ? "isActive" : ""}" href="./employees.html">Zaměstnanci</a>
-          <a class="waLink ${activeKey === "todo" ? "isActive" : ""}" href="./index.html">TODO</a>
+          ${link("Dashboard", "./dashboard.html", "dashboard", activeKey)}
+          ${link("Zaměstnanci", "./employees.html", "employees", activeKey)}
+          ${link("TODO", "./index.html", "todo", activeKey)}
+          ${canSeeBilling ? link("Billing", "./billing.html", "billing", activeKey) : ""}
         </div>
 
         <div class="waNav__right">
@@ -66,7 +73,7 @@
       <div class="waModal" role="dialog" aria-modal="true">
         <div class="waModal__head">
           <strong>Vyber roli (DEMO)</strong>
-          <button class="waIconBtn" id="waClose" title="Zavřít" type="button">✕</button>
+          <button class="waIconBtn" id="waClose" title="Zavřít" type="button">✖</button>
         </div>
         <div class="waModal__body">
           <p>Role se ukládá do localStorage a posílá se do backendu přes hlavičku <code>x-role</code>.</p>
