@@ -18,6 +18,7 @@ import contactsRouter from "./routes/contacts.js";
 import alertsRouter from "./routes/alerts.js";
 import billingRouter from "./routes/billing.js";
 import companyDocumentTemplatesRouter from "./routes/companyDocumentTemplates.js";
+import companyComplianceDocumentsRouter from "./routes/companyComplianceDocuments.js"; // NEW
 
 // AUTH (middleware)
 import { authMiddleware } from "./auth.js";
@@ -79,6 +80,10 @@ app.use("/api/audit", auditRouter);
 app.use("/api/me", meRouter);
 app.use("/api/billing", billingRouter);
 app.use("/api/company-document-templates", companyDocumentTemplatesRouter);
+app.use(
+  "/api/company-compliance-documents",
+  companyComplianceDocumentsRouter
+); // NEW
 
 // --- Error handler must be last ---
 app.use(errorHandler);
@@ -106,6 +111,7 @@ app.listen(PORT, () => {
   console.log("  POST /api/billing/activate");
   console.log("  POST /api/billing/cancel");
   console.log("  *    /api/company-document-templates");
+  console.log("  *    /api/company-compliance-documents"); // NEW
 });
 
 // start scheduler AFTER server is up
