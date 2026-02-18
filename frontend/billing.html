@@ -1,4 +1,3 @@
-Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
 <!doctype html>
 <html lang="cs">
 <head>
@@ -13,29 +12,53 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
       <div id="wa-nav"></div>
 
       <div class="section">
-        <h1 style="font-size:18px; margin:0;">Billing</h1>
-        <div class="small" style="opacity:.85;">Správa trialu a tarifu (demo aktivace)</div>
+        <h1 style="font-size:18px; margin:0;">Tarif a přístup</h1>
+        <div class="small" style="opacity:.85;">
+          Pokud je trial po expiraci, některé moduly jsou uzamčené, dokud není aktivní tarif.
+        </div>
       </div>
 
+      <!-- Paywall / status box -->
       <div class="section" id="boxPaywall" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
-        <div style="font-weight:700;" id="paywallTitle">—</div>
-        <div class="small" id="paywallText" style="opacity:0.9; margin-top:6px;"></div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; justify-content:space-between;">
+          <div style="min-width:240px;">
+            <div style="font-weight:800;" id="paywallTitle">—</div>
+            <div class="small" id="paywallText" style="opacity:0.9; margin-top:6px;"></div>
+          </div>
+          <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+            <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif (demo)</button>
+            <button id="btnCancel" style="display:none;">Zrušit tarif (demo)</button>
+            <button id="btnRefresh">Obnovit</button>
+          </div>
+        </div>
+
+        <!-- external info -->
+        <div id="externalNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
+          Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera/HR ve firmě.
+        </div>
       </div>
 
-      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-        <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif (demo)</button>
-        <button id="btnCancel" style="display:none;">Zrušit tarif (demo)</button>
-        <button id="btnRefresh">Obnovit</button>
-        <span class="small" id="statusLine" style="opacity:.85;"></span>
+      <!-- Benefits -->
+      <div class="section" id="benefitsBox" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Co získáte aktivací tarifu</div>
+        <ul class="small" style="margin:0; padding-left:18px; line-height:1.55; opacity:.92;">
+          <li>Plný přístup ke všem modulům i po skončení trialu.</li>
+          <li>Hlídání expirací školení a oprávnění bez ruční práce.</li>
+          <li>Bezpečné uchování dokumentů zaměstnanců a firmy.</li>
+          <li>Audit odeslaných dat (kdo, kdy, co).</li>
+          <li>Notifikace a automatizace (digesty, upozornění).</li>
+        </ul>
       </div>
 
+      <!-- Raw details -->
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
-        <div class="small" style="opacity:.85; margin-bottom:8px;">Stav</div>
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Technický stav (pro kontrolu)</div>
         <div id="details" class="small"></div>
+        <div class="small" id="statusLine" style="opacity:.75; margin-top:8px;"></div>
       </div>
 
-      <div class="section small" style="opacity:.75;">
-        Tip: Pokud trial vypršel, Workaccess blokuje moduly, dokud nebude aktivní tarif.
+      <div class="section small" style="opacity:.7;">
+        Tip: Pokud tě systém přesměroval sem, znamená to, že firma má uzamčený přístup kvůli expirovanému trialu.
       </div>
     </div>
   </div>
@@ -55,6 +78,9 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
     const elBtnActivate = document.getElementById("btnActivate");
     const elBtnCancel = document.getElementById("btnCancel");
     const elBtnRefresh = document.getElementById("btnRefresh");
+
+    const elExternalNotice = document.getElementById("externalNotice");
+
     const elStatusLine = document.getElementById("statusLine");
     const elDetails = document.getElementById("details");
 
@@ -111,7 +137,7 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
       elPaywallText.textContent = "";
     }
 
-    function setDetails(html) {
+    function setDetailsHtml(html) {
       elDetails.innerHTML = html || "";
     }
 
@@ -132,15 +158,43 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
       } catch {}
     }
 
+    function isExternalRole() {
+      try {
+        return (WA_NAV.getRole() || "") === "external";
+      } catch {
+        return false;
+      }
+    }
+
+    function applyRoleUi() {
+      const external = isExternalRole();
+      elExternalNotice.style.display = external ? "" : "none";
+      if (external) {
+        // externista nemá spravovat billing
+        elBtnActivate.style.display = "none";
+        elBtnCancel.style.display = "none";
+      }
+      return external;
+    }
+
     async function refresh() {
       elStatusLine.textContent = "Načítám…";
-      elBtnActivate.style.display = "none";
-      elBtnCancel.style.display = "none";
+      elBtnActivate.disabled = false;
+      elBtnCancel.disabled = false;
 
-      // pokud sem přišel redirect z gate, zobrazíme krátké vysvětlení hned
+      // role-based UI
+      const external = applyRoleUi();
+
+      // pokud sem přišel redirect z gate, ukážeme vysvětlení hned (ještě před fetch)
       const hint = readPaywallHint();
       if (hint.flagged) {
-        showPaywall("Přístup omezen", "Trial vypršel – pro pokračování aktivujte tarif.", "error");
+        const t = external
+          ? "Přístup omezen (externista)"
+          : "Přístup omezen";
+        const msg = external
+          ? "Trial vypršel – přístup firmy je uzamčený. Kontaktujte prosím manažera/HR, ať aktivuje tarif."
+          : "Trial vypršel – pro pokračování aktivujte tarif.";
+        showPaywall(t, msg, "error");
       }
 
       try {
@@ -153,16 +207,30 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
         const subEnd = s?.subscription?.end || "";
         const plan = s?.subscription?.plan || "";
 
-        // stavová hláška
+        // stavová hláška + tlačítka
         if (subActive) {
           showPaywall("Tarif aktivní", `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`, "ok");
-          elBtnCancel.style.display = "";
+          elBtnCancel.style.display = external ? "none" : "";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
         } else if (trialExpired) {
-          showPaywall("Trial vypršel", `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`, "error");
-          elBtnActivate.style.display = "";
-          elBtnCancel.style.display = "none";
+          if (external) {
+            showPaywall(
+              "Trial vypršel (externista)",
+              `Trial vypršel ${fmtDate(trialEnd)}. Nemáte oprávnění spravovat tarif – kontaktujte manažera/HR.`,
+              "error"
+            );
+            elBtnActivate.style.display = "none";
+            elBtnCancel.style.display = "none";
+          } else {
+            showPaywall(
+              "Trial vypršel",
+              `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`,
+              "error"
+            );
+            elBtnActivate.style.display = "";
+            elBtnCancel.style.display = "none";
+          }
         } else {
           const left = daysLeft(trialEnd);
           if (left != null) {
@@ -176,8 +244,9 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
           clearPaywallHint();
         }
 
-        setDetails(`
+        setDetailsHtml(`
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <span class="pill">role: ${esc(WA_NAV.getRole())}</span>
             <span class="pill">trial: ${esc(trialExpired ? "expired" : "active")}</span>
             <span class="pill">trialEnd: ${esc(trialEnd ? fmtDate(trialEnd) : "—")}</span>
             <span class="pill">subscription: ${esc(subActive ? "active" : "inactive")}</span>
@@ -188,9 +257,8 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
 
         elStatusLine.textContent = "OK";
       } catch (e) {
-        // soft fail – ukážeme error, ale nebudeme redirectovat (billing stránka je allowlist)
         showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "warn");
-        setDetails(`<span class="pill">error</span> ${esc(e?.message || e)}`);
+        setDetailsHtml(`<span class="pill">error</span> ${esc(e?.message || e)}`);
         elStatusLine.textContent = "Chyba";
       }
     }
@@ -231,4 +299,3 @@ Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
   </script>
 </body>
 </html>
-'@
