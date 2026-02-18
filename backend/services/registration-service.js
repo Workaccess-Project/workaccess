@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 import { getCompanyProfile, updateCompanyProfile } from "../data-company.js";
 import { createUser } from "../data-users.js";
 import { signAccessToken } from "./auth.service.js";
+import { seedDefaultCompanyDocumentTemplates } from "./company-document-templates-seed.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -112,6 +113,9 @@ export async function registerCompanyService(body = {}) {
     trialStart: trial.trialStart,
     trialEnd: trial.trialEnd,
   });
+
+  // 3b) seed default templates (new companies should not be empty)
+  await seedDefaultCompanyDocumentTemplates(companyId);
 
   // 4) create first admin user (manager)
   const createdUser = await createUser(companyId, {
