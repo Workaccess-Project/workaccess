@@ -8,8 +8,11 @@
 //
 // BOX #20:
 // - Globální billing gate ve frontendu:
-//   - Pokud backend vrátí 402 TrialExpired a subscription není aktivní → redirect na dashboard.html
+//   - Pokud backend vrátí 402 TrialExpired a subscription není aktivní → redirect na billing hub
 //   - Tichá kontrola /billing/status při loadu (pokud jsme na chráněné stránce)
+//
+// BOX #21:
+// - Billing hub je samostatná stránka billing.html (paywall + aktivace)
 
 (() => {
   function apiBase() {
@@ -78,10 +81,7 @@
     const companyId = getCompanyId();
 
     const base = {};
-
-    if (companyId) {
-      base["x-company-id"] = companyId;
-    }
+    if (companyId) base["x-company-id"] = companyId;
 
     // JWT má prioritu
     if (token) {
@@ -123,7 +123,7 @@
     return qs ? `?${qs}` : "";
   }
 
-  // ---------- BILLING GATE (BOX #20) ----------
+  // ---------- BILLING GATE (BOX #20/#21) ----------
 
   function pageName() {
     const p = (location.pathname || "").split("/").pop() || "";
@@ -134,7 +134,9 @@
     const p = pageName();
     // login musí být přístupný vždy
     if (p === "login.html") return true;
-    // dashboard je “billing hub” (banner + aktivace tarifu)
+    // billing hub (paywall)
+    if (p === "billing.html") return true;
+    // dashboard necháme přístupný (užitečný i bez modulů)
     if (p === "dashboard.html") return true;
     return false;
   }
@@ -142,21 +144,22 @@
   function rememberPaywall(reason = "TrialExpired") {
     try {
       sessionStorage.setItem("wa_paywall", "1");
-      sessionStorage.setItem("wa_paywall_reason", safeString(reason) || "TrialExpired");
+      sessionStorage.setItem(
+        "wa_paywall_reason",
+        safeString(reason) || "TrialExpired"
+      );
       sessionStorage.setItem("wa_paywall_ts", String(Date.now()));
     } catch {}
   }
 
   function goToBillingHub() {
-    // “billing hub” je dashboard (protože samostatná billing.html zatím neexistuje)
     const here = pageName();
-    if (here === "dashboard.html") return;
-    // aby nevznikal loop – pokud z nějakého důvodu dashboard neexistuje, nebudeme donekonečna přepisovat URL
+    if (here === "billing.html") return;
+
     try {
-      location.href = "./dashboard.html";
+      location.href = "./billing.html";
     } catch {
-      // fallback
-      location.replace("./dashboard.html");
+      location.replace("./billing.html");
     }
   }
 
@@ -190,7 +193,7 @@
     // allowlist stránky neblokujeme
     if (isAllowlistedPage()) return { ok: true, skipped: true };
 
-    // pokud ještě nemáme companyId, billing nedává smysl (např. před výběrem firmy / před loginem)
+    // pokud ještě nemáme companyId, billing nedává smysl (např. před loginem)
     const cid = safeString(getCompanyId());
     if (!cid) return { ok: true, skipped: true };
 
@@ -212,7 +215,7 @@
         headers: buildHeaders(),
       });
 
-      // Pokud nám billing status vrátí TrialExpired (402), je to zamčené
+      // Pokud billing status vrátí TrialExpired (402), je to zamčené
       if (res.status === 402) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -220,7 +223,7 @@
         return { ok: false, locked: true };
       }
 
-      // jiné chyby – neblokujeme (např. 401 když nejsme přihlášeni, nebo backend down)
+      // jiné chyby – neblokujeme (např. 401 nebo backend down)
       if (!res.ok) {
         setGateCache({ ts: Date.now(), locked: false, reason: null });
         return { ok: true, softFail: true, status: res.status };
@@ -247,13 +250,12 @@
 
       return { ok: true, locked: false };
     } catch {
-      // backend nedostupný → neblokujeme, ať se aspoň ukáže stránka a uživatel vidí chybu při requestu
+      // backend nedostupný → neblokujeme, ať se aspoň ukáže stránka
       return { ok: true, softFail: true };
     }
   }
 
-  // Gate spustíme hned při načtení api.js (asynchronně, bez blokování)
-  // Pokud je zamčeno, dojde k redirectu.
+  // Gate spustíme hned při načtení api.js (asynchronně)
   ensureBillingGate();
 
   // ---------- CORE FETCH ----------
@@ -271,9 +273,8 @@
       err.code = body?.error || null;
       err.body = body || null;
 
-      // Globální reakce: TrialExpired → redirect na dashboard
+      // Globální reakce: TrialExpired → redirect na billing
       if (isTrialExpiredError(err)) {
-        // nastavíme cache jako locked (ať se to nechová chaoticky)
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
         if (!isAllowlistedPage()) goToBillingHub();
@@ -287,18 +288,15 @@
 
   // --- AUTH ---
   const login = async (email, password) => {
-    // Pozn.: login je tenant-scoped → musí být nastaven x-company-id (z WA_NAV / localStorage)
     const r = await apiFetch("/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password }),
     });
 
-    // pokud backend vrátí user.companyId, uložíme pro další requesty
     const cid = safeString(r?.user?.companyId);
     if (cid) localStorage.setItem("wa_company_id", cid);
 
-    // token si typicky ukládá login stránka / wa_nav, ale pro jistotu:
     const tok = safeString(r?.token);
     if (tok) localStorage.setItem("wa_auth_token", tok);
 
@@ -312,8 +310,6 @@
 
   const logout = () => {
     localStorage.removeItem("wa_auth_token");
-    // companyId necháváme (může urychlit další login), ale pokud chceš:
-    // localStorage.removeItem("wa_company_id");
     setGateCache({ ts: Date.now(), locked: false, reason: null });
   };
 
@@ -368,7 +364,6 @@
 
   async function fetchAuditCsv(params = {}) {
     const url = apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
-
     const res = await fetch(url, { headers: buildHeaders() });
 
     if (!res.ok) {
@@ -384,7 +379,6 @@
       const err = new Error(msg);
       err.status = res.status;
 
-      // Globální reakce: TrialExpired → redirect na dashboard
       if (isTrialExpiredError(err)) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -408,7 +402,7 @@
     billingActivate,
     billingCancel,
 
-    // gate (pro případné ruční použití na stránkách)
+    // gate
     ensureBillingGate,
 
     // data

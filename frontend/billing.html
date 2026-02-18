@@ -1,0 +1,234 @@
+Set-Content -Path frontend\billing.html -Encoding UTF8 -Value @'
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Billing</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="wa-nav"></div>
+
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Billing</h1>
+        <div class="small" style="opacity:.85;">Správa trialu a tarifu (demo aktivace)</div>
+      </div>
+
+      <div class="section" id="boxPaywall" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="font-weight:700;" id="paywallTitle">—</div>
+        <div class="small" id="paywallText" style="opacity:0.9; margin-top:6px;"></div>
+      </div>
+
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif (demo)</button>
+        <button id="btnCancel" style="display:none;">Zrušit tarif (demo)</button>
+        <button id="btnRefresh">Obnovit</button>
+        <span class="small" id="statusLine" style="opacity:.85;"></span>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Stav</div>
+        <div id="details" class="small"></div>
+      </div>
+
+      <div class="section small" style="opacity:.75;">
+        Tip: Pokud trial vypršel, Workaccess blokuje moduly, dokud nebude aktivní tarif.
+      </div>
+    </div>
+  </div>
+
+  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js"></script>
+
+  <script>
+    WA_NAV.renderNav("billing");
+
+    const elBoxPaywall = document.getElementById("boxPaywall");
+    const elPaywallTitle = document.getElementById("paywallTitle");
+    const elPaywallText = document.getElementById("paywallText");
+
+    const elBtnActivate = document.getElementById("btnActivate");
+    const elBtnCancel = document.getElementById("btnCancel");
+    const elBtnRefresh = document.getElementById("btnRefresh");
+    const elStatusLine = document.getElementById("statusLine");
+    const elDetails = document.getElementById("details");
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function fmtDate(iso) {
+      const s = String(iso || "").trim();
+      if (!s) return "";
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return s;
+      return d.toISOString().slice(0, 10);
+    }
+
+    function daysLeft(untilIso) {
+      const s = String(untilIso || "").trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return null;
+      const diffMs = d.getTime() - Date.now();
+      return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+    }
+
+    function showPaywall(title, text, kind) {
+      elBoxPaywall.style.display = "";
+      elPaywallTitle.textContent = title || "—";
+      elPaywallText.textContent = text || "";
+
+      const border =
+        kind === "error" ? "#b42318" :
+        kind === "warn" ? "#b54708" :
+        kind === "ok" ? "#067647" :
+        "var(--border)";
+
+      const bg =
+        kind === "error" ? "rgba(180,35,24,0.06)" :
+        kind === "warn" ? "rgba(181,71,8,0.06)" :
+        kind === "ok" ? "rgba(6,118,71,0.06)" :
+        "rgba(0,0,0,0.02)";
+
+      elBoxPaywall.style.borderColor = border;
+      elBoxPaywall.style.background = bg;
+    }
+
+    function hidePaywall() {
+      elBoxPaywall.style.display = "none";
+      elPaywallTitle.textContent = "—";
+      elPaywallText.textContent = "";
+    }
+
+    function setDetails(html) {
+      elDetails.innerHTML = html || "";
+    }
+
+    function readPaywallHint() {
+      try {
+        const flag = sessionStorage.getItem("wa_paywall");
+        const reason = sessionStorage.getItem("wa_paywall_reason") || "";
+        if (flag === "1") return { flagged: true, reason };
+      } catch {}
+      return { flagged: false, reason: "" };
+    }
+
+    function clearPaywallHint() {
+      try {
+        sessionStorage.removeItem("wa_paywall");
+        sessionStorage.removeItem("wa_paywall_reason");
+        sessionStorage.removeItem("wa_paywall_ts");
+      } catch {}
+    }
+
+    async function refresh() {
+      elStatusLine.textContent = "Načítám…";
+      elBtnActivate.style.display = "none";
+      elBtnCancel.style.display = "none";
+
+      // pokud sem přišel redirect z gate, zobrazíme krátké vysvětlení hned
+      const hint = readPaywallHint();
+      if (hint.flagged) {
+        showPaywall("Přístup omezen", "Trial vypršel – pro pokračování aktivujte tarif.", "error");
+      }
+
+      try {
+        const s = await WA_API.getBillingStatus();
+
+        const trialEnd = s?.trial?.end || "";
+        const trialExpired = !!s?.trial?.expired;
+
+        const subActive = !!s?.subscription?.active;
+        const subEnd = s?.subscription?.end || "";
+        const plan = s?.subscription?.plan || "";
+
+        // stavová hláška
+        if (subActive) {
+          showPaywall("Tarif aktivní", `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`, "ok");
+          elBtnCancel.style.display = "";
+          elBtnActivate.style.display = "none";
+          clearPaywallHint();
+        } else if (trialExpired) {
+          showPaywall("Trial vypršel", `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`, "error");
+          elBtnActivate.style.display = "";
+          elBtnCancel.style.display = "none";
+        } else {
+          const left = daysLeft(trialEnd);
+          if (left != null) {
+            const kind = left <= 3 ? "warn" : "info";
+            showPaywall("Trial běží", `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dnů).`, kind);
+          } else {
+            hidePaywall();
+          }
+          elBtnActivate.style.display = "none";
+          elBtnCancel.style.display = "none";
+          clearPaywallHint();
+        }
+
+        setDetails(`
+          <div style="display:flex; gap:10px; flex-wrap:wrap;">
+            <span class="pill">trial: ${esc(trialExpired ? "expired" : "active")}</span>
+            <span class="pill">trialEnd: ${esc(trialEnd ? fmtDate(trialEnd) : "—")}</span>
+            <span class="pill">subscription: ${esc(subActive ? "active" : "inactive")}</span>
+            <span class="pill">plan: ${esc(plan || "—")}</span>
+            <span class="pill">subEnd: ${esc(subEnd ? fmtDate(subEnd) : "—")}</span>
+          </div>
+        `);
+
+        elStatusLine.textContent = "OK";
+      } catch (e) {
+        // soft fail – ukážeme error, ale nebudeme redirectovat (billing stránka je allowlist)
+        showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "warn");
+        setDetails(`<span class="pill">error</span> ${esc(e?.message || e)}`);
+        elStatusLine.textContent = "Chyba";
+      }
+    }
+
+    elBtnRefresh.addEventListener("click", refresh);
+
+    elBtnActivate.addEventListener("click", async () => {
+      elBtnActivate.disabled = true;
+      elStatusLine.textContent = "Aktivuji…";
+      try {
+        await WA_API.billingActivate("basic", 30);
+        await refresh();
+      } catch (e) {
+        alert(`Aktivace se nepovedla: ${e?.message || e}`);
+      } finally {
+        elBtnActivate.disabled = false;
+      }
+    });
+
+    elBtnCancel.addEventListener("click", async () => {
+      const ok = confirm("Opravdu zrušit tarif (demo)?");
+      if (!ok) return;
+
+      elBtnCancel.disabled = true;
+      elStatusLine.textContent = "Ruším…";
+      try {
+        await WA_API.billingCancel();
+        await refresh();
+      } catch (e) {
+        alert(`Zrušení se nepovedlo: ${e?.message || e}`);
+      } finally {
+        elBtnCancel.disabled = false;
+      }
+    });
+
+    // init
+    refresh();
+  </script>
+</body>
+</html>
+'@
