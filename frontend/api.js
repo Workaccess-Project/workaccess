@@ -1,18 +1,18 @@
 // frontend/api.js
-// Jedno místo pro volání backendu.
-// - Pokud existuje JWT token → posílá Authorization: Bearer ...
+// Jedno mĂsto pro volĂˇnĂ backendu.
+// - Pokud existuje JWT token â†’ posĂlĂˇ Authorization: Bearer ...
 // - Jinak fallback na DEMO x-role
 //
-// DŮLEŽITÉ:
-// - Backend je multitenant → posíláme x-company-id (z WA_NAV / localStorage / JWT)
+// DĹ®LEĹ˝ITĂ‰:
+// - Backend je multitenant â†’ posĂlĂˇme x-company-id (z WA_NAV / localStorage / JWT)
 //
 // BOX #20:
-// - Globální billing gate ve frontendu:
-//   - Pokud backend vrátí 402 TrialExpired a subscription není aktivní → redirect na billing hub
-//   - Tichá kontrola /billing/status při loadu (pokud jsme na chráněné stránce)
+// - GlobĂˇlnĂ billing gate ve frontendu:
+//   - Pokud backend vrĂˇtĂ 402 TrialExpired a subscription nenĂ aktivnĂ â†’ redirect n  na billing hub
+//   - TichĂˇ kontrola /billing/status pĹ™i loadu (pokud jsme na chrĂˇnÄ›nĂ© strĂˇnce)
 //
 // BOX #21:
-// - Billing hub je samostatná stránka billing.html (paywall + aktivace)
+// - Billing hub je samostatnĂˇ strĂˇnka billing.html (paywall + aktivace)
 
 (() => {
   function apiBase() {
@@ -83,7 +83,7 @@
     const base = {};
     if (companyId) base["x-company-id"] = companyId;
 
-    // JWT má prioritu
+    // JWT mĂˇ prioritu
     if (token) {
       return {
         ...base,
@@ -92,7 +92,7 @@
       };
     }
 
-    // fallback DEMO režim
+    // fallback DEMO reĹľim
     return {
       ...base,
       "x-role": currentRole(),
@@ -132,11 +132,11 @@
 
   function isAllowlistedPage() {
     const p = pageName();
-    // login musí být přístupný vždy
+    // login musĂ bĂ˝t pĹ™ĂstupnĂ˝ vĹľdy
     if (p === "login.html") return true;
     // billing hub (paywall)
     if (p === "billing.html") return true;
-    // dashboard necháme přístupný (užitečný i bez modulů)
+    // dashboard nechĂˇme pĹ™ĂstupnĂ˝ (uĹľiteÄŤnĂ˝ i bez modulĹŻ)
     if (p === "dashboard.html") return true;
     return false;
   }
@@ -172,7 +172,7 @@
     );
   }
 
-  // Cache billing status v sessionStorage (aby se to nevolalo na každé stránce 10×)
+  // Cache billing status v sessionStorage (aby se to nevolalo na kaĹľdĂ© strĂˇnce 10Ă—)
   function getGateCache() {
     try {
       const raw = sessionStorage.getItem("wa_gate_cache");
@@ -190,10 +190,10 @@
   }
 
   async function ensureBillingGate() {
-    // allowlist stránky neblokujeme
+    // allowlist strĂˇnky neblokujeme
     if (isAllowlistedPage()) return { ok: true, skipped: true };
 
-    // pokud ještě nemáme companyId, billing nedává smysl (např. před loginem)
+    // pokud jeĹˇtÄ› nemĂˇme companyId, billing nedĂˇvĂˇ smysl (napĹ™. pĹ™ed loginem)
     const cid = safeString(getCompanyId());
     if (!cid) return { ok: true, skipped: true };
 
@@ -208,14 +208,14 @@
       return { ok: true, cached: true };
     }
 
-    // zavoláme billing status (přímo fetch, aby to nepadalo do apiFetch error flow)
+    // zavolĂˇme billing status (pĹ™Ămo fetch, aby to nepadalo do apiFetch error flow)
     try {
       const res = await fetch(apiBase() + "/billing/status", {
         method: "GET",
         headers: buildHeaders(),
       });
 
-      // Pokud billing status vrátí TrialExpired (402), je to zamčené
+      // Pokud billing status vrĂˇtĂ TrialExpired (402), je to zamÄŤenĂ©
       if (res.status === 402) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -223,7 +223,7 @@
         return { ok: false, locked: true };
       }
 
-      // jiné chyby – neblokujeme (např. 401 nebo backend down)
+      // jinĂ© chyby â€“ neblokujeme (napĹ™. 401 nebo backend down)
       if (!res.ok) {
         setGateCache({ ts: Date.now(), locked: false, reason: null });
         return { ok: true, softFail: true, status: res.status };
@@ -250,12 +250,12 @@
 
       return { ok: true, locked: false };
     } catch {
-      // backend nedostupný → neblokujeme, ať se aspoň ukáže stránka
+      // backend nedostupnĂ˝ â†’ neblokujeme, aĹĄ se aspoĹ ukĂˇĹľe strĂˇnka
       return { ok: true, softFail: true };
     }
   }
 
-  // Gate spustíme hned při načtení api.js (asynchronně)
+  // Gate spustĂme hned pĹ™i naÄŤtenĂ api.js (asynchronnÄ›)
   ensureBillingGate();
 
   // ---------- CORE FETCH ----------
@@ -273,7 +273,7 @@
       err.code = body?.error || null;
       err.body = body || null;
 
-      // Globální reakce: TrialExpired → redirect na billing
+      // GlobĂˇlnĂ reakce: TrialExpired â†’ redirect na billing
       if (isTrialExpiredError(err)) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -300,7 +300,7 @@
     const tok = safeString(r?.token);
     if (tok) localStorage.setItem("wa_auth_token", tok);
 
-    // po loginu pro jistotu smažeme gate cache (mohl se změnit tenant)
+    // po loginu pro jistotu smaĹľeme gate cache (mohl se zmÄ›nit tenant)
     setGateCache({ ts: Date.now(), locked: false, reason: null });
 
     return r;
@@ -330,6 +330,9 @@
 
   // --- EXISTING ENDPOINTS ---
   const getMe = () => apiFetch("/me");
+
+  // BOX #29: compliance overview (dashboard card)
+  const getComplianceOverview = () => apiFetch("/company-compliance/overview");
 
   const getEmployees = () => apiFetch("/employees");
   const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
@@ -407,6 +410,7 @@
 
     // data
     getMe,
+    getComplianceOverview,
     getEmployees,
     getEmployee,
     getItems,

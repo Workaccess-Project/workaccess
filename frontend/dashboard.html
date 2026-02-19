@@ -81,7 +81,8 @@
 
       <div class="section small" id="metaLine"></div>
 
-      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
+      <!-- BOX #29: grid rozšířen na 4 karty -->
+      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px;">
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Propadlé</strong>
@@ -104,6 +105,15 @@
             <span class="pill" id="cntAudit">0</span>
           </div>
           <div id="boxAudit" class="small" style="margin-top:10px;"></div>
+        </div>
+
+        <!-- BOX #29: Compliance přehled -->
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Compliance přehled</strong>
+            <span class="pill" id="cntCompliance">0</span>
+          </div>
+          <div id="boxCompliance" class="small" style="margin-top:10px;">Načítám…</div>
         </div>
       </div>
     </div>
@@ -131,6 +141,10 @@
     const elBoxExpired = document.getElementById("boxExpired");
     const elBoxSoon = document.getElementById("boxSoon");
     const elBoxAudit = document.getElementById("boxAudit");
+
+    // BOX #29: compliance refs
+    const elCntCompliance = document.getElementById("cntCompliance");
+    const elBoxCompliance = document.getElementById("boxCompliance");
 
     // billing banner
     const elBillingBanner = document.getElementById("billingBanner");
@@ -323,11 +337,44 @@
       }
     }
 
+    // BOX #29: render compliance
+    function renderComplianceOverview(c) {
+      const totalDocs = Number(c?.totalDocuments || 0);
+      const totalTemplates = Number(c?.totalTemplates || 0);
+      const active = Number(c?.active || 0);
+      const expired = Number(c?.expired || 0);
+      const soon = Number(c?.expiringSoon || 0);
+      const missing = Number(c?.missing || 0);
+
+      elCntCompliance.textContent = String(totalDocs);
+
+      const red = expired > 0 ? "color:#b42318;" : "";
+      const orange = soon > 0 ? "color:#b54708;" : "";
+
+      elBoxCompliance.innerHTML = `
+        <div>Šablony: <strong>${totalTemplates}</strong></div>
+        <div>Dokumenty: <strong>${totalDocs}</strong></div>
+        <div>Aktivní: <strong>${active}</strong></div>
+        <div style="${red}">Propadlé: <strong>${expired}</strong></div>
+        <div style="${orange}">Končí brzy: <strong>${soon}</strong></div>
+        <div>Chybí vytvořit: <strong>${missing}</strong></div>
+      `;
+    }
+
     async function refreshMeAndUi() {
       await refreshBillingBanner();
 
       const role = WA_NAV.getRole();
       elAuditRolePill.textContent = roleLabel(role);
+
+      // BOX #29: compliance overview load
+      try {
+        const c = await WA_API.getComplianceOverview();
+        renderComplianceOverview(c);
+      } catch (e) {
+        elCntCompliance.textContent = "0";
+        elBoxCompliance.innerHTML = `<span class="pill">Chyba</span> ${esc(e?.message || e)}`;
+      }
 
       try {
         const me = await WA_API.getMe();
