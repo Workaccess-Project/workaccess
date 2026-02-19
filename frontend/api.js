@@ -1,18 +1,20 @@
 // frontend/api.js
-// Jedno mĂsto pro volĂˇnĂ backendu.
-// - Pokud existuje JWT token â†’ posĂlĂˇ Authorization: Bearer ...
+// Jedno místo pro volání backendu.
+// - Pokud existuje JWT token → posílá Authorization: Bearer ...
 // - Jinak fallback na DEMO x-role
 //
-// DĹ®LEĹ˝ITĂ‰:
-// - Backend je multitenant â†’ posĂlĂˇme x-company-id (z WA_NAV / localStorage / JWT)
+// DŮLEŽITÉ:
+// - Backend je multitenant → posíláme x-company-id (z WA_NAV / localStorage / JWT)
 //
-// BOX #20:
-// - GlobĂˇlnĂ billing gate ve frontendu:
-//   - Pokud backend vrĂˇtĂ 402 TrialExpired a subscription nenĂ aktivnĂ â†’ redirect n  na billing hub
-//   - TichĂˇ kontrola /billing/status pĹ™i loadu (pokud jsme na chrĂˇnÄ›nĂ© strĂˇnce)
+// BOX #20/#21:
+// - Billing gate: pokud backend vrátí 402 TrialExpired a subscription není aktivní → redirect na billing hub
 //
-// BOX #21:
-// - Billing hub je samostatnĂˇ strĂˇnka billing.html (paywall + aktivace)
+// BOX #30:
+// - Přidány endpointy pro Compliance UI:
+//   - GET  /company-compliance/overview
+//   - GET  /company-compliance-documents
+//   - GET  /company-document-templates
+//   - POST /company-compliance-documents/from-template
 
 (() => {
   function apiBase() {
@@ -83,7 +85,7 @@
     const base = {};
     if (companyId) base["x-company-id"] = companyId;
 
-    // JWT mĂˇ prioritu
+    // JWT má prioritu
     if (token) {
       return {
         ...base,
@@ -92,7 +94,7 @@
       };
     }
 
-    // fallback DEMO reĹľim
+    // fallback DEMO režim
     return {
       ...base,
       "x-role": currentRole(),
@@ -132,22 +134,17 @@
 
   function isAllowlistedPage() {
     const p = pageName();
-    // login musĂ bĂ˝t pĹ™ĂstupnĂ˝ vĹľdy
     if (p === "login.html") return true;
-    // billing hub (paywall)
     if (p === "billing.html") return true;
-    // dashboard nechĂˇme pĹ™ĂstupnĂ˝ (uĹľiteÄŤnĂ˝ i bez modulĹŻ)
     if (p === "dashboard.html") return true;
+    if (p === "compliance.html") return true; // BOX #30: compliance page je taky ok
     return false;
   }
 
   function rememberPaywall(reason = "TrialExpired") {
     try {
       sessionStorage.setItem("wa_paywall", "1");
-      sessionStorage.setItem(
-        "wa_paywall_reason",
-        safeString(reason) || "TrialExpired"
-      );
+      sessionStorage.setItem("wa_paywall_reason", safeString(reason) || "TrialExpired");
       sessionStorage.setItem("wa_paywall_ts", String(Date.now()));
     } catch {}
   }
@@ -172,7 +169,6 @@
     );
   }
 
-  // Cache billing status v sessionStorage (aby se to nevolalo na kaĹľdĂ© strĂˇnce 10Ă—)
   function getGateCache() {
     try {
       const raw = sessionStorage.getItem("wa_gate_cache");
@@ -190,10 +186,8 @@
   }
 
   async function ensureBillingGate() {
-    // allowlist strĂˇnky neblokujeme
     if (isAllowlistedPage()) return { ok: true, skipped: true };
 
-    // pokud jeĹˇtÄ› nemĂˇme companyId, billing nedĂˇvĂˇ smysl (napĹ™. pĹ™ed loginem)
     const cid = safeString(getCompanyId());
     if (!cid) return { ok: true, skipped: true };
 
@@ -208,14 +202,12 @@
       return { ok: true, cached: true };
     }
 
-    // zavolĂˇme billing status (pĹ™Ămo fetch, aby to nepadalo do apiFetch error flow)
     try {
       const res = await fetch(apiBase() + "/billing/status", {
         method: "GET",
         headers: buildHeaders(),
       });
 
-      // Pokud billing status vrĂˇtĂ TrialExpired (402), je to zamÄŤenĂ©
       if (res.status === 402) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -223,7 +215,6 @@
         return { ok: false, locked: true };
       }
 
-      // jinĂ© chyby â€“ neblokujeme (napĹ™. 401 nebo backend down)
       if (!res.ok) {
         setGateCache({ ts: Date.now(), locked: false, reason: null });
         return { ok: true, softFail: true, status: res.status };
@@ -250,12 +241,11 @@
 
       return { ok: true, locked: false };
     } catch {
-      // backend nedostupnĂ˝ â†’ neblokujeme, aĹĄ se aspoĹ ukĂˇĹľe strĂˇnka
       return { ok: true, softFail: true };
     }
   }
 
-  // Gate spustĂme hned pĹ™i naÄŤtenĂ api.js (asynchronnÄ›)
+  // Gate spustíme hned (asynchronně)
   ensureBillingGate();
 
   // ---------- CORE FETCH ----------
@@ -273,7 +263,6 @@
       err.code = body?.error || null;
       err.body = body || null;
 
-      // GlobĂˇlnĂ reakce: TrialExpired â†’ redirect na billing
       if (isTrialExpiredError(err)) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -300,7 +289,6 @@
     const tok = safeString(r?.token);
     if (tok) localStorage.setItem("wa_auth_token", tok);
 
-    // po loginu pro jistotu smaĹľeme gate cache (mohl se zmÄ›nit tenant)
     setGateCache({ ts: Date.now(), locked: false, reason: null });
 
     return r;
@@ -324,15 +312,10 @@
     });
 
   const billingCancel = () =>
-    apiFetch("/billing/cancel", {
-      method: "POST",
-    });
+    apiFetch("/billing/cancel", { method: "POST" });
 
   // --- EXISTING ENDPOINTS ---
   const getMe = () => apiFetch("/me");
-
-  // BOX #29: compliance overview (dashboard card)
-  const getComplianceOverview = () => apiFetch("/company-compliance/overview");
 
   const getEmployees = () => apiFetch("/employees");
   const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
@@ -360,6 +343,7 @@
       body: JSON.stringify({ text }),
     });
 
+  // --- AUDIT ---
   const getAudit = (params = {}) => apiFetch(`/audit${buildQuery(params)}`);
 
   const getAuditCsvUrl = (params = {}) =>
@@ -394,6 +378,18 @@
     return await res.blob();
   }
 
+  // --- COMPLIANCE (BOX #30) ---
+  const getComplianceOverview = () => apiFetch("/company-compliance/overview");
+  const getCompanyComplianceDocuments = () => apiFetch("/company-compliance-documents");
+  const getCompanyDocumentTemplates = () => apiFetch("/company-document-templates");
+
+  const createComplianceFromTemplate = (templateId, extra = {}) =>
+    apiFetch("/company-compliance-documents/from-template", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ templateId, ...extra }),
+    });
+
   window.WA_API = {
     // auth
     login,
@@ -410,7 +406,6 @@
 
     // data
     getMe,
-    getComplianceOverview,
     getEmployees,
     getEmployee,
     getItems,
@@ -424,5 +419,11 @@
     getAudit,
     getAuditCsvUrl,
     fetchAuditCsv,
+
+    // compliance
+    getComplianceOverview,
+    getCompanyComplianceDocuments,
+    getCompanyDocumentTemplates,
+    createComplianceFromTemplate,
   };
 })();

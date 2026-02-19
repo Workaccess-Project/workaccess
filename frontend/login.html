@@ -47,6 +47,7 @@
     }
     .error{ color:#fb7185; }
     .ok{ color:#2dd4bf; }
+    .small { font-size: 12px; opacity: .8; }
   </style>
 </head>
 <body>
@@ -67,15 +68,19 @@
   <div class="section">
     <h2>DEMO režim (bez JWT)</h2>
 
+    <label>Company ID (tenant)</label>
+    <input id="companyId" value="billingtest1" placeholder="např. billingtest1" />
+    <div class="small">Musí sedět s backend tenant složkou: backend/data/tenants/&lt;companyId&gt;/</div>
+
     <label>Role</label>
     <select id="roleSelect">
       <option value="hr">HR</option>
-      <option value="manager">Manager</option>
+      <option value="manager" selected>Manager</option>
       <option value="security">Security</option>
       <option value="external">External</option>
     </select>
 
-    <button id="btnDemoLogin">Použít DEMO roli</button>
+    <button id="btnDemoLogin">Použít DEMO</button>
 
     <div id="demoMsg" class="msg"></div>
   </div>
@@ -84,7 +89,8 @@
 <script>
   const LS = {
     token: "wa_auth_token",
-    role: "wa_role_key"
+    role: "wa_role_key",
+    companyId: "wa_company_id",
   };
 
   const el = {
@@ -92,17 +98,25 @@
     password: document.getElementById("password"),
     btnAuthLogin: document.getElementById("btnAuthLogin"),
     authMsg: document.getElementById("authMsg"),
+
+    companyId: document.getElementById("companyId"),
     roleSelect: document.getElementById("roleSelect"),
     btnDemoLogin: document.getElementById("btnDemoLogin"),
     demoMsg: document.getElementById("demoMsg"),
   };
+
+  // předvyplň z localStorage, pokud už někdy bylo nastaveno
+  try {
+    const cid = (localStorage.getItem(LS.companyId) || "").toString().trim();
+    if (cid) el.companyId.value = cid;
+  } catch {}
 
   function goDashboard(){
     window.location.href = "dashboard.html";
   }
 
   el.btnAuthLogin.addEventListener("click", async () => {
-    el.authMsg.textContent = "Přihlašuji...";
+    el.authMsg.textContent = "Přihlašuji…";
     el.authMsg.className = "msg";
 
     try {
@@ -124,14 +138,23 @@
   });
 
   el.btnDemoLogin.addEventListener("click", () => {
-    const role = el.roleSelect.value;
-    localStorage.removeItem(LS.token); // jistota – demo bez JWT
-    localStorage.setItem(LS.role, role);
+    const role = (el.roleSelect.value || "").trim();
+    const cid = (el.companyId.value || "").trim();
 
-    el.demoMsg.textContent = "DEMO režim aktivní → přechod na dashboard";
+    if (!cid) {
+      el.demoMsg.textContent = "Vyplň Company ID (tenant), jinak backend odmítne request.";
+      el.demoMsg.className = "msg error";
+      return;
+    }
+
+    localStorage.removeItem(LS.token); // jistota – demo bez JWT
+    localStorage.setItem(LS.role, role || "external");
+    localStorage.setItem(LS.companyId, cid);
+
+    el.demoMsg.textContent = `DEMO aktivní (companyId=${cid}, role=${role}) → přechod na dashboard`;
     el.demoMsg.className = "msg ok";
 
-    setTimeout(goDashboard, 800);
+    setTimeout(goDashboard, 600);
   });
 </script>
 

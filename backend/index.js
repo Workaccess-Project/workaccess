@@ -3,6 +3,9 @@
 import express from "express";
 import cors from "cors";
 
+import path from "path";
+import { fileURLToPath } from "url";
+
 // ROUTES
 import publicRouter from "./routes/public.js";
 import itemsRouter from "./routes/items.js";
@@ -40,9 +43,24 @@ import { startDigestScheduler } from "./services/digest-scheduler.js";
 const app = express();
 const PORT = 3000;
 
+// --- Resolve paths (ESM __dirname) ---
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Frontend is at projectRoot/frontend (backend is projectRoot/backend)
+const FRONTEND_DIR = path.resolve(__dirname, "..", "frontend");
+
 // --- Middlewares ---
 app.use(cors());
 app.use(express.json());
+
+// ✅ Serve frontend static files (login.html, dashboard.html, etc.)
+app.use(express.static(FRONTEND_DIR));
+
+// Optional: redirect root to login
+app.get("/", (req, res) => {
+  res.redirect("/login.html");
+});
 
 // --- Health check (public: no auth, no tenant) ---
 app.get("/api/health", (req, res) => {
@@ -91,27 +109,7 @@ app.use(errorHandler);
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
   console.log(`AUTH_MODE=${AUTH_MODE} (jwtOnly=${IS_JWT_ONLY})`);
-  console.log("Routes mounted:");
-  console.log("  GET  /api/health");
-  console.log("  *    /api/public");
-  console.log("  POST /api/auth/login");
-  console.log("  GET  /api/auth/me");
-  console.log("  *    /api/items");
-  console.log("  *    /api/employees");
-  console.log("  *    /api/documents");
-  console.log("  *    /api/send");
-  console.log("  *    /api/company");
-  console.log("  *    /api/contacts");
-  console.log("  *    /api/alerts");
-  console.log("  *    /api/reports");
-  console.log("  GET  /api/audit");
-  console.log("  GET  /api/me (compat)");
-  console.log("  GET  /api/billing/status");
-  console.log("  POST /api/billing/activate");
-  console.log("  POST /api/billing/cancel");
-  console.log("  *    /api/company-document-templates");
-  console.log("  *    /api/company-compliance-documents");
-  console.log("  GET  /api/company-compliance/overview");
+  console.log(`Serving frontend from: ${FRONTEND_DIR}`);
 });
 
 // start scheduler AFTER server is up

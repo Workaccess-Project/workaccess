@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Compliance</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="wa-nav"></div>
+
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Compliance</h1>
+        <div class="small">Přehled + dokumenty + vytvoření z šablony</div>
+      </div>
+
+      <div class="section" id="stateLine" style="opacity:.85;" class="small">Načítám…</div>
+
+      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:10px;">
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Šablony</strong><span class="pill" id="cntTemplates">0</span>
+          </div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Dokumenty</strong><span class="pill" id="cntDocs">0</span>
+          </div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Aktivní</strong><span class="pill" id="cntActive">0</span>
+          </div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Propadlé</strong><span class="pill" id="cntExpired">0</span>
+          </div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Končí brzy</strong><span class="pill" id="cntSoon">0</span>
+          </div>
+        </div>
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Chybí vytvořit</strong><span class="pill" id="cntMissing">0</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="flt">Filtr:</label>
+          <select id="flt" style="min-width:180px;">
+            <option value="all">Vše</option>
+            <option value="active">Aktivní</option>
+            <option value="soon">Končí brzy</option>
+            <option value="expired">Propadlé</option>
+          </select>
+          <button class="waBtn--primary" id="btnReload">Obnovit</button>
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="tpl">Vytvořit z šablony:</label>
+          <select id="tpl" style="min-width:260px;">
+            <option value="">Načítám…</option>
+          </select>
+          <button class="waBtn--primary" id="btnCreate">Vytvořit</button>
+        </div>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <strong>Seznam dokumentů</strong>
+          <span class="small" id="listMeta" style="opacity:.85;"></span>
+        </div>
+        <div id="list" class="small" style="margin-top:10px;"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js"></script>
+
+  <script>
+    WA_NAV.renderNav("compliance");
+
+    const elState = document.getElementById("stateLine");
+    const elFlt = document.getElementById("flt");
+    const elBtnReload = document.getElementById("btnReload");
+
+    const elTpl = document.getElementById("tpl");
+    const elBtnCreate = document.getElementById("btnCreate");
+
+    const elList = document.getElementById("list");
+    const elListMeta = document.getElementById("listMeta");
+
+    const elCntTemplates = document.getElementById("cntTemplates");
+    const elCntDocs = document.getElementById("cntDocs");
+    const elCntActive = document.getElementById("cntActive");
+    const elCntExpired = document.getElementById("cntExpired");
+    const elCntSoon = document.getElementById("cntSoon");
+    const elCntMissing = document.getElementById("cntMissing");
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function fmtDate(iso) {
+      const s = String(iso || "").trim();
+      if (!s) return "—";
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return esc(s);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function daysLeft(untilIso) {
+      const s = String(untilIso || "").trim();
+      if (!s) return null;
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return null;
+      const diffMs = d.getTime() - Date.now();
+      return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
+    }
+
+    function tagPills(doc) {
+      const status = (doc?.status || "").toString();
+      const expiresAt = doc?.expiresAt || "";
+      const left = daysLeft(expiresAt);
+
+      let tags = [];
+      if (status) tags.push(`<span class="pill">${esc(status)}</span>`);
+
+      if (expiresAt) {
+        if (left != null && left < 0) {
+          tags.push(`<span class="pill" style="border-color:#b42318;">propadlé</span>`);
+        } else if (left != null && left <= 30) {
+          tags.push(`<span class="pill" style="border-color:#b54708;">končí brzy</span>`);
+        }
+        tags.push(`<span class="pill">exp: ${fmtDate(expiresAt)}</span>`);
+      } else {
+        tags.push(`<span class="pill">bez expirace</span>`);
+      }
+
+      return tags.join(" ");
+    }
+
+    function renderDocs(docs) {
+      const flt = elFlt.value;
+
+      let list = Array.isArray(docs) ? docs.slice() : [];
+
+      if (flt === "active") {
+        list = list.filter(d => (d?.status || "") === "active");
+      } else if (flt === "expired") {
+        list = list.filter(d => {
+          const left = daysLeft(d?.expiresAt);
+          return left != null && left < 0;
+        });
+      } else if (flt === "soon") {
+        list = list.filter(d => {
+          const left = daysLeft(d?.expiresAt);
+          return left != null && left >= 0 && left <= 30;
+        });
+      }
+
+      elListMeta.textContent = `Zobrazeno: ${list.length}`;
+
+      elList.innerHTML = list.length
+        ? list.map(d => {
+            const name = esc(d?.name || "—");
+            const issued = fmtDate(d?.issuedAt);
+            const note = esc(d?.note || "");
+            return `
+              <div style="padding:10px 0; border-top:1px solid var(--border);">
+                <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+                  <strong>${name}</strong>
+                  <div>${tagPills(d)}</div>
+                </div>
+                <div class="small" style="opacity:.85; margin-top:6px;">
+                  Vystaveno: ${issued}${note ? " • Poznámka: " + note : ""}
+                </div>
+              </div>
+            `;
+          }).join("")
+        : "Nic.";
+    }
+
+    function fillTemplatesSelect(templates) {
+      const arr = Array.isArray(templates) ? templates : [];
+      elTpl.innerHTML = `<option value="">— vyber šablonu —</option>` +
+        arr.map(t => `<option value="${esc(t?.id)}">${esc(t?.name || t?.id || "—")}</option>`).join("");
+    }
+
+    async function loadAll() {
+      elState.textContent = "Načítám…";
+      elBtnReload.disabled = true;
+      elBtnCreate.disabled = true;
+
+      try {
+        const [overview, docs, templates] = await Promise.all([
+          WA_API.getComplianceOverview(),
+          WA_API.getCompanyComplianceDocuments(),
+          WA_API.getCompanyDocumentTemplates(),
+        ]);
+
+        elCntTemplates.textContent = String(Number(overview?.totalTemplates || 0));
+        elCntDocs.textContent = String(Number(overview?.totalDocuments || 0));
+        elCntActive.textContent = String(Number(overview?.active || 0));
+        elCntExpired.textContent = String(Number(overview?.expired || 0));
+        elCntSoon.textContent = String(Number(overview?.expiringSoon || 0));
+        elCntMissing.textContent = String(Number(overview?.missing || 0));
+
+        fillTemplatesSelect(templates);
+        renderDocs(docs);
+
+        elState.textContent = "OK";
+        elBtnCreate.disabled = false;
+      } catch (e) {
+        elState.textContent = `Chyba: ${String(e?.message || e)}`;
+      } finally {
+        elBtnReload.disabled = false;
+      }
+    }
+
+    elBtnReload.addEventListener("click", loadAll);
+    elFlt.addEventListener("change", loadAll);
+
+    elBtnCreate.addEventListener("click", async () => {
+      const templateId = (elTpl.value || "").trim();
+      if (!templateId) {
+        alert("Vyber šablonu.");
+        return;
+      }
+
+      elBtnCreate.disabled = true;
+      try {
+        await WA_API.createComplianceFromTemplate(templateId);
+        await loadAll();
+      } catch (e) {
+        alert(`Vytvoření selhalo: ${e?.message || e}`);
+      } finally {
+        elBtnCreate.disabled = false;
+      }
+    });
+
+    // init
+    loadAll();
+  </script>
+</body>
+</html>

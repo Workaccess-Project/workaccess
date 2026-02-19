@@ -81,7 +81,6 @@
 
       <div class="section small" id="metaLine"></div>
 
-      <!-- BOX #29: grid rozšířen na 4 karty -->
       <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px;">
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
@@ -107,8 +106,8 @@
           <div id="boxAudit" class="small" style="margin-top:10px;"></div>
         </div>
 
-        <!-- BOX #29: Compliance přehled -->
-        <div class="card" style="padding:12px;">
+        <!-- Compliance přehled (klikací) -->
+        <div class="card" id="complianceCard" style="padding:12px; cursor:pointer;" title="Klikni pro detail compliance">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Compliance přehled</strong>
             <span class="pill" id="cntCompliance">0</span>
@@ -119,7 +118,6 @@
     </div>
   </div>
 
-  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
   <script src="./api.js"></script>
@@ -142,9 +140,9 @@
     const elBoxSoon = document.getElementById("boxSoon");
     const elBoxAudit = document.getElementById("boxAudit");
 
-    // BOX #29: compliance refs
     const elCntCompliance = document.getElementById("cntCompliance");
     const elBoxCompliance = document.getElementById("boxCompliance");
+    const elComplianceCard = document.getElementById("complianceCard");
 
     // billing banner
     const elBillingBanner = document.getElementById("billingBanner");
@@ -230,7 +228,6 @@
       elCntAudit.textContent = String(audit);
     }
 
-    // placeholder (expirace)
     function renderTrainingsStub(role) {
       elBoxExpired.innerHTML = `<div class="pill">role: ${esc(role)}</div>`;
       elBoxSoon.innerHTML = `Nic.`;
@@ -324,10 +321,8 @@
           return;
         }
 
-        // fallback
         elBillingBanner.style.display = "none";
       } catch (e) {
-        // pokud billing status selže, ukážeme pouze informaci
         showBanner({
           kind: "warn",
           title: "Nelze načíst billing status",
@@ -337,7 +332,6 @@
       }
     }
 
-    // BOX #29: render compliance
     function renderComplianceOverview(c) {
       const totalDocs = Number(c?.totalDocuments || 0);
       const totalTemplates = Number(c?.totalTemplates || 0);
@@ -358,6 +352,7 @@
         <div style="${red}">Propadlé: <strong>${expired}</strong></div>
         <div style="${orange}">Končí brzy: <strong>${soon}</strong></div>
         <div>Chybí vytvořit: <strong>${missing}</strong></div>
+        <div class="small" style="opacity:.75; margin-top:6px;">Klikni pro detail →</div>
       `;
     }
 
@@ -367,7 +362,6 @@
       const role = WA_NAV.getRole();
       elAuditRolePill.textContent = roleLabel(role);
 
-      // BOX #29: compliance overview load
       try {
         const c = await WA_API.getComplianceOverview();
         renderComplianceOverview(c);
@@ -537,6 +531,10 @@
       }
     }
 
+    elComplianceCard.addEventListener("click", () => {
+      window.location.href = "./compliance.html";
+    });
+
     elBtnLoad.addEventListener("click", refreshMeAndUi);
 
     elBtnAudit.addEventListener("click", loadAuditFirstPage);
@@ -558,7 +556,6 @@
       }
     });
 
-    // init
     (async () => {
       try {
         await refreshMeAndUi();
