@@ -44,7 +44,8 @@
           <button id="btnReset">Reset</button>
         </div>
 
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <!-- WRITE sekce (schováme pro external) -->
+        <div id="csvBox" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <button id="btnCsv">Export CSV</button>
         </div>
       </div>
@@ -109,11 +110,26 @@
     const elBtnReload = document.getElementById("btnReload");
     const elBtnReset = document.getElementById("btnReset");
     const elBtnCsv = document.getElementById("btnCsv");
+    const elCsvBox = document.getElementById("csvBox");
     const elBtnPrev = document.getElementById("btnPrev");
     const elBtnNext = document.getElementById("btnNext");
 
     let cursorStack = [];
     let nextCursor = "";
+
+    function currentRole() {
+      if (window.WA_NAV && typeof window.WA_NAV.getRole === "function") return window.WA_NAV.getRole();
+      return (localStorage.getItem("wa_role_key") || "external").toString();
+    }
+
+    function canWrite() {
+      const r = (currentRole() || "").toString().trim();
+      return r === "hr" || r === "manager" || r === "security";
+    }
+
+    // UI enforcement: external = read-only → schovat CSV export
+    const writeAllowed = canWrite();
+    if (!writeAllowed && elCsvBox) elCsvBox.style.display = "none";
 
     function esc(s) {
       return String(s ?? "")
@@ -196,7 +212,7 @@
     async function load(cursorOverride = "") {
       elState.textContent = "Načítám…";
       elBtnReload.disabled = true;
-      elBtnCsv.disabled = true;
+      if (elBtnCsv) elBtnCsv.disabled = true;
       elBtnPrev.disabled = true;
       elBtnNext.disabled = true;
 
@@ -218,7 +234,7 @@
         nextCursor = "";
       } finally {
         elBtnReload.disabled = false;
-        elBtnCsv.disabled = false;
+        if (elBtnCsv && writeAllowed) elBtnCsv.disabled = false;
         setNavButtons();
       }
     }
@@ -254,21 +270,23 @@
       await load(prev || "");
     });
 
-    elBtnCsv.addEventListener("click", async () => {
-      try {
-        const blob = await WA_API.fetchAuditCsv(buildParams(cursorStack.length ? cursorStack[cursorStack.length - 1] : ""));
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "audit.csv";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-      } catch (e) {
-        alert(`Export selhal: ${e?.message || e}`);
-      }
-    });
+    if (writeAllowed && elBtnCsv) {
+      elBtnCsv.addEventListener("click", async () => {
+        try {
+          const blob = await WA_API.fetchAuditCsv(buildParams(cursorStack.length ? cursorStack[cursorStack.length - 1] : ""));
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "audit.csv";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          URL.revokeObjectURL(url);
+        } catch (e) {
+          alert(`Export selhal: ${e?.message || e}`);
+        }
+      });
+    }
 
     load("");
   </script>

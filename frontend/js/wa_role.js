@@ -1,7 +1,8 @@
 // frontend/js/wa_role.js
-// Sdílená logika pro roli (DEMO RBAC) – používá employees (module)
+// Sdílená logika pro roli (DEMO RBAC)
+// MUSÍ být konzistentní s WA_NAV (frontend/js/wa_nav.js)
 
-export const LS_ROLE = "workaccess.portal.role";
+export const LS_ROLE = "wa_role_key"; // sjednoceno s WA_NAV
 
 export const ROLE_LABELS = {
   hr: "HR",
@@ -11,11 +12,12 @@ export const ROLE_LABELS = {
 };
 
 export function getRole() {
-  return (localStorage.getItem(LS_ROLE) || "hr").toString();
+  // Bezpečný default: external (read-only)
+  return (localStorage.getItem(LS_ROLE) || "external").toString();
 }
 
 export function setRole(role) {
-  const r = (role || "hr").toString();
+  const r = (role || "external").toString();
   localStorage.setItem(LS_ROLE, r);
   return r;
 }
@@ -25,7 +27,7 @@ export function roleLabel(role = getRole()) {
 }
 
 export function canWrite(role = getRole()) {
-  // stejné jako backend audit + dashboard (external nemá)
+  // external je read-only, ostatní mohou write
   return role === "hr" || role === "manager" || role === "security";
 }
 

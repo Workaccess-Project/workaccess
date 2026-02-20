@@ -63,7 +63,8 @@
           <button class="waBtn--primary" id="btnReload">Obnovit</button>
         </div>
 
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <!-- WRITE sekce (schováme pro external) -->
+        <div id="createBox" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <label class="small" for="tpl">Vytvořit z šablony:</label>
           <select id="tpl" style="min-width:260px;">
             <option value="">Načítám…</option>
@@ -94,6 +95,7 @@
     const elFlt = document.getElementById("flt");
     const elBtnReload = document.getElementById("btnReload");
 
+    const elCreateBox = document.getElementById("createBox");
     const elTpl = document.getElementById("tpl");
     const elBtnCreate = document.getElementById("btnCreate");
 
@@ -106,6 +108,20 @@
     const elCntExpired = document.getElementById("cntExpired");
     const elCntSoon = document.getElementById("cntSoon");
     const elCntMissing = document.getElementById("cntMissing");
+
+    function currentRole() {
+      if (window.WA_NAV && typeof window.WA_NAV.getRole === "function") return window.WA_NAV.getRole();
+      return (localStorage.getItem("wa_role_key") || "external").toString();
+    }
+
+    function canWrite() {
+      const r = (currentRole() || "").toString().trim();
+      return r === "hr" || r === "manager" || r === "security";
+    }
+
+    // UI enforcement: external = read-only → schovat create box
+    const writeAllowed = canWrite();
+    if (!writeAllowed && elCreateBox) elCreateBox.style.display = "none";
 
     function esc(s) {
       return String(s ?? "")
@@ -205,7 +221,7 @@
     async function loadAll() {
       elState.textContent = "Načítám…";
       elBtnReload.disabled = true;
-      elBtnCreate.disabled = true;
+      if (elBtnCreate) elBtnCreate.disabled = true;
 
       try {
         const [overview, docs, templates] = await Promise.all([
@@ -225,7 +241,7 @@
         renderDocs(docs);
 
         elState.textContent = "OK";
-        elBtnCreate.disabled = false;
+        if (elBtnCreate && writeAllowed) elBtnCreate.disabled = false;
       } catch (e) {
         elState.textContent = `Chyba: ${String(e?.message || e)}`;
       } finally {
@@ -236,23 +252,26 @@
     elBtnReload.addEventListener("click", loadAll);
     elFlt.addEventListener("change", loadAll);
 
-    elBtnCreate.addEventListener("click", async () => {
-      const templateId = (elTpl.value || "").trim();
-      if (!templateId) {
-        alert("Vyber šablonu.");
-        return;
-      }
+    // Write akce jen pokud role smí
+    if (writeAllowed && elBtnCreate) {
+      elBtnCreate.addEventListener("click", async () => {
+        const templateId = (elTpl.value || "").trim();
+        if (!templateId) {
+          alert("Vyber šablonu.");
+          return;
+        }
 
-      elBtnCreate.disabled = true;
-      try {
-        await WA_API.createComplianceFromTemplate(templateId);
-        await loadAll();
-      } catch (e) {
-        alert(`Vytvoření selhalo: ${e?.message || e}`);
-      } finally {
-        elBtnCreate.disabled = false;
-      }
-    });
+        elBtnCreate.disabled = true;
+        try {
+          await WA_API.createComplianceFromTemplate(templateId);
+          await loadAll();
+        } catch (e) {
+          alert(`Vytvoření selhalo: ${e?.message || e}`);
+        } finally {
+          elBtnCreate.disabled = false;
+        }
+      });
+    }
 
     // init
     loadAll();
