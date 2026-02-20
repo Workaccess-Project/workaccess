@@ -75,6 +75,7 @@
           ${link("Zaměstnanci", "./employees.html", "employees", activeKey)}
           ${link("TODO", "./index.html", "todo", activeKey)}
           ${link("Compliance", "./compliance.html", "compliance", activeKey)}
+          ${link("Audit", "./audit.html", "audit", activeKey)}
           ${link("Billing", "./billing.html", "billing", activeKey)}
         </div>
 
@@ -90,7 +91,6 @@
     if (btn) {
       btn.addEventListener("click", () => {
         cycleRole();
-        // refresh stránky – jednoduše, bez magie
         location.reload();
       });
     }

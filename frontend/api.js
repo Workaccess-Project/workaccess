@@ -138,6 +138,7 @@
     if (p === "billing.html") return true;
     if (p === "dashboard.html") return true;
     if (p === "compliance.html") return true; // BOX #30: compliance page je taky ok
+    if (p === "audit.html") return true; // BOX #30: audit viewer je taky ok
     return false;
   }
 

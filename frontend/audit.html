@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Audit</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="wa-nav"></div>
+
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Audit log</h1>
+        <div class="small">Přehled akcí v tenantovi (HR / Manažer / Bezpečnost)</div>
+      </div>
+
+      <div class="section" id="stateLine" style="opacity:.85;" class="small">Načítám…</div>
+
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="limit">Limit:</label>
+          <select id="limit" style="min-width:120px;">
+            <option value="20">20</option>
+            <option value="50" selected>50</option>
+            <option value="100">100</option>
+            <option value="200">200</option>
+          </select>
+
+          <label class="small" for="actorRole">Role:</label>
+          <select id="actorRole" style="min-width:160px;">
+            <option value="">Vše</option>
+            <option value="external">Externista</option>
+            <option value="hr">HR</option>
+            <option value="manager">Manažer</option>
+            <option value="security">Bezpečnost</option>
+          </select>
+
+          <label class="small" for="action">Akce (prefix):</label>
+          <input id="action" placeholder="např. companyComplianceDocument." style="min-width:260px;" />
+
+          <button class="waBtn--primary" id="btnReload">Obnovit</button>
+          <button id="btnReset">Reset</button>
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <button id="btnCsv">Export CSV</button>
+        </div>
+      </div>
+
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="entityType">Entity type:</label>
+          <input id="entityType" placeholder="např. employee / item / ..." style="min-width:200px;" />
+
+          <label class="small" for="entityId">Entity id:</label>
+          <input id="entityId" placeholder="např. 123" style="min-width:200px;" />
+        </div>
+
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <label class="small" for="from">Od:</label>
+          <input id="from" type="date" />
+
+          <label class="small" for="to">Do:</label>
+          <input id="to" type="date" />
+        </div>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+          <strong>Události</strong>
+          <span class="small" id="listMeta" style="opacity:.85;"></span>
+        </div>
+
+        <div id="list" class="small" style="margin-top:10px;"></div>
+
+        <div style="display:flex; gap:10px; align-items:center; justify-content:flex-end; margin-top:12px; flex-wrap:wrap;">
+          <button id="btnPrev" disabled>Předchozí</button>
+          <button id="btnNext" disabled>Další</button>
+        </div>
+
+        <div class="small" style="opacity:.75; margin-top:10px;">
+          Tip: Pokud je seznam prázdný, udělej nějakou akci (např. vytvoř compliance dokument) a vrať se sem.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js"></script>
+
+  <script>
+    WA_NAV.renderNav("audit");
+
+    const elState = document.getElementById("stateLine");
+    const elList = document.getElementById("list");
+    const elMeta = document.getElementById("listMeta");
+
+    const elLimit = document.getElementById("limit");
+    const elActorRole = document.getElementById("actorRole");
+    const elAction = document.getElementById("action");
+    const elEntityType = document.getElementById("entityType");
+    const elEntityId = document.getElementById("entityId");
+    const elFrom = document.getElementById("from");
+    const elTo = document.getElementById("to");
+
+    const elBtnReload = document.getElementById("btnReload");
+    const elBtnReset = document.getElementById("btnReset");
+    const elBtnCsv = document.getElementById("btnCsv");
+    const elBtnPrev = document.getElementById("btnPrev");
+    const elBtnNext = document.getElementById("btnNext");
+
+    let cursorStack = [];
+    let nextCursor = "";
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function fmtTs(iso) {
+      const s = String(iso || "").trim();
+      if (!s) return "—";
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return esc(s);
+      const ymd = d.toISOString().slice(0, 10);
+      const hm = d.toISOString().slice(11, 16);
+      return `${ymd} ${hm}`;
+    }
+
+    function rolePill(role) {
+      const r = String(role || "").trim() || "—";
+      return `<span class="pill">${esc(r)}</span>`;
+    }
+
+    function rowHtml(x) {
+      const ts = fmtTs(x?.ts || x?.timestamp);
+      const id = esc(x?.id || "");
+      const action = esc(x?.action || "—");
+      const actorRole = esc(x?.actorRole || x?.role || "—");
+      const entityType = esc(x?.entityType || "—");
+      const entityId = esc(x?.entityId || "");
+
+      return `
+        <div style="padding:10px 0; border-top:1px solid var(--border);">
+          <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+            <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+              <strong>${ts}</strong>
+              ${rolePill(actorRole)}
+              <span class="pill">${esc(action)}</span>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <span class="pill">${esc(entityType)}${entityId ? ":" + esc(entityId) : ""}</span>
+              ${id ? `<span class="small" style="opacity:.75;">id: ${id}</span>` : ""}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function normalizeItems(items) {
+      if (Array.isArray(items)) return items;
+      if (!items) return [];
+      if (typeof items === "object") {
+        const vals = Object.values(items);
+        return Array.isArray(vals) ? vals : [];
+      }
+      return [];
+    }
+
+    function buildParams(cursorOverride = "") {
+      const params = {
+        limit: elLimit.value,
+        actorRole: (elActorRole.value || "").trim(),
+        action: (elAction.value || "").trim(),
+        entityType: (elEntityType.value || "").trim(),
+        entityId: (elEntityId.value || "").trim(),
+        from: (elFrom.value || "").trim(),
+        to: (elTo.value || "").trim(),
+      };
+      if (cursorOverride) params.cursor = cursorOverride;
+      return params;
+    }
+
+    function setNavButtons() {
+      elBtnPrev.disabled = cursorStack.length === 0;
+      elBtnNext.disabled = !nextCursor;
+    }
+
+    async function load(cursorOverride = "") {
+      elState.textContent = "Načítám…";
+      elBtnReload.disabled = true;
+      elBtnCsv.disabled = true;
+      elBtnPrev.disabled = true;
+      elBtnNext.disabled = true;
+
+      try {
+        const data = await WA_API.getAudit(buildParams(cursorOverride));
+
+        const items = normalizeItems(data?.items);
+        const count = Number(data?.count || items.length || 0);
+        nextCursor = (data?.nextCursor || "").toString();
+
+        elMeta.textContent = `Zobrazeno: ${items.length} • Celkem (server): ${count}${nextCursor ? " • další stránka dostupná" : ""}`;
+
+        elList.innerHTML = items.length ? items.map(rowHtml).join("") : "Nic.";
+
+        elState.textContent = "OK";
+      } catch (e) {
+        elState.textContent = `Chyba: ${String(e?.message || e)}`;
+        elList.innerHTML = "Nic.";
+        nextCursor = "";
+      } finally {
+        elBtnReload.disabled = false;
+        elBtnCsv.disabled = false;
+        setNavButtons();
+      }
+    }
+
+    elBtnReload.addEventListener("click", async () => {
+      const currentCursor = cursorStack.length ? cursorStack[cursorStack.length - 1] : "";
+      await load(currentCursor);
+    });
+
+    elBtnReset.addEventListener("click", async () => {
+      cursorStack = [];
+      nextCursor = "";
+      elActorRole.value = "";
+      elAction.value = "";
+      elEntityType.value = "";
+      elEntityId.value = "";
+      elFrom.value = "";
+      elTo.value = "";
+      elLimit.value = "50";
+      await load("");
+    });
+
+    elBtnNext.addEventListener("click", async () => {
+      if (!nextCursor) return;
+      const currentCursor = cursorStack.length ? cursorStack[cursorStack.length - 1] : "";
+      cursorStack.push(currentCursor);
+      await load(nextCursor);
+    });
+
+    elBtnPrev.addEventListener("click", async () => {
+      if (!cursorStack.length) return;
+      const prev = cursorStack.pop();
+      await load(prev || "");
+    });
+
+    elBtnCsv.addEventListener("click", async () => {
+      try {
+        const blob = await WA_API.fetchAuditCsv(buildParams(cursorStack.length ? cursorStack[cursorStack.length - 1] : ""));
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "audit.csv";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        alert(`Export selhal: ${e?.message || e}`);
+      }
+    });
+
+    load("");
+  </script>
+</body>
+</html>
