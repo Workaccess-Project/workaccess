@@ -221,3 +221,51 @@ input::placeholder{ color:rgba(232,238,255,.45); }
   color:var(--muted);
   font-size:12px;
 }
+
+/* --- UX STATE LAYER (BOX #32) --- */
+
+.waState{
+  font-size:13px;
+  padding:8px 10px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  display:inline-block;
+}
+
+.waState--loading{
+  background:rgba(110,168,254,.12);
+  border-color:rgba(110,168,254,.25);
+}
+
+.waState--ok{
+  background:rgba(6,118,71,.12);
+  border-color:rgba(6,118,71,.25);
+}
+
+.waState--error{
+  background:rgba(180,35,24,.12);
+  border-color:rgba(180,35,24,.25);
+}
+
+.waState--info{
+  background:rgba(255,255,255,.04);
+}
+
+.waEmpty{
+  padding:18px;
+  border:1px dashed var(--border);
+  border-radius:14px;
+  background:rgba(255,255,255,.02);
+  text-align:center;
+}
+
+.waEmpty__title{
+  font-weight:600;
+  margin-bottom:6px;
+}
+
+.waEmpty__hint{
+  font-size:12px;
+  color:var(--muted);
+}
+

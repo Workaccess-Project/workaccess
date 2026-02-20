@@ -16,7 +16,9 @@
         <div class="small">Přehled akcí v tenantovi (HR / Manažer / Bezpečnost)</div>
       </div>
 
-      <div class="section" id="stateLine" style="opacity:.85;" class="small">Načítám…</div>
+      <div class="section">
+        <div id="stateLine" class="small" style="opacity:.95;">—</div>
+      </div>
 
       <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
@@ -90,6 +92,7 @@
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
+  <script src="./js/wa_ui_state.js"></script>
   <script src="./api.js"></script>
 
   <script>
@@ -132,12 +135,7 @@
     if (!writeAllowed && elCsvBox) elCsvBox.style.display = "none";
 
     function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return WA_UI_STATE.esc(String(s ?? ""));
     }
 
     function fmtTs(iso) {
@@ -169,10 +167,10 @@
             <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
               <strong>${ts}</strong>
               ${rolePill(actorRole)}
-              <span class="pill">${esc(action)}</span>
+              <span class="pill">${action}</span>
             </div>
             <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-              <span class="pill">${esc(entityType)}${entityId ? ":" + esc(entityId) : ""}</span>
+              <span class="pill">${entityType}${entityId ? ":" + entityId : ""}</span>
               ${id ? `<span class="small" style="opacity:.75;">id: ${id}</span>` : ""}
             </div>
           </div>
@@ -209,12 +207,40 @@
       elBtnNext.disabled = !nextCursor;
     }
 
+    function setControlsEnabled(enabled) {
+      elBtnReload.disabled = !enabled;
+      elBtnReset.disabled = !enabled;
+      elLimit.disabled = !enabled;
+      elActorRole.disabled = !enabled;
+      elAction.disabled = !enabled;
+      elEntityType.disabled = !enabled;
+      elEntityId.disabled = !enabled;
+      elFrom.disabled = !enabled;
+      elTo.disabled = !enabled;
+
+      if (elBtnCsv) elBtnCsv.disabled = !(enabled && writeAllowed);
+
+      if (!enabled) {
+        elBtnPrev.disabled = true;
+        elBtnNext.disabled = true;
+      }
+    }
+
     async function load(cursorOverride = "") {
-      elState.textContent = "Načítám…";
-      elBtnReload.disabled = true;
-      if (elBtnCsv) elBtnCsv.disabled = true;
-      elBtnPrev.disabled = true;
-      elBtnNext.disabled = true;
+      const guard = WA_UI_STATE.requireCompanyId();
+      if (!guard.ok) {
+        WA_UI_STATE.setState(elState, "error", guard.message);
+        WA_UI_STATE.renderEmpty(elList, "Nelze načíst audit", "Chybí tenant (companyId).");
+        elMeta.textContent = "";
+        nextCursor = "";
+        cursorStack = [];
+        setControlsEnabled(true);
+        setNavButtons();
+        return;
+      }
+
+      WA_UI_STATE.setState(elState, "loading", "Načítám…");
+      setControlsEnabled(false);
 
       try {
         const data = await WA_API.getAudit(buildParams(cursorOverride));
@@ -223,18 +249,28 @@
         const count = Number(data?.count || items.length || 0);
         nextCursor = (data?.nextCursor || "").toString();
 
-        elMeta.textContent = `Zobrazeno: ${items.length} • Celkem (server): ${count}${nextCursor ? " • další stránka dostupná" : ""}`;
+        elMeta.textContent =
+          `Zobrazeno: ${items.length} • Celkem (server): ${count}${nextCursor ? " • další stránka dostupná" : ""}`;
 
-        elList.innerHTML = items.length ? items.map(rowHtml).join("") : "Nic.";
+        if (!items.length) {
+          WA_UI_STATE.renderEmpty(
+            elList,
+            "Žádné audit události",
+            "Udělej nějakou akci (např. vytvoř compliance dokument) a obnov."
+          );
+        } else {
+          elList.innerHTML = items.map(rowHtml).join("");
+        }
 
-        elState.textContent = "OK";
+        WA_UI_STATE.setState(elState, "ok", "OK");
       } catch (e) {
-        elState.textContent = `Chyba: ${String(e?.message || e)}`;
-        elList.innerHTML = "Nic.";
+        const msg = WA_UI_STATE.friendlyError(e);
+        WA_UI_STATE.setState(elState, "error", msg);
+        WA_UI_STATE.renderEmpty(elList, "Chyba načtení auditu", msg);
+        elMeta.textContent = "";
         nextCursor = "";
       } finally {
-        elBtnReload.disabled = false;
-        if (elBtnCsv && writeAllowed) elBtnCsv.disabled = false;
+        setControlsEnabled(true);
         setNavButtons();
       }
     }
@@ -272,8 +308,14 @@
 
     if (writeAllowed && elBtnCsv) {
       elBtnCsv.addEventListener("click", async () => {
+        WA_UI_STATE.setState(elState, "loading", "Generuji CSV…");
+        elBtnCsv.disabled = true;
+
         try {
-          const blob = await WA_API.fetchAuditCsv(buildParams(cursorStack.length ? cursorStack[cursorStack.length - 1] : ""));
+          const blob = await WA_API.fetchAuditCsv(
+            buildParams(cursorStack.length ? cursorStack[cursorStack.length - 1] : "")
+          );
+
           const url = URL.createObjectURL(blob);
           const a = document.createElement("a");
           a.href = url;
@@ -282,8 +324,15 @@
           a.click();
           a.remove();
           URL.revokeObjectURL(url);
+
+          WA_UI_STATE.setState(elState, "ok", "CSV staženo.");
         } catch (e) {
-          alert(`Export selhal: ${e?.message || e}`);
+          const msg = WA_UI_STATE.friendlyError(e);
+          WA_UI_STATE.setState(elState, "error", msg);
+          alert(`Export selhal: ${msg}`);
+        } finally {
+          if (writeAllowed) elBtnCsv.disabled = false;
+          setNavButtons();
         }
       });
     }

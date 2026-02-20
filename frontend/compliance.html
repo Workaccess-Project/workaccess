@@ -16,7 +16,9 @@
         <div class="small">Přehled + dokumenty + vytvoření z šablony</div>
       </div>
 
-      <div class="section" id="stateLine" style="opacity:.85;" class="small">Načítám…</div>
+      <div class="section">
+        <div id="stateLine" class="small" style="opacity:.95;">—</div>
+      </div>
 
       <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr; gap:10px;">
         <div class="card" style="padding:12px;">
@@ -24,26 +26,31 @@
             <strong>Šablony</strong><span class="pill" id="cntTemplates">0</span>
           </div>
         </div>
+
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Dokumenty</strong><span class="pill" id="cntDocs">0</span>
           </div>
         </div>
+
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Aktivní</strong><span class="pill" id="cntActive">0</span>
           </div>
         </div>
+
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Propadlé</strong><span class="pill" id="cntExpired">0</span>
           </div>
         </div>
+
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Končí brzy</strong><span class="pill" id="cntSoon">0</span>
           </div>
         </div>
+
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
             <strong>Chybí vytvořit</strong><span class="pill" id="cntMissing">0</span>
@@ -80,12 +87,12 @@
         </div>
         <div id="list" class="small" style="margin-top:10px;"></div>
       </div>
-
     </div>
   </div>
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
+  <script src="./js/wa_ui_state.js"></script>
   <script src="./api.js"></script>
 
   <script>
@@ -124,12 +131,7 @@
     if (!writeAllowed && elCreateBox) elCreateBox.style.display = "none";
 
     function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
+      return WA_UI_STATE.esc(String(s ?? ""));
     }
 
     function fmtDate(iso) {
@@ -173,7 +175,6 @@
 
     function renderDocs(docs) {
       const flt = elFlt.value;
-
       let list = Array.isArray(docs) ? docs.slice() : [];
 
       if (flt === "active") {
@@ -192,36 +193,66 @@
 
       elListMeta.textContent = `Zobrazeno: ${list.length}`;
 
-      elList.innerHTML = list.length
-        ? list.map(d => {
-            const name = esc(d?.name || "—");
-            const issued = fmtDate(d?.issuedAt);
-            const note = esc(d?.note || "");
-            return `
-              <div style="padding:10px 0; border-top:1px solid var(--border);">
-                <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
-                  <strong>${name}</strong>
-                  <div>${tagPills(d)}</div>
-                </div>
-                <div class="small" style="opacity:.85; margin-top:6px;">
-                  Vystaveno: ${issued}${note ? " • Poznámka: " + note : ""}
-                </div>
-              </div>
-            `;
-          }).join("")
-        : "Nic.";
+      if (!list.length) {
+        WA_UI_STATE.renderEmpty(
+          elList,
+          "Žádné compliance dokumenty",
+          writeAllowed
+            ? "Zkus vytvořit dokument ze šablony nebo změň filtr."
+            : "Změň filtr nebo přepni roli na HR/Manažer/Bezpečnost."
+        );
+        return;
+      }
+
+      elList.innerHTML = list.map(d => {
+        const name = esc(d?.name || "—");
+        const issued = fmtDate(d?.issuedAt);
+        const note = esc(d?.note || "");
+        return `
+          <div style="padding:10px 0; border-top:1px solid var(--border);">
+            <div style="display:flex; gap:10px; align-items:center; justify-content:space-between; flex-wrap:wrap;">
+              <strong>${name}</strong>
+              <div>${tagPills(d)}</div>
+            </div>
+            <div class="small" style="opacity:.85; margin-top:6px;">
+              Vystaveno: ${issued}${note ? " • Poznámka: " + note : ""}
+            </div>
+          </div>
+        `;
+      }).join("");
     }
 
     function fillTemplatesSelect(templates) {
       const arr = Array.isArray(templates) ? templates : [];
-      elTpl.innerHTML = `<option value="">— vyber šablonu —</option>` +
+      if (!arr.length) {
+        elTpl.innerHTML = `<option value="">— žádné šablony —</option>`;
+        return;
+      }
+
+      elTpl.innerHTML =
+        `<option value="">— vyber šablonu —</option>` +
         arr.map(t => `<option value="${esc(t?.id)}">${esc(t?.name || t?.id || "—")}</option>`).join("");
     }
 
+    function setControlsEnabled(enabled) {
+      elBtnReload.disabled = !enabled;
+      elFlt.disabled = !enabled;
+
+      if (elTpl) elTpl.disabled = !enabled;
+      if (elBtnCreate) elBtnCreate.disabled = !(enabled && writeAllowed);
+    }
+
     async function loadAll() {
-      elState.textContent = "Načítám…";
-      elBtnReload.disabled = true;
-      if (elBtnCreate) elBtnCreate.disabled = true;
+      const guard = WA_UI_STATE.requireCompanyId();
+      if (!guard.ok) {
+        WA_UI_STATE.setState(elState, "error", guard.message);
+        setControlsEnabled(true);
+        WA_UI_STATE.renderEmpty(elList, "Nelze načíst data", "Chybí tenant (companyId).");
+        return;
+      }
+
+      WA_UI_STATE.setState(elState, "loading", "Načítám…");
+      setControlsEnabled(false);
 
       try {
         const [overview, docs, templates] = await Promise.all([
@@ -240,19 +271,19 @@
         fillTemplatesSelect(templates);
         renderDocs(docs);
 
-        elState.textContent = "OK";
-        if (elBtnCreate && writeAllowed) elBtnCreate.disabled = false;
+        WA_UI_STATE.setState(elState, "ok", "OK");
       } catch (e) {
-        elState.textContent = `Chyba: ${String(e?.message || e)}`;
+        const msg = WA_UI_STATE.friendlyError(e);
+        WA_UI_STATE.setState(elState, "error", msg);
+        WA_UI_STATE.renderEmpty(elList, "Chyba načtení", msg);
       } finally {
-        elBtnReload.disabled = false;
+        setControlsEnabled(true);
       }
     }
 
     elBtnReload.addEventListener("click", loadAll);
     elFlt.addEventListener("change", loadAll);
 
-    // Write akce jen pokud role smí
     if (writeAllowed && elBtnCreate) {
       elBtnCreate.addEventListener("click", async () => {
         const templateId = (elTpl.value || "").trim();
@@ -261,19 +292,22 @@
           return;
         }
 
+        WA_UI_STATE.setState(elState, "loading", "Vytvářím…");
         elBtnCreate.disabled = true;
+
         try {
           await WA_API.createComplianceFromTemplate(templateId);
           await loadAll();
         } catch (e) {
-          alert(`Vytvoření selhalo: ${e?.message || e}`);
+          const msg = WA_UI_STATE.friendlyError(e);
+          WA_UI_STATE.setState(elState, "error", msg);
+          alert(`Vytvoření selhalo: ${msg}`);
         } finally {
-          elBtnCreate.disabled = false;
+          if (writeAllowed) elBtnCreate.disabled = false;
         }
       });
     }
 
-    // init
     loadAll();
   </script>
 </body>
