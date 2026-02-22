@@ -1,5 +1,7 @@
 // backend/ecosystem.config.cjs
-// PM2 config (CommonJS on purpose; backend uses ESM "type": "module")
+// Production-ready PM2 configuration
+// IMPORTANT: Secrets are NOT stored here.
+// Production values must be provided via .env.production on VPS.
 
 module.exports = {
   apps: [
@@ -7,28 +9,26 @@ module.exports = {
       name: "workaccess-api",
       cwd: __dirname,
       script: "index.js",
+
       instances: 1,
       exec_mode: "fork",
+
       autorestart: true,
       max_memory_restart: "300M",
+      restart_delay: 5000,        // prevent restart storm
+      max_restarts: 10,           // fail-safe limit
+
       time: true,
 
-      // Default (dev-ish) env
+      // Default development env
       env: {
         NODE_ENV: "development",
         PORT: "3000"
       },
 
-      // Production env (PM2: --env production)
+      // Production mode (pm2 start ecosystem.config.cjs --env production)
       env_production: {
-        NODE_ENV: "production",
-        PORT: "3000",
-        // Set this on VPS to your real domains:
-        // Example: "https://workaccess.cz,https://www.workaccess.cz"
-        CORS_ORIGINS: "",
-        // Optional build metadata
-        BUILD_SHA: "",
-        BUILD_TIME: ""
+        NODE_ENV: "production"
       }
     }
   ]
