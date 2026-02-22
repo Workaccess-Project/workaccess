@@ -49,6 +49,10 @@ const IS_PROD = NODE_ENV === "production";
 const PORT_RAW = (process.env.PORT ?? "3000").toString().trim();
 const PORT = Number(PORT_RAW) || 3000;
 
+// Build/version metadata (optional; set during deploy)
+const BUILD_SHA = (process.env.BUILD_SHA ?? "").toString().trim();
+const BUILD_TIME = (process.env.BUILD_TIME ?? "").toString().trim();
+
 // --- Resolve paths (ESM __dirname) ---
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -135,10 +139,20 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// --- Version/build info (public: no auth, no tenant) ---
+app.get("/api/version", (req, res) => {
+  res.json({
+    ok: true,
+    nodeEnv: NODE_ENV,
+    buildSha: BUILD_SHA || null,
+    buildTime: BUILD_TIME || null,
+  });
+});
+
 // --- Public routes (no auth, no tenant) ---
 app.use("/api/public", publicRouter);
 
-// --- Auth middleware after public + health ---
+// --- Auth middleware after public + health + version ---
 app.use(authMiddleware);
 
 // --- Auth routes ---
@@ -191,6 +205,8 @@ app.listen(PORT, () => {
     console.log(`CORS=DEV (allow all)`);
   }
   console.log(`Serving frontend from: ${FRONTEND_DIR}`);
+  if (BUILD_SHA) console.log(`BUILD_SHA=${BUILD_SHA}`);
+  if (BUILD_TIME) console.log(`BUILD_TIME=${BUILD_TIME}`);
 });
 
 // start scheduler AFTER server is up
