@@ -1,6 +1,6 @@
 // backend/middleware/error-handler.js
 
-import { AUTH_MODE } from "../config/auth-mode.js";
+import { AUTH_MODE, IS_PROD } from "../config/auth-mode.js";
 
 function inferStatusAndCode(err) {
   // explicit status from error
@@ -36,8 +36,7 @@ function inferStatusAndCode(err) {
 export function errorHandler(err, req, res, next) {
   const { status, code } = inferStatusAndCode(err);
 
-  const NODE_ENV = (process.env.NODE_ENV ?? "development").toString().trim();
-  const IS_PROD = NODE_ENV === "production";
+  // Stack is NEVER shown in production
   const CAN_SHOW_STACK = AUTH_MODE === "DEV" && !IS_PROD;
 
   // If service threw structured error via err.payload, keep payload but normalize shape

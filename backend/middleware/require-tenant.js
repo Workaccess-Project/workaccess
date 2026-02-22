@@ -1,13 +1,13 @@
 // backend/middleware/require-tenant.js
 
-import { AUTH_MODE } from "../config/auth-mode.js";
+import { AUTH_MODE, IS_PROD } from "../config/auth-mode.js";
 
 function sanitizeCompanyId(raw) {
   const s = (raw ?? "").toString().trim();
   if (!s) return null;
 
-  // Povolíme bezpečné ID (připravené na složky/soubory v budoucnu)
-  // např. "acme", "globex-1", "tenant_123"
+  // Allowed safe ID (ready for folders/files in the future)
+  // e.g. "acme", "globex-1", "tenant_123"
   const ok = /^[a-zA-Z0-9_-]{2,64}$/.test(s);
   if (!ok) return "__INVALID__";
 
@@ -16,9 +16,9 @@ function sanitizeCompanyId(raw) {
 
 /**
  * requireTenant:
- * - vynucuje přítomnost companyId na requestu
- * - companyId bere z req.auth.companyId (nastavuje authMiddleware)
- * - ukládá sanitized hodnotu zpět
+ * - enforces presence of companyId in request context
+ * - companyId is taken from req.auth.companyId (set by auth middleware)
+ * - stores sanitized value back
  */
 export function requireTenant(req, res, next) {
   const sanitized = sanitizeCompanyId(req.auth?.companyId);
@@ -42,9 +42,10 @@ export function requireTenant(req, res, next) {
   }
 
   if (!sanitized) {
+    // In production we never hint DEMO headers or internal auth details.
     const devHint =
-      AUTH_MODE === "DEV"
-        ? " Provide Authorization Bearer token OR DEMO header x-company-id."
+      !IS_PROD && AUTH_MODE === "DEV"
+        ? " Provide Authorization: Bearer <token> OR DEMO header x-company-id."
         : "";
 
     return res.status(400).json({
