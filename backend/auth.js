@@ -38,10 +38,10 @@ function isPublicAuthLogin(req) {
  * - If Authorization Bearer token is present -> JWT path
  * - If token is missing:
  *    - Allow POST /api/auth/login as public (even in JWT_ONLY)
- *    - DEV: DEMO headers fallback (x-role + x-company-id)
  *    - JWT_ONLY: reject with 401
+ *    - DEV (jwtOnly=false): allow DEMO headers fallback (x-role + optional x-company-id)
  *
- * companyId is mandatory for tenant-scoped APIs (except public/login routes).
+ * Tenant (companyId) enforcement is handled by requireTenant middleware.
  */
 export function authMiddleware(req, res, next) {
   const token = getBearerToken(req);
@@ -63,10 +63,13 @@ export function authMiddleware(req, res, next) {
       const userId = user?.id ?? user?.userId ?? null;
       const companyId = user?.companyId ?? null;
 
+      // Token without tenant context is not usable for tenant-scoped APIs
       if (!companyId) {
         return res.status(401).json({
           error: "Unauthorized",
+          code: "TOKEN_TENANT_MISSING",
           message: "Token is missing companyId (tenant context required).",
+          mode: AUTH_MODE,
         });
       }
 
@@ -78,7 +81,9 @@ export function authMiddleware(req, res, next) {
     } catch (err) {
       return res.status(err.statusCode || 401).json({
         error: "Unauthorized",
+        code: "TOKEN_INVALID",
         message: err.message || "Neplatný token.",
+        mode: AUTH_MODE,
       });
     }
   }
@@ -87,30 +92,23 @@ export function authMiddleware(req, res, next) {
   if (IS_JWT_ONLY) {
     return res.status(401).json({
       error: "Unauthorized",
+      code: "JWT_ONLY",
       message:
         "JWT-only mode is enabled. Provide Authorization: Bearer [token].",
       mode: AUTH_MODE,
     });
   }
 
-  // 3) DEV DEMO fallback (no JWT) – x-company-id required
+  // 3) DEV DEMO fallback (no JWT)
+  // IMPORTANT: companyId is optional here; requireTenant enforces it for tenant-scoped APIs.
   const role = getRoleFromHeader(req);
   const companyId = getCompanyIdFromHeader(req);
-
-  if (!companyId) {
-    return res.status(400).json({
-      error: "BadRequest",
-      message:
-        "Missing companyId. Provide Authorization Bearer token OR DEMO header x-company-id.",
-      mode: AUTH_MODE,
-    });
-  }
 
   req.user = null;
   req.auth = {
     role,
     userId: null,
-    companyId,
+    companyId, // may be null -> requireTenant will return TENANT_MISSING
   };
   req.role = role;
 
@@ -124,9 +122,13 @@ export function requireRole(allowedRoles = []) {
     if (!allowedRoles.includes(role)) {
       return res.status(403).json({
         error: "Forbidden",
+        code: "FORBIDDEN",
         message: `Role '${role}' nemá oprávnění pro tuto akci.`,
         role,
         allowedRoles,
+        mode: AUTH_MODE,
+        path: req?.originalUrl,
+        method: req?.method,
       });
     }
 

@@ -102,6 +102,17 @@ app.use("/api/company-document-templates", companyDocumentTemplatesRouter);
 app.use("/api/company-compliance-documents", companyComplianceDocumentsRouter);
 app.use("/api/company-compliance/overview", companyComplianceOverviewRouter);
 
+// ✅ API 404 fallback (JSON, never HTML) — must be before errorHandler
+app.use("/api", (req, res) => {
+  return res.status(404).json({
+    error: "NotFound",
+    message: "API endpoint not found.",
+    path: req.originalUrl,
+    method: req.method,
+    mode: AUTH_MODE,
+  });
+});
+
 // --- Error handler must be last ---
 app.use(errorHandler);
 
