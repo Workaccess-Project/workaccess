@@ -36,6 +36,10 @@ function inferStatusAndCode(err) {
 export function errorHandler(err, req, res, next) {
   const { status, code } = inferStatusAndCode(err);
 
+  const NODE_ENV = (process.env.NODE_ENV ?? "development").toString().trim();
+  const IS_PROD = NODE_ENV === "production";
+  const CAN_SHOW_STACK = AUTH_MODE === "DEV" && !IS_PROD;
+
   // If service threw structured error via err.payload, keep payload but normalize shape
   if (err?.payload) {
     const payloadError = err?.payload?.error || err?.message || "Error";
@@ -57,7 +61,7 @@ export function errorHandler(err, req, res, next) {
 
     const out = { ...base, ...extra };
 
-    if (AUTH_MODE === "DEV" && err?.stack) out.stack = err.stack;
+    if (CAN_SHOW_STACK && err?.stack) out.stack = err.stack;
 
     return res.status(status).json(out);
   }
@@ -72,7 +76,7 @@ export function errorHandler(err, req, res, next) {
     method: req?.method,
   };
 
-  if (AUTH_MODE === "DEV" && err?.stack) out.stack = err.stack;
+  if (CAN_SHOW_STACK && err?.stack) out.stack = err.stack;
 
   return res.status(status).json(out);
 }

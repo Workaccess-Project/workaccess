@@ -41,7 +41,13 @@ import { errorHandler } from "./middleware/error-handler.js";
 import { startDigestScheduler } from "./services/digest-scheduler.js";
 
 const app = express();
-const PORT = 3000;
+
+// --- Environment ---
+const NODE_ENV = (process.env.NODE_ENV ?? "development").toString().trim();
+const IS_PROD = NODE_ENV === "production";
+
+const PORT_RAW = (process.env.PORT ?? "3000").toString().trim();
+const PORT = Number(PORT_RAW) || 3000;
 
 // --- Resolve paths (ESM __dirname) ---
 const __filename = fileURLToPath(import.meta.url);
@@ -50,9 +56,66 @@ const __dirname = path.dirname(__filename);
 // Frontend is at projectRoot/frontend (backend is projectRoot/backend)
 const FRONTEND_DIR = path.resolve(__dirname, "..", "frontend");
 
+// --- CORS (staging/prod-ready) ---
+function parseCorsOrigins() {
+  return (process.env.CORS_ORIGINS ?? "")
+    .toString()
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+const corsOptions = {
+  origin(origin, cb) {
+    // allow requests without Origin header (curl, server-to-server)
+    if (!origin) return cb(null, true);
+
+    // DEV: allow all (fast local development)
+    if (!IS_PROD) return cb(null, true);
+
+    // PROD: whitelist only
+    const allowed = parseCorsOrigins();
+    if (allowed.length === 0) {
+      return cb(
+        {
+          status: 500,
+          code: "CORS_NOT_CONFIGURED",
+          message:
+            "CORS is not configured. Set CORS_ORIGINS (comma-separated) in environment.",
+        },
+        false
+      );
+    }
+
+    if (allowed.includes(origin)) return cb(null, true);
+
+    return cb(
+      {
+        status: 403,
+        code: "CORS_FORBIDDEN",
+        message: `Origin not allowed by CORS: ${origin}`,
+      },
+      false
+    );
+  },
+};
+
 // --- Middlewares ---
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
+
+// ✅ Basic request logging (API only)
+app.use((req, res, next) => {
+  if (!req.originalUrl?.startsWith("/api")) return next();
+
+  const start = Date.now();
+  res.on("finish", () => {
+    const ms = Date.now() - start;
+    const status = res.statusCode;
+    console.log(`${req.method} ${req.originalUrl} -> ${status} (${ms}ms)`);
+  });
+  next();
+});
 
 // ✅ Serve frontend static files (login.html, dashboard.html, etc.)
 app.use(express.static(FRONTEND_DIR));
@@ -66,6 +129,7 @@ app.get("/", (req, res) => {
 app.get("/api/health", (req, res) => {
   res.json({
     ok: true,
+    nodeEnv: NODE_ENV,
     authMode: AUTH_MODE,
     jwtOnly: IS_JWT_ONLY,
   });
@@ -119,7 +183,13 @@ app.use(errorHandler);
 // --- Start server ---
 app.listen(PORT, () => {
   console.log(`API running on http://localhost:${PORT}`);
+  console.log(`NODE_ENV=${NODE_ENV} (prod=${IS_PROD})`);
   console.log(`AUTH_MODE=${AUTH_MODE} (jwtOnly=${IS_JWT_ONLY})`);
+  if (IS_PROD) {
+    console.log(`CORS_ORIGINS=${(process.env.CORS_ORIGINS ?? "").toString()}`);
+  } else {
+    console.log(`CORS=DEV (allow all)`);
+  }
   console.log(`Serving frontend from: ${FRONTEND_DIR}`);
 });
 
