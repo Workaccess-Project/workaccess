@@ -2,6 +2,8 @@
 
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 
 import path from "path";
 import { fileURLToPath } from "url";
@@ -52,6 +54,15 @@ const PORT = Number(PORT_RAW) || 3000;
 // Build/version metadata (optional; set during deploy)
 const BUILD_SHA = (process.env.BUILD_SHA ?? "").toString().trim();
 const BUILD_TIME = (process.env.BUILD_TIME ?? "").toString().trim();
+
+// If behind reverse proxy (Nginx/Traefik), Express must trust proxy to get real client IP.
+// In dev it can remain false.
+if (IS_PROD) {
+  app.set("trust proxy", 1);
+}
+
+// Reduce fingerprinting
+app.disable("x-powered-by");
 
 // --- Resolve paths (ESM __dirname) ---
 const __filename = fileURLToPath(import.meta.url);
@@ -104,9 +115,21 @@ const corsOptions = {
   },
 };
 
+// --- Security headers ---
+// CSP can be tricky with static HTML/inline scripts; keep it off for MVP hardening layer.
+// (We can add CSP later once we map frontend requirements.)
+app.use(
+  helmet({
+    contentSecurityPolicy: false,
+    crossOriginEmbedderPolicy: false,
+  })
+);
+
 // --- Middlewares ---
 app.use(cors(corsOptions));
-app.use(express.json());
+
+// Request body size limit (anti payload abuse)
+app.use(express.json({ limit: "200kb" }));
 
 // ✅ Basic request logging (API only)
 app.use((req, res, next) => {
@@ -116,10 +139,80 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const ms = Date.now() - start;
     const status = res.statusCode;
+    // log discipline: do not log headers/body; only method + path + status + latency
     console.log(`${req.method} ${req.originalUrl} -> ${status} (${ms}ms)`);
   });
   next();
 });
+
+// --- Basic abuse guard (burst protection) ---
+// This complements express-rate-limit by catching very fast bursts.
+// Memory-only (resets on restart) – good enough for MVP hardening.
+const burstState = new Map(); // ip -> { ts, count }
+const BURST_WINDOW_MS = 10_000; // 10s
+const BURST_MAX = 60; // max requests per 10s per IP to /api
+
+app.use("/api", (req, res, next) => {
+  const ip = req.ip || "unknown";
+  const now = Date.now();
+  const prev = burstState.get(ip);
+
+  if (!prev || now - prev.ts > BURST_WINDOW_MS) {
+    burstState.set(ip, { ts: now, count: 1 });
+    return next();
+  }
+
+  prev.count += 1;
+  if (prev.count > BURST_MAX) {
+    return res.status(429).json({
+      error: "TooManyRequests",
+      message: "Too many requests (burst protection). Try again soon.",
+    });
+  }
+
+  return next();
+});
+
+// --- Rate limiting ---
+// Global limiter (mild) for API
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 600, // per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "TooManyRequests",
+    message: "Too many requests. Please try again later.",
+  },
+});
+
+// Stricter limiter for public endpoints (anti spam)
+const publicLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 120, // per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "TooManyRequests",
+    message: "Too many requests to public endpoints. Please try again later.",
+  },
+});
+
+// Stricter limiter for auth endpoints (anti brute force)
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60, // per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    error: "TooManyRequests",
+    message: "Too many auth attempts. Please try again later.",
+  },
+});
+
+// Apply limiters (health/version are defined below BEFORE /api middleware mounts)
+// We mount global limiter on /api AFTER health/version handlers.
+//// (see placement below)
 
 // ✅ Serve frontend static files (login.html, dashboard.html, etc.)
 app.use(express.static(FRONTEND_DIR));
@@ -149,14 +242,19 @@ app.get("/api/version", (req, res) => {
   });
 });
 
+// Now apply global API limiter (does not affect / and static frontend)
+app.use("/api", apiLimiter);
+
 // --- Public routes (no auth, no tenant) ---
-app.use("/api/public", publicRouter);
+// Add a stricter limiter for public endpoints
+app.use("/api/public", publicLimiter, publicRouter);
 
 // --- Auth middleware after public + health + version ---
 app.use(authMiddleware);
 
 // --- Auth routes ---
-app.use("/api/auth", authRouter);
+// Add a stricter limiter for auth endpoints
+app.use("/api/auth", authLimiter, authRouter);
 
 // --- Tenant enforcement for everything else ---
 app.use(requireTenant);
@@ -201,6 +299,7 @@ app.listen(PORT, () => {
   console.log(`AUTH_MODE=${AUTH_MODE} (jwtOnly=${IS_JWT_ONLY})`);
   if (IS_PROD) {
     console.log(`CORS_ORIGINS=${(process.env.CORS_ORIGINS ?? "").toString()}`);
+    console.log(`trust proxy=1`);
   } else {
     console.log(`CORS=DEV (allow all)`);
   }
