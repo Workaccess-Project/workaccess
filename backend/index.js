@@ -8,6 +8,9 @@ import rateLimit from "express-rate-limit";
 import path from "path";
 import { fileURLToPath } from "url";
 
+// ENV CONTRACT (fail-fast in production)
+import { enforceProductionEnvContract } from "./config/env-contract.js";
+
 // ROUTES
 import publicRouter from "./routes/public.js";
 import itemsRouter from "./routes/items.js";
@@ -41,6 +44,9 @@ import { errorHandler } from "./middleware/error-handler.js";
 
 // SCHEDULER
 import { startDigestScheduler } from "./services/digest-scheduler.js";
+
+// MUST run before server init (fail-fast in production)
+enforceProductionEnvContract();
 
 const app = express();
 
@@ -146,8 +152,6 @@ app.use((req, res, next) => {
 });
 
 // --- Basic abuse guard (burst protection) ---
-// This complements express-rate-limit by catching very fast bursts.
-// Memory-only (resets on restart) – good enough for MVP hardening.
 const burstState = new Map(); // ip -> { ts, count }
 const BURST_WINDOW_MS = 10_000; // 10s
 const BURST_MAX = 60; // max requests per 10s per IP to /api
@@ -174,7 +178,6 @@ app.use("/api", (req, res, next) => {
 });
 
 // --- Rate limiting ---
-// Global limiter (mild) for API
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 600, // per IP
@@ -186,7 +189,6 @@ const apiLimiter = rateLimit({
   },
 });
 
-// Stricter limiter for public endpoints (anti spam)
 const publicLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 120, // per IP
@@ -198,7 +200,6 @@ const publicLimiter = rateLimit({
   },
 });
 
-// Stricter limiter for auth endpoints (anti brute force)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60, // per IP
@@ -210,11 +211,7 @@ const authLimiter = rateLimit({
   },
 });
 
-// Apply limiters (health/version are defined below BEFORE /api middleware mounts)
-// We mount global limiter on /api AFTER health/version handlers.
-//// (see placement below)
-
-// ✅ Serve frontend static files (login.html, dashboard.html, etc.)
+// ✅ Serve frontend static files
 app.use(express.static(FRONTEND_DIR));
 
 // Optional: redirect root to login
@@ -246,20 +243,18 @@ app.get("/api/version", (req, res) => {
 app.use("/api", apiLimiter);
 
 // --- Public routes (no auth, no tenant) ---
-// Add a stricter limiter for public endpoints
 app.use("/api/public", publicLimiter, publicRouter);
 
 // --- Auth middleware after public + health + version ---
 app.use(authMiddleware);
 
 // --- Auth routes ---
-// Add a stricter limiter for auth endpoints
 app.use("/api/auth", authLimiter, authRouter);
 
 // --- Tenant enforcement for everything else ---
 app.use(requireTenant);
 
-// --- Trial guard (blocks expired trial except allowlisted paths) ---
+// --- Trial guard ---
 app.use(trialGuard);
 
 // --- Routes ---
