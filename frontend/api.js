@@ -1,20 +1,12 @@
 // frontend/api.js
-// Jedno místo pro volání backendu.
-// - Pokud existuje JWT token → posílá Authorization: Bearer ...
-// - Jinak fallback na DEMO x-role
+// Centralizovaná gateway pro volání backendu.
 //
-// DŮLEŽITÉ:
-// - Backend je multitenant → posíláme x-company-id (z WA_NAV / localStorage / JWT)
-//
-// BOX #20/#21:
-// - Billing gate: pokud backend vrátí 402 TrialExpired a subscription není aktivní → redirect na billing hub
-//
-// BOX #30:
-// - Přidány endpointy pro Compliance UI:
-//   - GET  /company-compliance/overview
-//   - GET  /company-compliance-documents
-//   - GET  /company-document-templates
-//   - POST /company-compliance-documents/from-template
+// Produkční disciplína (BOX #51):
+// - JWT je primární auth (wa_auth_token).
+// - V produkci (reverse proxy /api) nepoužíváme DEMO x-role fallback.
+// - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na login.html.
+// - Billing gate (402 TrialExpired) zachován.
+// - CSV export sjednocen do stejného error handleru.
 
 (() => {
   function apiBase() {
@@ -24,12 +16,25 @@
     return "http://localhost:3000/api";
   }
 
+  function isDevLocalApi() {
+    // Pokud base obsahuje localhost, bereme to jako DEV režim.
+    // V produkci má být "/api".
+    const b = String(apiBase() || "").toLowerCase();
+    return b.includes("localhost") || b.includes("127.0.0.1");
+  }
+
   function safeString(v) {
     return (v ?? "").toString().trim();
   }
 
   function getToken() {
     return localStorage.getItem("wa_auth_token");
+  }
+
+  function clearToken() {
+    try {
+      localStorage.removeItem("wa_auth_token");
+    } catch {}
   }
 
   function currentRole() {
@@ -94,10 +99,18 @@
       };
     }
 
-    // fallback DEMO režim
+    // DEMO fallback pouze v DEV (localhost API)
+    if (isDevLocalApi()) {
+      return {
+        ...base,
+        "x-role": currentRole(),
+        ...extra,
+      };
+    }
+
+    // Produkce bez tokenu: žádný fallback (backend vrátí 401 -> globální handler)
     return {
       ...base,
-      "x-role": currentRole(),
       ...extra,
     };
   }
@@ -125,20 +138,41 @@
     return qs ? `?${qs}` : "";
   }
 
-  // ---------- BILLING GATE (BOX #20/#21) ----------
-
   function pageName() {
     const p = (location.pathname || "").split("/").pop() || "";
     return p.toLowerCase();
   }
+
+  function rememberAfterLogin() {
+    // Uložíme návratovou URL, aby se uživatel po přihlášení mohl vrátit.
+    // Použijeme pathname + search + hash, bez originu.
+    try {
+      const target = `${location.pathname || ""}${location.search || ""}${location.hash || ""}`;
+      sessionStorage.setItem("wa_after_login", target);
+    } catch {}
+  }
+
+  function goToLogin() {
+    const here = pageName();
+    if (here === "login.html") return;
+
+    rememberAfterLogin();
+    try {
+      location.href = "./login.html";
+    } catch {
+      location.replace("./login.html");
+    }
+  }
+
+  // ---------- BILLING GATE (BOX #20/#21) ----------
 
   function isAllowlistedPage() {
     const p = pageName();
     if (p === "login.html") return true;
     if (p === "billing.html") return true;
     if (p === "dashboard.html") return true;
-    if (p === "compliance.html") return true; // BOX #30: compliance page je taky ok
-    if (p === "audit.html") return true; // BOX #30: audit viewer je taky ok
+    if (p === "compliance.html") return true;
+    if (p === "audit.html") return true;
     return false;
   }
 
@@ -209,6 +243,14 @@
         headers: buildHeaders(),
       });
 
+      // 401: uživatel není přihlášen / token invalid -> globální redirect na login
+      if (res.status === 401) {
+        clearToken();
+        setGateCache({ ts: Date.now(), locked: false, reason: null });
+        goToLogin();
+        return { ok: false, unauthorized: true };
+      }
+
       if (res.status === 402) {
         setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
         rememberPaywall("TrialExpired");
@@ -249,6 +291,35 @@
   // Gate spustíme hned (asynchronně)
   ensureBillingGate();
 
+  // ---------- CORE ERROR HANDLING ----------
+
+  function buildHttpError(res, body) {
+    const msg = body?.error || body?.message || `${res.status} ${res.statusText}`;
+    const err = new Error(msg);
+    err.status = res.status;
+    err.code = body?.error || null;
+    err.body = body || null;
+    return err;
+  }
+
+  function handleAuthAndGateSideEffects(err) {
+    // 401: JWT missing/invalid -> vyčisti token + redirect na login
+    if (Number(err?.status || 0) === 401) {
+      clearToken();
+      setGateCache({ ts: Date.now(), locked: false, reason: null });
+      goToLogin();
+      return;
+    }
+
+    // 402: billing gate
+    if (isTrialExpiredError(err)) {
+      setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
+      rememberPaywall("TrialExpired");
+      if (!isAllowlistedPage()) goToBillingHub();
+      return;
+    }
+  }
+
   // ---------- CORE FETCH ----------
 
   async function apiFetch(path, opts = {}) {
@@ -257,19 +328,8 @@
 
     if (!res.ok) {
       const body = await readJsonIfAny(res);
-      const msg = body?.error || body?.message || `${res.status} ${res.statusText}`;
-
-      const err = new Error(msg);
-      err.status = res.status;
-      err.code = body?.error || null;
-      err.body = body || null;
-
-      if (isTrialExpiredError(err)) {
-        setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
-        rememberPaywall("TrialExpired");
-        if (!isAllowlistedPage()) goToBillingHub();
-      }
-
+      const err = buildHttpError(res, body);
+      handleAuthAndGateSideEffects(err);
       throw err;
     }
 
@@ -298,7 +358,7 @@
   const getAuthMe = () => apiFetch("/auth/me");
 
   const logout = () => {
-    localStorage.removeItem("wa_auth_token");
+    clearToken();
     setGateCache({ ts: Date.now(), locked: false, reason: null });
   };
 
@@ -312,8 +372,7 @@
       body: JSON.stringify({ plan, days }),
     });
 
-  const billingCancel = () =>
-    apiFetch("/billing/cancel", { method: "POST" });
+  const billingCancel = () => apiFetch("/billing/cancel", { method: "POST" });
 
   // --- EXISTING ENDPOINTS ---
   const getMe = () => apiFetch("/me");
@@ -329,11 +388,9 @@
       body: JSON.stringify({ text }),
     });
 
-  const toggleItem = (id) =>
-    apiFetch(`/items/${encodeURIComponent(id)}`, { method: "PATCH" });
+  const toggleItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "PATCH" });
 
-  const deleteItem = (id) =>
-    apiFetch(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
+  const deleteItem = (id) => apiFetch(`/items/${encodeURIComponent(id)}`, { method: "DELETE" });
 
   const deleteDone = () => apiFetch("/items", { method: "DELETE" });
 
@@ -347,39 +404,30 @@
   // --- AUDIT ---
   const getAudit = (params = {}) => apiFetch(`/audit${buildQuery(params)}`);
 
-  const getAuditCsvUrl = (params = {}) =>
-    apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
+  const getAuditCsvUrl = (params = {}) => apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
 
   async function fetchAuditCsv(params = {}) {
     const url = apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
     const res = await fetch(url, { headers: buildHeaders() });
 
     if (!res.ok) {
-      let msg = `${res.status} ${res.statusText}`;
+      // pokus o JSON error (pokud server vrátí)
+      let body = null;
       try {
-        const ct = (res.headers.get("content-type") || "").toLowerCase();
-        if (ct.includes("application/json")) {
-          const j = await res.json();
-          msg = j?.error || j?.message || msg;
-        }
-      } catch {}
-
-      const err = new Error(msg);
-      err.status = res.status;
-
-      if (isTrialExpiredError(err)) {
-        setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
-        rememberPaywall("TrialExpired");
-        if (!isAllowlistedPage()) goToBillingHub();
+        body = await readJsonIfAny(res);
+      } catch {
+        body = null;
       }
 
+      const err = buildHttpError(res, body);
+      handleAuthAndGateSideEffects(err);
       throw err;
     }
 
     return await res.blob();
   }
 
-  // --- COMPLIANCE (BOX #30) ---
+  // --- COMPLIANCE ---
   const getComplianceOverview = () => apiFetch("/company-compliance/overview");
   const getCompanyComplianceDocuments = () => apiFetch("/company-compliance-documents");
   const getCompanyDocumentTemplates = () => apiFetch("/company-document-templates");

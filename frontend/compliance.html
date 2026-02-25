@@ -13,7 +13,7 @@
 
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Compliance</h1>
-        <div class="small">Přehled + dokumenty + vytvoření z šablony</div>
+        <div class="small">Přehled + dokumenty + vytvoření ze šablony</div>
       </div>
 
       <div class="section">
@@ -72,7 +72,7 @@
 
         <!-- WRITE sekce (schováme pro external) -->
         <div id="createBox" style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <label class="small" for="tpl">Vytvořit z šablony:</label>
+          <label class="small" for="tpl">Vytvořit ze šablony:</label>
           <select id="tpl" style="min-width:260px;">
             <option value="">Načítám…</option>
           </select>
@@ -126,7 +126,6 @@
       return r === "hr" || r === "manager" || r === "security";
     }
 
-    // UI enforcement: external = read-only → schovat create box
     const writeAllowed = canWrite();
     if (!writeAllowed && elCreateBox) elCreateBox.style.display = "none";
 
@@ -156,7 +155,8 @@
       const expiresAt = doc?.expiresAt || "";
       const left = daysLeft(expiresAt);
 
-      let tags = [];
+      const tags = [];
+
       if (status) tags.push(`<span class="pill">${esc(status)}</span>`);
 
       if (expiresAt) {
@@ -199,7 +199,7 @@
           "Žádné compliance dokumenty",
           writeAllowed
             ? "Zkus vytvořit dokument ze šablony nebo změň filtr."
-            : "Změň filtr nebo přepni roli na HR/Manažer/Bezpečnost."
+            : "Změň filtr nebo se přihlas rolí HR/Manažer/Bezpečnost."
         );
         return;
       }
@@ -242,10 +242,14 @@
       if (elBtnCreate) elBtnCreate.disabled = !(enabled && writeAllowed);
     }
 
+    function setInlineError(text) {
+      WA_UI_STATE.setState(elState, "error", text || "Chyba");
+    }
+
     async function loadAll() {
       const guard = WA_UI_STATE.requireCompanyId();
       if (!guard.ok) {
-        WA_UI_STATE.setState(elState, "error", guard.message);
+        setInlineError(guard.message);
         setControlsEnabled(true);
         WA_UI_STATE.renderEmpty(elList, "Nelze načíst data", "Chybí tenant (companyId).");
         return;
@@ -274,10 +278,34 @@
         WA_UI_STATE.setState(elState, "ok", "OK");
       } catch (e) {
         const msg = WA_UI_STATE.friendlyError(e);
-        WA_UI_STATE.setState(elState, "error", msg);
+        setInlineError(msg);
         WA_UI_STATE.renderEmpty(elList, "Chyba načtení", msg);
       } finally {
         setControlsEnabled(true);
+      }
+    }
+
+    async function createFromTemplate() {
+      if (!writeAllowed) return;
+
+      const templateId = (elTpl.value || "").trim();
+      if (!templateId) {
+        WA_UI_STATE.setState(elState, "info", "Vyber šablonu.");
+        return;
+      }
+
+      WA_UI_STATE.setState(elState, "loading", "Vytvářím…");
+      elBtnCreate.disabled = true;
+
+      try {
+        await WA_API.createComplianceFromTemplate(templateId);
+        WA_UI_STATE.setState(elState, "ok", "Vytvořeno.");
+        await loadAll();
+      } catch (e) {
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInlineError(msg);
+      } finally {
+        if (writeAllowed) elBtnCreate.disabled = false;
       }
     }
 
@@ -285,27 +313,7 @@
     elFlt.addEventListener("change", loadAll);
 
     if (writeAllowed && elBtnCreate) {
-      elBtnCreate.addEventListener("click", async () => {
-        const templateId = (elTpl.value || "").trim();
-        if (!templateId) {
-          alert("Vyber šablonu.");
-          return;
-        }
-
-        WA_UI_STATE.setState(elState, "loading", "Vytvářím…");
-        elBtnCreate.disabled = true;
-
-        try {
-          await WA_API.createComplianceFromTemplate(templateId);
-          await loadAll();
-        } catch (e) {
-          const msg = WA_UI_STATE.friendlyError(e);
-          WA_UI_STATE.setState(elState, "error", msg);
-          alert(`Vytvoření selhalo: ${msg}`);
-        } finally {
-          if (writeAllowed) elBtnCreate.disabled = false;
-        }
-      });
+      elBtnCreate.addEventListener("click", createFromTemplate);
     }
 
     loadAll();

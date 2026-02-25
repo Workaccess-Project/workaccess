@@ -16,8 +16,18 @@
         <div class="small">Seznam je z backendu: <code>/api/employees</code></div>
       </div>
 
+      <div class="section">
+        <div id="stateLine" class="small" style="opacity:.95;">—</div>
+      </div>
+
       <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-        <input id="q" type="text" placeholder="Hledat (jméno, email, oddělení)…" style="flex:1; min-width:260px;" autocomplete="off" />
+        <input
+          id="q"
+          type="text"
+          placeholder="Hledat (jméno, email, oddělení)…"
+          style="flex:1; min-width:260px;"
+          autocomplete="off"
+        />
         <button class="waBtn--primary" id="btnLoad">Načíst</button>
       </div>
 
@@ -36,35 +46,27 @@
           </thead>
           <tbody id="tbody"></tbody>
         </table>
-        <div class="small" id="empty" style="display:none; text-align:center; padding:14px;">
-          Nic nenalezeno.
-        </div>
+
+        <div id="emptyBox" class="small" style="margin-top:10px;"></div>
       </div>
     </div>
   </div>
 
-  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
+  <!-- DŮLEŽITÉ pořadí: config -> nav -> ui_state -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
+  <script src="./js/wa_ui_state.js"></script>
   <script src="./api.js"></script>
 
   <script>
     WA_NAV.renderNav("employees");
 
+    const elState = document.getElementById("stateLine");
     const elQ = document.getElementById("q");
     const elBtnLoad = document.getElementById("btnLoad");
     const elMeta = document.getElementById("meta");
     const elBody = document.getElementById("tbody");
-    const elEmpty = document.getElementById("empty");
-
-    function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
+    const elEmptyBox = document.getElementById("emptyBox");
 
     function roleLabel(roleKey) {
       const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
@@ -88,9 +90,22 @@
       return hay.includes(q);
     }
 
+    function clearEmpty() {
+      elEmptyBox.innerHTML = "";
+    }
+
     function renderRows(list) {
       elBody.innerHTML = "";
-      elEmpty.style.display = list.length ? "none" : "block";
+      clearEmpty();
+
+      if (!list.length) {
+        WA_UI_STATE.renderEmpty(
+          elEmptyBox,
+          "Nic nenalezeno",
+          "Zkus upravit vyhledávání nebo načti data znovu."
+        );
+        return;
+      }
 
       for (const e of list) {
         const tr = document.createElement("tr");
@@ -120,24 +135,48 @@
       }
     }
 
+    function setControlsEnabled(enabled) {
+      elBtnLoad.disabled = !enabled;
+      elQ.disabled = !enabled;
+    }
+
     async function load() {
-      elBtnLoad.disabled = true;
+      const guard = WA_UI_STATE.requireCompanyId();
+      if (!guard.ok) {
+        WA_UI_STATE.setState(elState, "error", guard.message);
+        elMeta.textContent = "";
+        elBody.innerHTML = "";
+        WA_UI_STATE.renderEmpty(elEmptyBox, "Nelze načíst zaměstnance", guard.message);
+        setControlsEnabled(true);
+        return;
+      }
+
+      setControlsEnabled(false);
+      WA_UI_STATE.setState(elState, "loading", "Načítám…");
+      clearEmpty();
+
       try {
         const me = await WA_API.getMe();
         const role = me?.role || WA_NAV.getRole();
+
         const all = await WA_API.getEmployees();
         const arr = Array.isArray(all) ? all : [];
-        const q = normalize(elQ.value);
 
+        const q = normalize(elQ.value);
         const filtered = arr.filter((x) => matchEmployee(x, q));
 
         elMeta.textContent = `Role: ${roleLabel(role)} • Záznamů: ${filtered.length}`;
         renderRows(filtered);
+
+        WA_UI_STATE.setState(elState, "ok", "OK");
       } catch (e) {
-        console.error(e);
-        alert("Chyba při načtení zaměstnanců: " + (e?.message || e));
+        const msg = WA_UI_STATE.friendlyError(e);
+        WA_UI_STATE.setState(elState, "error", msg);
+        elMeta.textContent = "";
+        elBody.innerHTML = "";
+        WA_UI_STATE.renderEmpty(elEmptyBox, "Chyba načtení", msg);
       } finally {
-        elBtnLoad.disabled = false;
+        setControlsEnabled(true);
       }
     }
 

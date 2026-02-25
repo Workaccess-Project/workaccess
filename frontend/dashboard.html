@@ -303,7 +303,7 @@
           showBanner({
             kind: "error",
             title: "Trial vypršel",
-            text: `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`,
+            text: `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivuj tarif.`,
             showActivate: true,
           });
           return;
@@ -394,7 +394,7 @@
           showBanner({
             kind: "error",
             title: "Trial vypršel",
-            text: "Pro pokračování aktivujte tarif (demo tlačítko nahoře).",
+            text: "Pro pokračování aktivuj tarif (tlačítko nahoře).",
             showActivate: true,
           });
 
@@ -441,7 +441,7 @@
           showBanner({
             kind: "error",
             title: "Trial vypršel",
-            text: "Audit je uzamčený – aktivujte tarif.",
+            text: "Audit je uzamčený – aktivuj tarif.",
             showActivate: true,
           });
           elAudStatus.textContent = "Trial vypršel.";
@@ -481,7 +481,7 @@
           showBanner({
             kind: "error",
             title: "Trial vypršel",
-            text: "Audit je uzamčený – aktivujte tarif.",
+            text: "Audit je uzamčený – aktivuj tarif.",
             showActivate: true,
           });
           elAudStatus.textContent = "Trial vypršel.";
@@ -518,7 +518,7 @@
           showBanner({
             kind: "error",
             title: "Trial vypršel",
-            text: "Export je uzamčený – aktivujte tarif.",
+            text: "Export je uzamčený – aktivuj tarif.",
             showActivate: true,
           });
           elAudStatus.textContent = "Trial vypršel.";
@@ -550,7 +550,12 @@
         await WA_API.billingActivate("basic", 30);
         await refreshMeAndUi();
       } catch (e) {
-        alert(`Aktivace se nepovedla: ${e?.message || e}`);
+        showBanner({
+          kind: "error",
+          title: "Aktivace se nepovedla",
+          text: `Chyba: ${esc(e?.message || e)}`,
+          showActivate: true,
+        });
       } finally {
         elBtnBillingActivate.disabled = false;
       }
@@ -560,8 +565,13 @@
       try {
         await refreshMeAndUi();
       } catch (e) {
-        console.error(e);
-        alert("Nepodařilo se inicializovat dashboard. Je backend spuštěný na http://localhost:3000 ?");
+        showBanner({
+          kind: "error",
+          title: "Dashboard nelze inicializovat",
+          text: "Nelze načíst data ze serveru. Zkus obnovit stránku nebo se znovu přihlásit.",
+          showActivate: false,
+        });
+        elMetaLine.textContent = "Chyba inicializace – nelze načíst data.";
       }
     })();
   </script>

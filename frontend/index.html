@@ -19,6 +19,10 @@
         </div>
       </div>
 
+      <div class="section">
+        <div id="stateLine" class="small" style="opacity:.95;">—</div>
+      </div>
+
       <div class="section" style="display:grid; grid-template-columns:1fr auto; gap:10px;">
         <div style="display:flex; gap:10px; align-items:center;">
           <input id="newText" type="text" placeholder="Nový úkol… (Enter přidá)" autocomplete="off" />
@@ -56,9 +60,10 @@
     </div>
   </div>
 
-  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
+  <!-- DŮLEŽITÉ pořadí: config -> nav -> ui_state -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
+  <script src="./js/wa_ui_state.js"></script>
   <script src="./api.js"></script>
 
   <script>
@@ -72,6 +77,8 @@
     let selectedId = localStorage.getItem(LS_SELECTED);
     let editingId = null;
 
+    const elState = document.getElementById("stateLine");
+
     const elList = document.getElementById("list");
     const elEmpty = document.getElementById("empty");
     const elNewText = document.getElementById("newText");
@@ -82,6 +89,10 @@
     const elCountAll = document.getElementById("countAll");
     const elCountDone = document.getElementById("countDone");
     const elCountLeft = document.getElementById("countLeft");
+
+    function setInline(kind, text) {
+      WA_UI_STATE.setState(elState, kind, text || "");
+    }
 
     function normalizeText(s){ return (s ?? "").toString().trim(); }
     function getItemText(item){ return item?.text ?? item?.title ?? item?.name ?? ""; }
@@ -99,6 +110,7 @@
         return String(a.id).localeCompare(String(b.id));
       });
     }
+
     function applyFilter(arr){
       if (filter === "active") return arr.filter(x => !x.done);
       if (filter === "done") return arr.filter(x => x.done);
@@ -176,11 +188,15 @@
           setSelectedById(idStr);
 
           cb.disabled = true;
+          setInline("loading", "Ukládám…");
+
           try {
             await WA_API.toggleItem(item.id);
             await reload(true, idStr);
+            setInline("ok", "OK");
           } catch (e) {
-            alert("Chyba při přepnutí hotovo: " + (e?.message || e));
+            const msg = WA_UI_STATE.friendlyError(e);
+            setInline("error", msg);
             cb.disabled = false;
             cb.checked = !!item.done;
           }
@@ -204,12 +220,16 @@
           const save = async () => {
             const next = normalizeText(inp.value);
             if (!next || next === normalizeText(original)) { cancel(); return; }
+
+            setInline("loading", "Ukládám…");
             try {
               await WA_API.updateItemText(item.id, next);
               editingId = null;
               await reload(true, idStr);
+              setInline("ok", "OK");
             } catch (e) {
-              alert("Chyba při uložení textu: " + (e?.message || e));
+              const msg = WA_UI_STATE.friendlyError(e);
+              setInline("error", msg);
             }
           };
 
@@ -243,18 +263,22 @@
 
         const btnDel = document.createElement("button");
         btnDel.className = "waIconBtn waBtn--danger";
-        btnDel.textContent = "✕";
+        btnDel.textContent = "✖";
         btnDel.title = "Smazat";
 
         btnDel.addEventListener("click", async (e) => {
           e.stopPropagation();
           if (!confirm("Smazat tuto položku?")) return;
+
+          setInline("loading", "Mažu…");
           try {
             await WA_API.deleteItem(item.id);
             if (String(selectedId) === idStr) setSelectedById(null);
             await reload(true);
+            setInline("ok", "OK");
           } catch (err) {
-            alert("Chyba při mazání položky: " + (err?.message || err));
+            const msg = WA_UI_STATE.friendlyError(err);
+            setInline("error", msg);
           }
         });
 
@@ -282,20 +306,38 @@
       selectedId = prev != null ? String(prev) : null;
       persistSelected();
 
-      items = await WA_API.getItems();
-      if (!Array.isArray(items)) items = [];
-      render();
+      setInline("loading", "Načítám…");
+      try {
+        items = await WA_API.getItems();
+        if (!Array.isArray(items)) items = [];
+        render();
+        setInline("ok", "OK");
+      } catch (e) {
+        items = [];
+        render();
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInline("error", msg);
+        WA_UI_STATE.renderEmpty(elList, "Nelze načíst úkoly", msg);
+      }
     }
 
     async function addFromInput(){
       const text = normalizeText(elNewText.value);
       if (!text) return;
+
+      elBtnAdd.disabled = true;
+      setInline("loading", "Přidávám…");
+
       try {
         await WA_API.addItem(text);
         elNewText.value = "";
         await reload(true);
+        setInline("ok", "OK");
       } catch (e) {
-        alert("Chyba při přidání úkolu: " + (e?.message || e));
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInline("error", msg);
+      } finally {
+        elBtnAdd.disabled = false;
       }
     }
 
@@ -303,12 +345,20 @@
       const doneCount = items.filter(x => x.done).length;
       if (!doneCount) return;
       if (!confirm("Smazat všechny hotové položky?")) return;
+
+      elBtnClearDone.disabled = true;
+      setInline("loading", "Mažu hotové…");
+
       try {
         await WA_API.deleteDone();
         setSelectedById(null);
         await reload(false);
+        setInline("ok", "OK");
       } catch (e) {
-        alert("Chyba při mazání hotových: " + (e?.message || e));
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInline("error", msg);
+      } finally {
+        elBtnClearDone.disabled = false;
       }
     }
 
@@ -322,12 +372,19 @@
       const msg = label ? `Smazat položku:\n„${label}“ ?` : "Smazat tuto položku?";
       if (!confirm(msg)) return;
 
+      elBtnDeleteSelected.disabled = true;
+      setInline("loading", "Mažu…");
+
       try {
         await WA_API.deleteItem(item.id);
         setSelectedById(null);
         await reload(false);
+        setInline("ok", "OK");
       } catch (e) {
-        alert("Chyba při mazání položky: " + (e?.message || e));
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInline("error", msg);
+      } finally {
+        elBtnDeleteSelected.disabled = false;
       }
     }
 
@@ -358,12 +415,14 @@
 
     // init
     (async () => {
+      setInline("loading", "Inicializuji…");
       try {
         ME = await WA_API.getMe();
         await reload(false);
       } catch (e) {
-        console.error(e);
-        alert("Nepodařilo se inicializovat aplikaci. Je backend spuštěný na http://localhost:3000 ?");
+        const msg = WA_UI_STATE.friendlyError(e);
+        setInline("error", msg);
+        WA_UI_STATE.renderEmpty(elList, "Aplikaci nelze inicializovat", msg);
       }
     })();
   </script>

@@ -14,7 +14,7 @@
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Tarif a přístup</h1>
         <div class="small" style="opacity:.85;">
-          Pokud je trial po expiraci, některé moduly jsou uzamčené, dokud není aktivní tarif.
+          Pokud trial vyprší, některé moduly mohou být uzamčené, dokud nebude aktivní tarif.
         </div>
       </div>
 
@@ -58,7 +58,7 @@
       </div>
 
       <div class="section small" style="opacity:.7;">
-        Tip: Pokud tě systém přesměroval sem, znamená to, že firma má uzamčený přístup kvůli expirovanému trialu.
+        Tip: Pokud tě systém přesměroval sem, firma má uzamčený přístup kvůli expirovanému trialu.
       </div>
     </div>
   </div>
@@ -110,7 +110,7 @@
       return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
     }
 
-    function showPaywall(title, text, kind) {
+    function showPaywall(title, text, kind = "info") {
       elBoxPaywall.style.display = "";
       elPaywallTitle.textContent = title || "—";
       elPaywallText.textContent = text || "";
@@ -169,11 +169,12 @@
     function applyRoleUi() {
       const external = isExternalRole();
       elExternalNotice.style.display = external ? "" : "none";
+
       if (external) {
-        // externista nemá spravovat billing
         elBtnActivate.style.display = "none";
         elBtnCancel.style.display = "none";
       }
+
       return external;
     }
 
@@ -182,18 +183,15 @@
       elBtnActivate.disabled = false;
       elBtnCancel.disabled = false;
 
-      // role-based UI
       const external = applyRoleUi();
 
-      // pokud sem přišel redirect z gate, ukážeme vysvětlení hned (ještě před fetch)
+      // Pokud sem přišel redirect z gate, ukážeme vysvětlení hned (ještě před fetch)
       const hint = readPaywallHint();
       if (hint.flagged) {
-        const t = external
-          ? "Přístup omezen (externista)"
-          : "Přístup omezen";
+        const t = external ? "Přístup omezen (externista)" : "Přístup omezen";
         const msg = external
-          ? "Trial vypršel – přístup firmy je uzamčený. Kontaktujte prosím manažera/HR, ať aktivuje tarif."
-          : "Trial vypršel – pro pokračování aktivujte tarif.";
+          ? "Trial vypršel – přístup firmy je uzamčený. Kontaktuj prosím manažera/HR, ať aktivuje tarif."
+          : "Trial vypršel – pro pokračování aktivuj tarif.";
         showPaywall(t, msg, "error");
       }
 
@@ -207,9 +205,12 @@
         const subEnd = s?.subscription?.end || "";
         const plan = s?.subscription?.plan || "";
 
-        // stavová hláška + tlačítka
         if (subActive) {
-          showPaywall("Tarif aktivní", `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`, "ok");
+          showPaywall(
+            "Tarif aktivní",
+            `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`,
+            "ok"
+          );
           elBtnCancel.style.display = external ? "none" : "";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
@@ -217,7 +218,7 @@
           if (external) {
             showPaywall(
               "Trial vypršel (externista)",
-              `Trial vypršel ${fmtDate(trialEnd)}. Nemáte oprávnění spravovat tarif – kontaktujte manažera/HR.`,
+              `Trial vypršel ${fmtDate(trialEnd)}. Nemáš oprávnění spravovat tarif – kontaktuj manažera/HR.`,
               "error"
             );
             elBtnActivate.style.display = "none";
@@ -225,7 +226,7 @@
           } else {
             showPaywall(
               "Trial vypršel",
-              `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivujte tarif.`,
+              `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivuj tarif.`,
               "error"
             );
             elBtnActivate.style.display = "";
@@ -235,10 +236,15 @@
           const left = daysLeft(trialEnd);
           if (left != null) {
             const kind = left <= 3 ? "warn" : "info";
-            showPaywall("Trial běží", `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dnů).`, kind);
+            showPaywall(
+              "Trial běží",
+              `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dní).`,
+              kind
+            );
           } else {
             hidePaywall();
           }
+
           elBtnActivate.style.display = "none";
           elBtnCancel.style.display = "none";
           clearPaywallHint();
@@ -272,7 +278,8 @@
         await WA_API.billingActivate("basic", 30);
         await refresh();
       } catch (e) {
-        alert(`Aktivace se nepovedla: ${e?.message || e}`);
+        showPaywall("Aktivace se nepovedla", `Chyba: ${esc(e?.message || e)}`, "error");
+        elStatusLine.textContent = "Chyba aktivace";
       } finally {
         elBtnActivate.disabled = false;
       }
@@ -288,13 +295,13 @@
         await WA_API.billingCancel();
         await refresh();
       } catch (e) {
-        alert(`Zrušení se nepovedlo: ${e?.message || e}`);
+        showPaywall("Zrušení se nepovedlo", `Chyba: ${esc(e?.message || e)}`, "error");
+        elStatusLine.textContent = "Chyba zrušení";
       } finally {
         elBtnCancel.disabled = false;
       }
     });
 
-    // init
     refresh();
   </script>
 </body>
