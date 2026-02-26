@@ -253,6 +253,16 @@ app.get("/api/health", (req, res) => {
   });
 });
 
+// --- Health check alias (public: no auth, no tenant) ---
+app.get("/health", (req, res) => {
+  res.json({
+    ok: true,
+    nodeEnv: NODE_ENV,
+    authMode: AUTH_MODE,
+    jwtOnly: IS_JWT_ONLY,
+  });
+});
+
 // --- Version/build info (public: no auth, no tenant) ---
 app.get("/api/version", (req, res) => {
   res.json({

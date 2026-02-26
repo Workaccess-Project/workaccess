@@ -27,10 +27,22 @@ function getBearerToken(req) {
   return token.trim();
 }
 
+function getUrlPath(req) {
+  // normalize to path-only, ignore querystring
+  const url = (req.originalUrl ?? req.url ?? "").toString();
+  return url.split("?")[0];
+}
+
 function isPublicAuthLogin(req) {
   // authMiddleware is global, so login must pass without token/companyId
-  const url = (req.originalUrl ?? req.url ?? "").toString();
-  return req.method === "POST" && url.startsWith("/api/auth/login");
+  const path = getUrlPath(req);
+  return req.method === "POST" && path === "/api/auth/login";
+}
+
+function isPublicHealth(req) {
+  const path = getUrlPath(req);
+  // Public liveness endpoint must remain accessible even in JWT_ONLY / production.
+  return req.method === "GET" && (path === "/health" || path === "/api/health");
 }
 
 /**
@@ -38,6 +50,7 @@ function isPublicAuthLogin(req) {
  * - If Authorization Bearer token is present -> JWT path
  * - If token is missing:
  *    - Allow POST /api/auth/login as public (even in JWT_ONLY / production)
+ *    - Allow GET /health as public (even in JWT_ONLY / production)
  *    - Production: always reject (no demo headers)
  *    - JWT_ONLY: reject with 401
  *    - DEV (jwtOnly=false): allow DEMO headers fallback (x-role + optional x-company-id)
@@ -47,8 +60,8 @@ function isPublicAuthLogin(req) {
 export function authMiddleware(req, res, next) {
   const token = getBearerToken(req);
 
-  // 0) Public login must pass without token/companyId
-  if (!token && isPublicAuthLogin(req)) {
+  // 0) Public endpoints must pass without token/companyId
+  if (!token && (isPublicAuthLogin(req) || isPublicHealth(req))) {
     req.user = null;
     req.auth = { role: "external", userId: null, companyId: null };
     req.role = "external";
@@ -147,4 +160,4 @@ export function requireRole(allowedRoles = []) {
   };
 }
 
-export const requireWrite = requireRole(["admin","hr","manager"]);
+export const requireWrite = requireRole(["admin", "hr", "manager"]);

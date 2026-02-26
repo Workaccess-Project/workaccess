@@ -14,6 +14,16 @@ function sanitizeCompanyId(raw) {
   return s;
 }
 
+function getUrlPath(req) {
+  const url = (req.originalUrl ?? req.url ?? "").toString();
+  return url.split("?")[0];
+}
+
+function isPublicHealth(req) {
+  const path = getUrlPath(req);
+  return req.method === "GET" && (path === "/health" || path === "/api/health");
+}
+
 /**
  * requireTenant:
  * - enforces presence of companyId in request context
@@ -21,6 +31,9 @@ function sanitizeCompanyId(raw) {
  * - stores sanitized value back
  */
 export function requireTenant(req, res, next) {
+  // Public liveness endpoint must NOT require tenant context.
+  if (isPublicHealth(req)) return next();
+
   const sanitized = sanitizeCompanyId(req.auth?.companyId);
 
   const base = {
