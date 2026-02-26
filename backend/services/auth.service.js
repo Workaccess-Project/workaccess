@@ -7,6 +7,7 @@ import { fileURLToPath } from "url";
 
 import { JWT_SECRET, JWT_EXPIRES_IN } from "../config/jwt.js";
 import { getUserByEmail } from "../data-users.js";
+import { evaluateTrialIfNeeded } from "../src/billing/trialEvaluator.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -143,12 +144,17 @@ export async function loginWithPassword({ email, password }) {
 export function verifyAccessToken(token) {
   try {
     const payload = jwt.verify(token, JWT_SECRET);
-    return {
+    const user = {
       id: payload.sub,
       email: payload.email,
       role: payload.role,
       companyId: payload.companyId,
     };
+
+    // Billing (v36) - trial evaluator hook (non-blocking)
+    evaluateTrialIfNeeded(user.companyId).catch(() => {});
+
+    return user;
   } catch (e) {
     const err = new Error("Neplatný nebo expirovaný token.");
     err.statusCode = 401;

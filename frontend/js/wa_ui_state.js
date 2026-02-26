@@ -96,7 +96,7 @@
       ok: false,
       companyId: "",
       message:
-        "Chybí companyId (tenant). Přihlas se přes login.html nebo nastav wa_company_id do localStorage.",
+        "Chybí companyId (tenant). Přihlas se přes /login nebo nastav wa_company_id do localStorage.",
     };
   }
 

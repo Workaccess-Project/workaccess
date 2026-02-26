@@ -1,5 +1,11 @@
 // backend/data-company.js
 import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
+import {
+  createDefaultBillingProfile,
+  validateBillingProfile,
+  BILLING_PLANS,
+  BILLING_STATUS,
+} from "./src/billing/billingModel.js";
 
 const ENTITY = "company";
 
@@ -31,6 +37,8 @@ function defaultAlerts() {
 }
 
 function defaultCompany(companyId) {
+  const createdAt = nowIso();
+
   return {
     companyId: safeString(companyId),
     name: "",
@@ -44,19 +52,22 @@ function defaultCompany(companyId) {
     phone: "",
     alerts: defaultAlerts(),
 
-    // SaaS trial (ISO strings)
+    // Legacy SaaS trial (ISO strings) - kept for backward compatibility
     trialStart: "",
     trialEnd: "",
 
-    // Subscription skeleton (ISO strings)
+    // Legacy subscription skeleton (ISO strings) - kept for backward compatibility
     subscriptionStatus: "none", // none | active | past_due | canceled
     plan: "free", // free | basic | pro
     paymentProvider: "", // e.g. "manual"
     subscriptionStart: "",
     subscriptionEnd: "",
 
-    updatedAt: nowIso(),
-    createdAt: nowIso(),
+    // v36 Billing model (canonical going forward)
+    billing: createDefaultBillingProfile({ now: new Date(createdAt), trialDays: 14 }),
+
+    updatedAt: createdAt,
+    createdAt,
   };
 }
 
@@ -128,7 +139,49 @@ function normalizeCompanyBody(body = {}, prev = {}) {
 
     // alerts může přijít buď jako body.alerts, nebo přímo v body (kompatibilita)
     alerts: normalizeAlertsBody(body.alerts ?? body, prevAlerts),
+
+    // Billing is not patched via generic profile update (handled by dedicated billing flows)
+    billing: prev.billing,
   };
+}
+
+/**
+ * Builds a canonical v36 billing profile with safe migration from legacy fields.
+ */
+function buildBillingProfileFromCompany(mergedCompany) {
+  const createdAtIso = mergedCompany?.createdAt ? normalizeIsoDateString(mergedCompany.createdAt) : "";
+  const createdAt = createdAtIso ? new Date(createdAtIso) : new Date();
+
+  // 1) If billing already exists -> validate; if invalid -> reset to default
+  if (mergedCompany?.billing) {
+    const v = validateBillingProfile(mergedCompany.billing);
+    if (v.ok) return v.normalized;
+
+    // invalid -> reset (but keep original for debugging / audit)
+    return {
+      ...createDefaultBillingProfile({ now: createdAt, trialDays: 14 }),
+      legacyInvalidBilling: mergedCompany.billing,
+    };
+  }
+
+  // 2) Legacy trialEnd migration (if present)
+  const legacyTrialEnd = normalizeIsoDateString(mergedCompany?.trialEnd);
+  if (legacyTrialEnd) {
+    const now = new Date();
+    const trialEndDate = new Date(legacyTrialEnd);
+    const expired = now.getTime() > trialEndDate.getTime();
+
+    return {
+      ...createDefaultBillingProfile({ now: createdAt, trialDays: 14 }),
+      plan: BILLING_PLANS.TRIAL,
+      billingStatus: expired ? BILLING_STATUS.PAST_DUE : BILLING_STATUS.TRIALING,
+      trialEndsAt: legacyTrialEnd,
+      updatedAt: now.toISOString(),
+    };
+  }
+
+  // 3) Default billing for legacy tenants without trial info
+  return createDefaultBillingProfile({ now: createdAt, trialDays: 14 });
 }
 
 export async function getCompanyProfile(companyId) {
@@ -148,7 +201,7 @@ export async function getCompanyProfile(companyId) {
     return def;
   }
 
-  // jemná migrace: doplníme missing fields včetně trial + alerts + subscription
+  // jemná migrace: doplníme missing fields včetně trial + alerts + subscription + billing(v36)
   const def = defaultCompany(cid);
   const merged = { ...def, ...data };
 
@@ -156,17 +209,20 @@ export async function getCompanyProfile(companyId) {
   const aData = merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
   merged.alerts = { ...aDef, ...aData };
 
-  // trial normalize
+  // trial normalize (legacy)
   merged.trialStart = normalizeIsoDateString(merged.trialStart);
   merged.trialEnd = normalizeIsoDateString(merged.trialEnd);
 
-  // subscription normalize
+  // subscription normalize (legacy)
   const sub = normalizeSubscriptionBody(merged, merged);
   merged.subscriptionStatus = sub.subscriptionStatus;
   merged.plan = sub.plan;
   merged.paymentProvider = sub.paymentProvider;
   merged.subscriptionStart = sub.subscriptionStart;
   merged.subscriptionEnd = sub.subscriptionEnd;
+
+  // v36 billing normalize + migrate
+  merged.billing = buildBillingProfileFromCompany(merged);
 
   if (!merged.createdAt) merged.createdAt = def.createdAt;
   merged.updatedAt = merged.updatedAt || def.updatedAt;

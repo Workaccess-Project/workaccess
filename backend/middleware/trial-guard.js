@@ -1,5 +1,9 @@
 // backend/middleware/trial-guard.js
+// NOTE: Upgraded in BOX #57.4 to support v36 billing model (company.billing.*)
+// Kept filename for compatibility (index.js may import trialGuard).
+
 import { getCompanyProfile } from "../data-company.js";
+import { BILLING_PLANS, BILLING_STATUS } from "../src/billing/billingModel.js";
 
 function safeString(v) {
   return (v ?? "").toString().trim();
@@ -39,7 +43,7 @@ function isBillingAllowed(req) {
   return url.startsWith("/api/billing");
 }
 
-function isSubscriptionActive(profile) {
+function isSubscriptionActiveLegacy(profile) {
   const status = safeString(profile?.subscriptionStatus).toLowerCase();
   if (status !== "active") return false;
 
@@ -49,19 +53,44 @@ function isSubscriptionActive(profile) {
   return !isExpiredIso(end);
 }
 
+function getBillingSnapshot(profile) {
+  const b = profile?.billing && typeof profile.billing === "object" ? profile.billing : null;
+
+  if (b) {
+    return {
+      source: "v36",
+      plan: safeString(b.plan),
+      billingStatus: safeString(b.billingStatus),
+      trialEndsAt: safeString(b.trialEndsAt),
+    };
+  }
+
+  // legacy fallback
+  return {
+    source: "legacy",
+    plan: safeString(profile?.plan), // legacy plan: free/basic/pro
+    billingStatus: "", // none
+    trialEndsAt: safeString(profile?.trialEnd),
+  };
+}
+
 /**
- * trialGuard:
- * - vyžaduje tenant (companyId) -> proto musí být až po requireTenant
- * - načte company profil a zkontroluje trialEnd
- * - když vypršel -> 402 TrialExpired
- *   výjimky:
- *    - /api/health
- *    - /api/public/*
- *    - /api/auth/*
- *    - GET /api/company (read-only)
- *    - /api/billing/* (aby šlo aktivovat tarif i po expiraci)
- *   a navíc:
- *    - pokud je subscription aktivní (active + subscriptionEnd >= now) -> neblokujeme
+ * trialGuard (legacy name):
+ * - must run after requireTenant
+ * - upgraded to enforce v36 billing model
+ *
+ * Allowlist:
+ * - /api/health
+ * - /api/public/*
+ * - /api/auth/*
+ * - GET /api/company*
+ * - /api/billing* (so user can fix billing)
+ *
+ * Enforcement:
+ * - If legacy subscription is active -> allow (compat)
+ * - If v36 billingStatus is past_due/unpaid/cancelled -> block with 402
+ * - If v36 plan=trial and trialEndsAt is expired -> block with 402 (and include status)
+ * - Legacy: if trialEnd expired -> block with 402
  */
 export async function trialGuard(req, res, next) {
   try {
@@ -70,16 +99,49 @@ export async function trialGuard(req, res, next) {
     if (isBillingAllowed(req)) return next();
 
     const companyId = req.auth?.companyId;
-    if (!companyId) return next(); // requireTenant už by tohle řešil
+    if (!companyId) return next(); // requireTenant already enforces
 
     const profile = await getCompanyProfile(companyId);
 
-    // subscription active -> allow
-    if (isSubscriptionActive(profile)) return next();
+    // legacy subscription active -> allow
+    if (isSubscriptionActiveLegacy(profile)) return next();
 
-    const trialEnd = profile?.trialEnd;
-    if (!trialEnd) return next(); // pokud není trialEnd, neblokujeme (zatím)
+    const snap = getBillingSnapshot(profile);
 
+    // v36 enforcement
+    if (snap.source === "v36") {
+      const status = safeString(snap.billingStatus);
+
+      // hard blocked states (using 402 to match frontend Billing Gate)
+      if ([BILLING_STATUS.PAST_DUE, BILLING_STATUS.UNPAID, BILLING_STATUS.CANCELLED].includes(status)) {
+        return res.status(402).json({
+          error: "TrialExpired", // keep legacy error for frontend redirect compatibility
+          message: "Trial vypršel nebo billing není aktivní. Pro pokračování je potřeba aktivovat tarif.",
+          companyId,
+          billingStatus: status,
+          plan: safeString(snap.plan),
+          trialEndsAt: snap.trialEndsAt || null,
+        });
+      }
+
+      // trialing but expired -> also block (defensive)
+      if (safeString(snap.plan) === BILLING_PLANS.TRIAL && snap.trialEndsAt && isExpiredIso(snap.trialEndsAt)) {
+        return res.status(402).json({
+          error: "TrialExpired",
+          message: "Trial vypršel. Pro pokračování je potřeba aktivovat tarif.",
+          companyId,
+          billingStatus: status || BILLING_STATUS.PAST_DUE,
+          plan: safeString(snap.plan),
+          trialEndsAt: snap.trialEndsAt,
+        });
+      }
+
+      return next();
+    }
+
+    // legacy enforcement
+    const trialEnd = safeString(profile?.trialEnd);
+    if (!trialEnd) return next(); // if no trialEnd, do not block (legacy behavior)
     if (!isExpiredIso(trialEnd)) return next();
 
     return res.status(402).json({

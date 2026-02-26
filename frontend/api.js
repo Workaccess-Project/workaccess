@@ -4,7 +4,7 @@
 // Produkční disciplína (BOX #51):
 // - JWT je primární auth (wa_auth_token).
 // - V produkci (reverse proxy /api) nepoužíváme DEMO x-role fallback.
-// - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na login.html.
+// - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na /login (pretty URL).
 // - Billing gate (402 TrialExpired) zachován.
 // - CSV export sjednocen do stejného error handleru.
 
@@ -17,8 +17,6 @@
   }
 
   function isDevLocalApi() {
-    // Pokud base obsahuje localhost, bereme to jako DEV režim.
-    // V produkci má být "/api".
     const b = String(apiBase() || "").toLowerCase();
     return b.includes("localhost") || b.includes("127.0.0.1");
   }
@@ -51,7 +49,6 @@
       const payload = t.split(".")[1];
       if (!payload) return null;
 
-      // base64url -> base64
       const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
       const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
       const json = atob(b64 + pad);
@@ -62,17 +59,14 @@
   }
 
   function getCompanyId() {
-    // 1) WA_NAV (pokud existuje)
     if (window.WA_NAV && typeof window.WA_NAV.getCompanyId === "function") {
       const cid = safeString(window.WA_NAV.getCompanyId());
       if (cid) return cid;
     }
 
-    // 2) localStorage
     const fromLs = safeString(localStorage.getItem("wa_company_id"));
     if (fromLs) return fromLs;
 
-    // 3) JWT payload
     const token = getToken();
     if (token) {
       const p = parseJwtPayload(token);
@@ -90,7 +84,6 @@
     const base = {};
     if (companyId) base["x-company-id"] = companyId;
 
-    // JWT má prioritu
     if (token) {
       return {
         ...base,
@@ -99,7 +92,6 @@
       };
     }
 
-    // DEMO fallback pouze v DEV (localhost API)
     if (isDevLocalApi()) {
       return {
         ...base,
@@ -108,7 +100,6 @@
       };
     }
 
-    // Produkce bez tokenu: žádný fallback (backend vrátí 401 -> globální handler)
     return {
       ...base,
       ...extra,
@@ -139,13 +130,22 @@
   }
 
   function pageName() {
-    const p = (location.pathname || "").split("/").pop() || "";
+    const p = (location.pathname || "").split("/").filter(Boolean).pop() || "";
     return p.toLowerCase();
   }
 
+  function isLoginRoute() {
+    // Podporujeme jak /login (pretty) tak /login.html (přímý soubor)
+    const p = pageName();
+    return p === "login" || p === "login.html";
+  }
+
+  function isBillingRoute() {
+    const p = pageName();
+    return p === "billing" || p === "billing.html";
+  }
+
   function rememberAfterLogin() {
-    // Uložíme návratovou URL, aby se uživatel po přihlášení mohl vrátit.
-    // Použijeme pathname + search + hash, bez originu.
     try {
       const target = `${location.pathname || ""}${location.search || ""}${location.hash || ""}`;
       sessionStorage.setItem("wa_after_login", target);
@@ -153,26 +153,25 @@
   }
 
   function goToLogin() {
-    const here = pageName();
-    if (here === "login.html") return;
+    if (isLoginRoute()) return;
 
     rememberAfterLogin();
     try {
-      location.href = "./login.html";
+      location.href = "/login";
     } catch {
-      location.replace("./login.html");
+      location.replace("/login");
     }
   }
 
-  // ---------- BILLING GATE (BOX #20/#21) ----------
+  // ---------- BILLING GATE ----------
 
   function isAllowlistedPage() {
     const p = pageName();
-    if (p === "login.html") return true;
-    if (p === "billing.html") return true;
-    if (p === "dashboard.html") return true;
-    if (p === "compliance.html") return true;
-    if (p === "audit.html") return true;
+    if (p === "login" || p === "login.html") return true;
+    if (p === "billing" || p === "billing.html") return true;
+    if (p === "dashboard" || p === "dashboard.html") return true;
+    if (p === "compliance" || p === "compliance.html") return true;
+    if (p === "audit" || p === "audit.html") return true;
     return false;
   }
 
@@ -185,13 +184,12 @@
   }
 
   function goToBillingHub() {
-    const here = pageName();
-    if (here === "billing.html") return;
+    if (isBillingRoute()) return;
 
     try {
-      location.href = "./billing.html";
+      location.href = "/billing";
     } catch {
-      location.replace("./billing.html");
+      location.replace("/billing");
     }
   }
 
@@ -226,7 +224,6 @@
     const cid = safeString(getCompanyId());
     if (!cid) return { ok: true, skipped: true };
 
-    // cache 60s
     const cache = getGateCache();
     if (cache && typeof cache.ts === "number" && Date.now() - cache.ts < 60_000) {
       if (cache.locked) {
@@ -243,7 +240,6 @@
         headers: buildHeaders(),
       });
 
-      // 401: uživatel není přihlášen / token invalid -> globální redirect na login
       if (res.status === 401) {
         clearToken();
         setGateCache({ ts: Date.now(), locked: false, reason: null });
@@ -303,7 +299,6 @@
   }
 
   function handleAuthAndGateSideEffects(err) {
-    // 401: JWT missing/invalid -> vyčisti token + redirect na login
     if (Number(err?.status || 0) === 401) {
       clearToken();
       setGateCache({ ts: Date.now(), locked: false, reason: null });
@@ -311,7 +306,6 @@
       return;
     }
 
-    // 402: billing gate
     if (isTrialExpiredError(err)) {
       setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
       rememberPaywall("TrialExpired");
@@ -411,7 +405,6 @@
     const res = await fetch(url, { headers: buildHeaders() });
 
     if (!res.ok) {
-      // pokus o JSON error (pokud server vrátí)
       let body = null;
       try {
         body = await readJsonIfAny(res);
