@@ -1,8 +1,13 @@
 // backend/routes/billing.js
+// Upgraded in BOX #57.5 to use v36 billing model (company.billing.*)
+// Legacy trial/subscription fields are kept for backward compatibility.
+
 import express from "express";
 import { requireRole } from "../auth.js";
-import { getCompanyProfile, updateCompanyProfile } from "../data-company.js";
+import { getCompanyProfile } from "../data-company.js";
+import { writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
+import { BILLING_PLANS, BILLING_STATUS, validateBillingProfile } from "../src/billing/billingModel.js";
 
 const router = express.Router();
 
@@ -22,7 +27,7 @@ function parseIsoOrEmpty(v) {
   return d.toISOString();
 }
 
-function isExpired(iso) {
+function isExpiredIso(iso) {
   const s = safeString(iso);
   if (!s) return false;
   const d = new Date(s);
@@ -30,53 +35,75 @@ function isExpired(iso) {
   return d.getTime() < Date.now();
 }
 
-function isSubscriptionActive(profile) {
-  const status = safeString(profile?.subscriptionStatus).toLowerCase();
-  if (status !== "active") return false;
+function normalizePlanToV36(planRaw) {
+  const p = safeString(planRaw).toLowerCase();
+  if (p === BILLING_PLANS.TRIAL) return BILLING_PLANS.TRIAL;
+  if (p === BILLING_PLANS.BASIC) return BILLING_PLANS.BASIC;
+  if (p === BILLING_PLANS.PRO) return BILLING_PLANS.PRO;
+  if (p === BILLING_PLANS.ENTERPRISE) return BILLING_PLANS.ENTERPRISE;
 
-  const end = safeString(profile?.subscriptionEnd);
-  if (!end) return false; // pro skeleton chceme mít jasný konec
+  // legacy mapping
+  if (p === "free") return BILLING_PLANS.TRIAL;
+  if (p === "basic") return BILLING_PLANS.BASIC;
+  if (p === "pro") return BILLING_PLANS.PRO;
 
-  return !isExpired(end);
+  return BILLING_PLANS.BASIC;
 }
 
-function isTrialExpired(profile) {
-  const end = safeString(profile?.trialEnd);
-  if (!end) return false;
-  return isExpired(end);
+function computeLockedFromBilling(billing) {
+  const st = safeString(billing?.billingStatus);
+  if ([BILLING_STATUS.PAST_DUE, BILLING_STATUS.UNPAID, BILLING_STATUS.CANCELLED].includes(st)) {
+    return true;
+  }
+
+  // Defensive: trialing but expired -> locked
+  const plan = safeString(billing?.plan);
+  const te = safeString(billing?.trialEndsAt);
+  if (plan === BILLING_PLANS.TRIAL && te && isExpiredIso(te)) return true;
+
+  return false;
 }
 
 /**
  * GET /api/billing/status
- * READ: pro všechny role (tenant scoped)
+ * READ: for all roles (tenant scoped)
+ *
+ * Returns v36 billing as primary.
+ * Also includes legacy trial/subscription fields for backward compatibility.
  */
 router.get("/status", async (req, res) => {
   const companyId = req.auth.companyId;
-
   const profile = await getCompanyProfile(companyId);
 
-  const trialExpired = isTrialExpired(profile);
-  const subscriptionActive = isSubscriptionActive(profile);
+  const billing = profile?.billing ?? null;
 
-  const isLocked = trialExpired && !subscriptionActive;
+  const locked = computeLockedFromBilling(billing);
 
   res.json({
     companyId,
-    trial: {
-      start: profile?.trialStart ?? "",
-      end: profile?.trialEnd ?? "",
-      expired: trialExpired,
+    billing, // v36 canonical
+    isLocked: locked,
+
+    // legacy snapshot (kept for older UIs / diagnostics)
+    legacy: {
+      trial: {
+        start: profile?.trialStart ?? "",
+        end: profile?.trialEnd ?? "",
+        expired: isExpiredIso(profile?.trialEnd ?? ""),
+      },
+      subscription: {
+        status: profile?.subscriptionStatus ?? "none",
+        plan: profile?.plan ?? "free",
+        paymentProvider: profile?.paymentProvider ?? "",
+        start: profile?.subscriptionStart ?? "",
+        end: profile?.subscriptionEnd ?? "",
+        active:
+          safeString(profile?.subscriptionStatus).toLowerCase() === "active" &&
+          !!safeString(profile?.subscriptionEnd) &&
+          !isExpiredIso(profile?.subscriptionEnd),
+        expired: isExpiredIso(profile?.subscriptionEnd ?? ""),
+      },
     },
-    subscription: {
-      status: profile?.subscriptionStatus ?? "none",
-      plan: profile?.plan ?? "free",
-      paymentProvider: profile?.paymentProvider ?? "",
-      start: profile?.subscriptionStart ?? "",
-      end: profile?.subscriptionEnd ?? "",
-      active: subscriptionActive,
-      expired: isExpired(profile?.subscriptionEnd ?? ""),
-    },
-    isLocked,
   });
 });
 
@@ -85,40 +112,67 @@ router.get("/status", async (req, res) => {
  * WRITE: manager only
  *
  * Body:
- *  - plan: "free"|"basic"|"pro" (string)
- *  - days: number (default 30)  -> aktivuje od teď na X dní
- *  - until: ISO string (volitelné) -> aktivuje do konkrétního data (má prioritu)
+ *  - plan: "basic"|"pro"|"enterprise" (string)  (trial is not activated here)
+ *
+ * Effects:
+ * - Sets company.billing.plan + billingStatus=active
+ * - Keeps legacy subscription fields updated (manual provider) for compatibility
  */
 router.post("/activate", requireRole(["manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
 
-  const profileBefore = await getCompanyProfile(companyId);
+  const before = await getCompanyProfile(companyId);
 
-  const plan = safeString(req.body?.plan) || "basic";
-
-  const untilIso = parseIsoOrEmpty(req.body?.until);
-  const daysRaw = Number(req.body?.days);
-  const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(3650, Math.floor(daysRaw))) : 30;
-
-  let endIso = "";
-  if (untilIso) {
-    endIso = untilIso;
-  } else {
-    const end = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
-    endIso = end.toISOString();
+  const plan = normalizePlanToV36(req.body?.plan);
+  if (plan === BILLING_PLANS.TRIAL) {
+    return res.status(400).json({
+      error: "BadRequest",
+      code: "PLAN_INVALID",
+      message: "Activate expects a paid plan (basic/pro/enterprise).",
+      allowed: [BILLING_PLANS.BASIC, BILLING_PLANS.PRO, BILLING_PLANS.ENTERPRISE],
+    });
   }
 
-  // nastavíme subscription přes updateCompanyProfile (persist + migrace)
-  const patch = {
+  const now = nowIso();
+
+  const subscriptionEnd = (() => {
+    const untilIso = parseIsoOrEmpty(req.body?.until);
+    const daysRaw = Number(req.body?.days);
+    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(3650, Math.floor(daysRaw))) : 30;
+    if (untilIso) return untilIso;
+    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+  })();
+
+  const nextCompany = {
+    ...before,
+    billing: {
+      ...(before.billing || {}),
+      plan,
+      billingStatus: BILLING_STATUS.ACTIVE,
+      updatedAt: now,
+    },
+
+    // legacy compatibility (manual subscription mirror)
     subscriptionStatus: "active",
-    plan,
+    plan: plan === BILLING_PLANS.ENTERPRISE ? "pro" : plan, // legacy doesn't have enterprise
     paymentProvider: "manual",
-    subscriptionStart: nowIso(),
-    subscriptionEnd: endIso,
+    subscriptionStart: now,
+    subscriptionEnd,
+
+    updatedAt: now,
   };
 
-  const updated = await updateCompanyProfile(companyId, patch);
-  const profileAfter = updated.after;
+  const v = validateBillingProfile(nextCompany.billing);
+  if (!v.ok) {
+    return res.status(500).json({
+      error: "BillingInvalid",
+      message: "Internal billing profile validation failed.",
+      errors: v.errors,
+    });
+  }
+  nextCompany.billing = v.normalized;
+
+  await writeTenantEntity(companyId, "company", nextCompany);
 
   await auditLog({
     companyId,
@@ -126,33 +180,15 @@ router.post("/activate", requireRole(["manager"]), async (req, res) => {
     action: "billing.activate",
     entityType: "company",
     entityId: companyId,
-    meta: { plan, subscriptionEnd: endIso, paymentProvider: "manual" },
-    before: {
-      subscriptionStatus: profileBefore.subscriptionStatus ?? "none",
-      plan: profileBefore.plan ?? "free",
-      paymentProvider: profileBefore.paymentProvider ?? "",
-      subscriptionStart: profileBefore.subscriptionStart ?? "",
-      subscriptionEnd: profileBefore.subscriptionEnd ?? "",
-    },
-    after: {
-      subscriptionStatus: profileAfter.subscriptionStatus ?? "active",
-      plan: profileAfter.plan ?? plan,
-      paymentProvider: profileAfter.paymentProvider ?? "manual",
-      subscriptionStart: profileAfter.subscriptionStart ?? "",
-      subscriptionEnd: profileAfter.subscriptionEnd ?? endIso,
-    },
+    meta: { plan, paymentProvider: "manual" },
+    before: { billing: before.billing ?? null, legacy: { subscriptionStatus: before.subscriptionStatus ?? "none", plan: before.plan ?? "free" } },
+    after: { billing: nextCompany.billing ?? null, legacy: { subscriptionStatus: nextCompany.subscriptionStatus, plan: nextCompany.plan } },
   });
 
   res.json({
     ok: true,
     companyId,
-    subscription: {
-      status: profileAfter.subscriptionStatus,
-      plan: profileAfter.plan,
-      paymentProvider: profileAfter.paymentProvider,
-      start: profileAfter.subscriptionStart,
-      end: profileAfter.subscriptionEnd,
-    },
+    billing: nextCompany.billing,
   });
 });
 
@@ -160,20 +196,42 @@ router.post("/activate", requireRole(["manager"]), async (req, res) => {
  * POST /api/billing/cancel
  * WRITE: manager only
  *
- * Nastaví subscriptionStatus=canceled a subscriptionEnd=now (aby se to hned zamklo po expiraci trialu)
+ * Effects:
+ * - Sets v36 billingStatus=cancelled
+ * - Mirrors legacy subscriptionStatus=canceled
  */
 router.post("/cancel", requireRole(["manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
 
-  const profileBefore = await getCompanyProfile(companyId);
+  const before = await getCompanyProfile(companyId);
+  const now = nowIso();
 
-  const patch = {
+  const nextCompany = {
+    ...before,
+    billing: {
+      ...(before.billing || {}),
+      billingStatus: BILLING_STATUS.CANCELLED,
+      updatedAt: now,
+    },
+
+    // legacy mirror
     subscriptionStatus: "canceled",
-    subscriptionEnd: nowIso(),
+    subscriptionEnd: now,
+
+    updatedAt: now,
   };
 
-  const updated = await updateCompanyProfile(companyId, patch);
-  const profileAfter = updated.after;
+  const v = validateBillingProfile(nextCompany.billing);
+  if (!v.ok) {
+    return res.status(500).json({
+      error: "BillingInvalid",
+      message: "Internal billing profile validation failed.",
+      errors: v.errors,
+    });
+  }
+  nextCompany.billing = v.normalized;
+
+  await writeTenantEntity(companyId, "company", nextCompany);
 
   await auditLog({
     companyId,
@@ -182,32 +240,14 @@ router.post("/cancel", requireRole(["manager"]), async (req, res) => {
     entityType: "company",
     entityId: companyId,
     meta: {},
-    before: {
-      subscriptionStatus: profileBefore.subscriptionStatus ?? "none",
-      plan: profileBefore.plan ?? "free",
-      paymentProvider: profileBefore.paymentProvider ?? "",
-      subscriptionStart: profileBefore.subscriptionStart ?? "",
-      subscriptionEnd: profileBefore.subscriptionEnd ?? "",
-    },
-    after: {
-      subscriptionStatus: profileAfter.subscriptionStatus ?? "canceled",
-      plan: profileAfter.plan ?? "free",
-      paymentProvider: profileAfter.paymentProvider ?? "",
-      subscriptionStart: profileAfter.subscriptionStart ?? "",
-      subscriptionEnd: profileAfter.subscriptionEnd ?? "",
-    },
+    before: { billing: before.billing ?? null, legacy: { subscriptionStatus: before.subscriptionStatus ?? "none", plan: before.plan ?? "free" } },
+    after: { billing: nextCompany.billing ?? null, legacy: { subscriptionStatus: nextCompany.subscriptionStatus, plan: nextCompany.plan ?? "" } },
   });
 
   res.json({
     ok: true,
     companyId,
-    subscription: {
-      status: profileAfter.subscriptionStatus,
-      plan: profileAfter.plan,
-      paymentProvider: profileAfter.paymentProvider,
-      start: profileAfter.subscriptionStart,
-      end: profileAfter.subscriptionEnd,
-    },
+    billing: nextCompany.billing,
   });
 });
 
