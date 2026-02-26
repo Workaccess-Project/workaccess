@@ -13,6 +13,7 @@
   }
 
   // --- STATE LINE ---
+
   // kind: "loading" | "ok" | "error" | "info"
   function setState(el, kind = "info", text = "") {
     if (!el) return;
@@ -35,6 +36,7 @@
   }
 
   // --- EMPTY STATE ---
+
   function renderEmpty(el, title = "Zatím nic", hint = "") {
     if (!el) return;
     const t = safeString(title) || "Zatím nic";
@@ -49,6 +51,7 @@
   }
 
   // --- FRIENDLY ERRORS ---
+
   function friendlyError(e) {
     const status = Number(e?.status || 0) || 0;
     const code = safeString(e?.code || e?.body?.error || "");
@@ -65,9 +68,9 @@
     if (status === 404) return "Požadovaný endpoint nebyl nalezen (404).";
     if (status >= 500) return "Chyba serveru. Zkus to prosím za chvíli znovu.";
 
-    // Network / fetch fail (produkční text, bez localhost)
+    // Network / fetch fail
     if (!status && (raw.includes("Failed to fetch") || raw.includes("NetworkError"))) {
-      return "Nelze se spojit se serverem. Zkus obnovit stránku a zkontroluj připojení.";
+      return "Nelze se spojit se serverem. Je backend spuštěný na http://localhost:3000 ?";
     }
 
     // Default
@@ -75,6 +78,7 @@
   }
 
   // --- TENANT GUARDS ---
+
   function getCompanyId() {
     // preferuj WA_NAV, pokud existuje
     if (window.WA_NAV && typeof window.WA_NAV.getCompanyId === "function") {

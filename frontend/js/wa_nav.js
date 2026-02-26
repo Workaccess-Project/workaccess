@@ -1,6 +1,6 @@
 // frontend/js/wa_nav.js
-// Jednoduchá navigace + role switch (DEMO) + companyId storage.
-// Musí být kompatibilní s backendem (x-role / x-company-id) a s frontend/api.js.
+// Produkce: JWT_ONLY → role se bere z JWT tokenu (wa_auth_token), role switch je vypnutý.
+// Dev fallback: pokud token není, použije se wa_role_key (DEMO).
 
 (() => {
   function safeString(v) {
@@ -9,22 +9,57 @@
 
   const ROLE_ORDER = ["external", "hr", "manager", "security"];
 
-  function getRole() {
+  function getToken() {
+    try {
+      return safeString(localStorage.getItem("wa_auth_token"));
+    } catch {
+      return "";
+    }
+  }
+
+  function parseJwtPayload(token) {
+    try {
+      const t = safeString(token);
+      if (!t || !t.includes(".")) return null;
+      const payload = t.split(".")[1];
+      if (!payload) return null;
+
+      const b64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+      const pad = b64.length % 4 ? "=".repeat(4 - (b64.length % 4)) : "";
+      const json = atob(b64 + pad);
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
+  function getDemoRole() {
     return safeString(localStorage.getItem("wa_role_key")) || "external";
   }
 
-  function setRole(roleKey) {
+  function setDemoRole(roleKey) {
     const r = safeString(roleKey) || "external";
     localStorage.setItem("wa_role_key", r);
     return r;
   }
 
-  function cycleRole() {
-    const cur = getRole();
+  function cycleDemoRole() {
+    const cur = getDemoRole();
     const idx = ROLE_ORDER.indexOf(cur);
     const next = ROLE_ORDER[(idx >= 0 ? idx + 1 : 0) % ROLE_ORDER.length];
-    setRole(next);
+    setDemoRole(next);
     return next;
+  }
+
+  // Produkční role: z JWT, jinak fallback DEMO
+  function getRole() {
+    const tok = getToken();
+    if (tok) {
+      const p = parseJwtPayload(tok);
+      const r = safeString(p?.role);
+      if (r) return r;
+    }
+    return getDemoRole();
   }
 
   function getCompanyId() {
@@ -39,6 +74,7 @@
 
   function roleLabel(roleKey) {
     const map = {
+      admin: "Admin",
       hr: "HR",
       manager: "Manažer",
       security: "Bezpečnost",
@@ -65,6 +101,7 @@
     const root = document.getElementById("wa-nav");
     if (!root) return;
 
+    const tok = getToken();
     const role = getRole();
 
     root.innerHTML = `
@@ -82,15 +119,20 @@
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <span class="small" style="opacity:.8;">Role:</span>
           <span class="pill">${esc(roleLabel(role))}</span>
-          <button id="waRoleBtn">Změnit roli</button>
+          ${
+            tok
+              ? ""
+              : `<button id="waRoleBtn" title="DEMO only">Změnit roli</button>`
+          }
         </div>
       </div>
     `;
 
+    // Role switch jen když není token (DEMO/dev)
     const btn = document.getElementById("waRoleBtn");
     if (btn) {
       btn.addEventListener("click", () => {
-        cycleRole();
+        cycleDemoRole();
         location.reload();
       });
     }
@@ -99,7 +141,8 @@
   window.WA_NAV = {
     renderNav,
     getRole,
-    setRole,
+    // setRole ponecháme pro zpětnou kompatibilitu, ale mění jen DEMO roli
+    setRole: setDemoRole,
     getCompanyId,
     setCompanyId,
   };

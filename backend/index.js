@@ -54,6 +54,8 @@ const app = express();
 const NODE_ENV = (process.env.NODE_ENV ?? "development").toString().trim();
 const IS_PROD = NODE_ENV === "production";
 
+const OPS_TESTS = (process.env.OPS_TESTS ?? "").toString().trim() === "1";
+
 const PORT_RAW = (process.env.PORT ?? "3000").toString().trim();
 const PORT = Number(PORT_RAW) || 3000;
 
@@ -137,7 +139,8 @@ app.use(cors(corsOptions));
 // Request body size limit (anti payload abuse)
 app.use(express.json({ limit: "200kb" }));
 
-// ✅ Basic request logging (API only)
+// ✅ Request logging discipline (API only)
+// Goal: keep production logs readable (avoid 401 noise), keep security/ops signals.
 app.use((req, res, next) => {
   if (!req.originalUrl?.startsWith("/api")) return next();
 
@@ -145,9 +148,30 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const ms = Date.now() - start;
     const status = res.statusCode;
-    // log discipline: do not log headers/body; only method + path + status + latency
-    console.log(`${req.method} ${req.originalUrl} -> ${status} (${ms}ms)`);
+    const method = req.method;
+    const url = req.originalUrl;
+
+    // 5xx are logged by errorHandler to stderr (PM2 error log)
+    if (status >= 500) return;
+
+    // Avoid JWT noise: log 401 only for login attempts
+    if (status === 401) {
+      if (method === "POST" && url.startsWith("/api/auth/login")) {
+        console.warn(`${method} ${url} -> ${status} (${ms}ms)`);
+      }
+      return;
+    }
+
+    // Keep useful signals
+    if (status === 403 || status === 429) {
+      console.warn(`${method} ${url} -> ${status} (${ms}ms)`);
+      return;
+    }
+
+    // Everything else: no-op (keeps logs clean)
+    return;
   });
+
   next();
 });
 
@@ -239,6 +263,22 @@ app.get("/api/version", (req, res) => {
   });
 });
 
+// --- Ops self-test (localhost only, gated) ---
+// Enable by setting OPS_TESTS=1 (intentionally OFF by default).
+app.get("/api/_ops/throw", (req, res) => {
+  if (!OPS_TESTS) {
+    return res.status(404).json({ error: "NotFound", message: "Not found." });
+  }
+
+  // only allow from localhost (backend listens on 127.0.0.1 anyway, but keep guard explicit)
+  const ip = (req.ip ?? "").toString();
+  if (ip && ip !== "127.0.0.1" && ip !== "::1" && !ip.endsWith("127.0.0.1")) {
+    return res.status(403).json({ error: "Forbidden", message: "Localhost only." });
+  }
+
+  throw new Error("OPS_TEST_THROW");
+});
+
 // Now apply global API limiter (does not affect / and static frontend)
 app.use("/api", apiLimiter);
 
@@ -288,7 +328,7 @@ app.use("/api", (req, res) => {
 app.use(errorHandler);
 
 // --- Start server ---
-app.listen(PORT, () => {
+app.listen(PORT, "127.0.0.1", () => {
   console.log(`API running on http://localhost:${PORT}`);
   console.log(`NODE_ENV=${NODE_ENV} (prod=${IS_PROD})`);
   console.log(`AUTH_MODE=${AUTH_MODE} (jwtOnly=${IS_JWT_ONLY})`);

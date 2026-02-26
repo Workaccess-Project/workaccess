@@ -33,11 +33,31 @@ function inferStatusAndCode(err) {
   return { status: 500, code: "INTERNAL_ERROR" };
 }
 
+function logServerError({ err, req, status, code }) {
+  // Only log 5xx here to avoid noise
+  if (status < 500) return;
+
+  const ts = new Date().toISOString();
+  const method = req?.method || "UNKNOWN";
+  const path = req?.originalUrl || "UNKNOWN_PATH";
+
+  const msg = (err?.message ?? "").toString();
+  const name = (err?.name ?? "").toString();
+  const stack = (err?.stack ?? "").toString();
+
+  // stderr -> PM2 error log
+  console.error(`[${ts}] API_ERROR ${method} ${path} -> ${status} ${code} ${name ? `(${name})` : ""} ${msg}`);
+  if (stack) console.error(stack);
+}
+
 export function errorHandler(err, req, res, next) {
   const { status, code } = inferStatusAndCode(err);
 
   // Stack is NEVER shown in production
   const CAN_SHOW_STACK = AUTH_MODE === "DEV" && !IS_PROD;
+
+  // Server-side visibility (PM2 error log)
+  logServerError({ err, req, status, code });
 
   // If service threw structured error via err.payload, keep payload but normalize shape
   if (err?.payload) {

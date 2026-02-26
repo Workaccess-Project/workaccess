@@ -3,7 +3,7 @@
 import { verifyAccessToken } from "./services/auth.service.js";
 import { IS_JWT_ONLY, AUTH_MODE, IS_PROD } from "./config/auth-mode.js";
 
-const ROLES = ["hr", "manager", "security", "external"];
+const ROLES = ["admin", "hr", "manager", "security", "external"];
 
 function getRoleFromHeader(req) {
   const raw = (req.headers["x-role"] ?? "").toString().trim().toLowerCase();
@@ -147,4 +147,4 @@ export function requireRole(allowedRoles = []) {
   };
 }
 
-export const requireWrite = requireRole(["hr", "manager"]);
+export const requireWrite = requireRole(["admin","hr","manager"]);

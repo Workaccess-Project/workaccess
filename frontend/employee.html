@@ -13,7 +13,9 @@
 
       <div class="section">
         <h1 style="font-size:18px;">Detail zaměstnance</h1>
-        <div class="small"><a href="./employees.html" style="color:var(--accent); text-decoration:none;">← zpět na seznam</a></div>
+        <div class="small">
+          <a href="./employees.html" style="color:var(--accent); text-decoration:none;">← zpět na seznam</a>
+        </div>
       </div>
 
       <div class="section">
@@ -24,7 +26,8 @@
   </div>
 
   <script src="./js/wa_nav.js"></script>
-  <script src="./js/api.js"></script>
+  <script src="./api.js"></script>
+
   <script>
     WA_NAV.renderNav("employees");
 
@@ -41,6 +44,244 @@
         .replaceAll("'", "&#039;");
     }
 
+    function fmtDate(iso) {
+      const s = String(iso || "").trim();
+      if (!s) return "—";
+      const d = new Date(s);
+      if (String(d) === "Invalid Date") return escapeHtml(s);
+      return d.toISOString().slice(0, 10);
+    }
+
+    function getToken() {
+      // sladěno s frontend/api.js
+      return localStorage.getItem("wa_auth_token") || "";
+    }
+
+    async function apiFetch(path, { method = "GET", body = null } = {}) {
+      const token = getToken();
+      const headers = { "Accept": "application/json" };
+      if (token) headers["Authorization"] = "Bearer " + token;
+      if (body != null) headers["Content-Type"] = "application/json";
+
+      const res = await fetch(path, {
+        method,
+        headers,
+        body: body == null ? undefined : JSON.stringify(body),
+      });
+
+      let json = null;
+      const ct = (res.headers.get("content-type") || "").toLowerCase();
+      if (ct.includes("application/json")) {
+        try { json = await res.json(); } catch (_) {}
+      } else {
+        try { json = { message: await res.text() }; } catch (_) {}
+      }
+
+      if (!res.ok) {
+        const msg =
+          (json && (json.error || json.message)) ||
+          `HTTP ${res.status}`;
+        const err = new Error(msg);
+        err.status = res.status;
+        err.payload = json;
+        throw err;
+      }
+
+      return json;
+    }
+
+    function renderTrainingsTable({ empId, trainings }) {
+      const list = Array.isArray(trainings) ? trainings : [];
+      if (!list.length) {
+        return `<div class="small" style="opacity:0.85;">Žádná školení.</div>`;
+      }
+
+      return `
+        <table class="table" style="margin-top:10px;">
+          <thead>
+            <tr>
+              <th style="width:220px;">Název</th>
+              <th style="width:160px;">Platné od</th>
+              <th style="width:160px;">Platné do</th>
+              <th>ID</th>
+              <th style="width:120px;"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${list.map((t) => `
+              <tr>
+                <td>${escapeHtml(t?.name ?? "—")}</td>
+                <td>${fmtDate(t?.validFrom)}</td>
+                <td>${fmtDate(t?.validTo)}</td>
+                <td class="small" style="opacity:0.85;">${escapeHtml(t?.id ?? "—")}</td>
+                <td style="text-align:right;">
+                  <button class="waBtn" data-del-training="${escapeHtml(t?.id ?? "")}" title="Smazat školení">Smazat</button>
+                </td>
+              </tr>
+            `).join("")}
+          </tbody>
+        </table>
+      `;
+    }
+
+    function renderTrainingForm() {
+      return `
+        <div class="section" style="margin-top:12px; border:1px solid var(--border); border-radius:12px; padding:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <strong>Přidat školení</strong>
+            <span class="small" id="trFormMsg" style="opacity:0.85;"></span>
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
+            <input id="trName" type="text" placeholder="Název (např. BOZP)" style="min-width:240px;" />
+            <input id="trFrom" type="date" style="min-width:160px;" />
+            <input id="trTo" type="date" style="min-width:160px;" />
+            <button class="waBtn--primary" id="btnAddTraining">Přidat</button>
+          </div>
+
+          <div class="small" style="margin-top:8px; opacity:0.85;">
+            Kontrakt: <code>{ name, validFrom, validTo }</code>
+          </div>
+        </div>
+      `;
+    }
+
+    let CURRENT_EMP = null;
+
+    async function loadEmployee(empId) {
+      const e = await WA_API.getEmployee(empId);
+      CURRENT_EMP = e;
+      return e;
+    }
+
+    function renderEmployee(e, idParam) {
+      const empId = e.id ?? e.employeeId ?? e._id ?? idParam;
+
+      const trainingsCount = Array.isArray(e.trainings) ? e.trainings.length : 0;
+
+      document.getElementById("box").innerHTML = `
+        <table class="table">
+          <tbody>
+            <tr><th style="width:220px;">ID</th><td>${escapeHtml(empId)}</td></tr>
+            <tr><th>Jméno</th><td>${escapeHtml(e.name ?? e.fullName ?? "—")}</td></tr>
+            <tr><th>Email</th><td>${escapeHtml(e.email ?? "—")}</td></tr>
+            <tr><th>Oddělení</th><td>${escapeHtml(e.department ?? e.team ?? "—")}</td></tr>
+            <tr><th>Role / pozice</th><td>${escapeHtml(e.role ?? e.position ?? "—")}</td></tr>
+          </tbody>
+        </table>
+
+        <div class="section" style="margin-top:14px; border-top:1px solid var(--border); padding-top:12px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;">
+            <h2 style="font-size:16px; margin:0;">Školení</h2>
+            <span class="pill small">počet: ${escapeHtml(trainingsCount)}</span>
+          </div>
+
+          <div id="trainingsBox">
+            ${renderTrainingsTable({ empId, trainings: e.trainings })}
+          </div>
+
+          ${renderTrainingForm()}
+        </div>
+
+        <div class="small" style="margin-top:12px; opacity:0.85;">
+          (Pozn.: Zobrazuju „best effort“ pole. Když máš v datech jiné názvy, upravíme mapování.)
+        </div>
+      `;
+
+      wireTrainingHandlers(empId);
+    }
+
+    function setTrMsg(text, kind) {
+      const el = document.getElementById("trFormMsg");
+      if (!el) return;
+      el.textContent = text || "";
+      el.style.color =
+        kind === "error" ? "#b42318" :
+        kind === "ok" ? "#067647" :
+        "inherit";
+    }
+
+    async function refreshTrainings(empId) {
+      const e = await loadEmployee(empId);
+      const box = document.getElementById("trainingsBox");
+      if (box) box.innerHTML = renderTrainingsTable({ empId, trainings: e.trainings });
+      wireTrainingDelete(empId);
+    }
+
+    function wireTrainingDelete(empId) {
+      document.querySelectorAll("[data-del-training]").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const trainingId = btn.getAttribute("data-del-training") || "";
+          if (!trainingId) return;
+
+          if (!confirm("Opravdu smazat školení?")) return;
+
+          setTrMsg("Mažu…", "info");
+          try {
+            await apiFetch(`/api/employees/${encodeURIComponent(empId)}/trainings/${encodeURIComponent(trainingId)}`, {
+              method: "DELETE",
+            });
+            setTrMsg("Smazáno ✓", "ok");
+            await refreshTrainings(empId);
+          } catch (err) {
+            console.error(err);
+            if (err?.status === 401) setTrMsg("Nepřihlášeno (401). Přihlas se znovu.", "error");
+            else if (err?.status === 403) setTrMsg("Nemáš oprávnění (403).", "error");
+            else setTrMsg(`Chyba: ${err.message}`, "error");
+          }
+        });
+      });
+    }
+
+    function wireTrainingHandlers(empId) {
+      const btn = document.getElementById("btnAddTraining");
+      const elName = document.getElementById("trName");
+      const elFrom = document.getElementById("trFrom");
+      const elTo = document.getElementById("trTo");
+
+      if (!btn || !elName || !elFrom || !elTo) return;
+
+      btn.addEventListener("click", async () => {
+        const name = String(elName.value || "").trim();
+        const validFrom = String(elFrom.value || "").trim();
+        const validTo = String(elTo.value || "").trim();
+
+        if (!name || !validFrom || !validTo) {
+          setTrMsg("Vyplň název + platné od + platné do.", "error");
+          return;
+        }
+
+        if (validFrom > validTo) {
+          setTrMsg("Platné od nesmí být později než platné do.", "error");
+          return;
+        }
+
+        setTrMsg("Ukládám…", "info");
+        btn.disabled = true;
+
+        try {
+          await apiFetch(`/api/employees/${encodeURIComponent(empId)}/trainings`, {
+            method: "POST",
+            body: { name, validFrom, validTo },
+          });
+
+          setTrMsg("Uloženo ✓", "ok");
+
+          elName.value = "";
+          await refreshTrainings(empId);
+        } catch (err) {
+          console.error(err);
+          if (err?.status === 401) setTrMsg("Nepřihlášeno (401). Přihlas se znovu.", "error");
+          else if (err?.status === 403) setTrMsg("Nemáš oprávnění (403).", "error");
+          else setTrMsg(`Chyba: ${err.message}`, "error");
+        } finally {
+          btn.disabled = false;
+        }
+      });
+
+      wireTrainingDelete(empId);
+    }
+
     (async () => {
       const id = getParam("id");
       if (!id) {
@@ -49,28 +290,13 @@
       }
 
       try {
-        const e = await WA_API.getEmployee(id);
-        document.getElementById("state").textContent = "Načteno ✅";
-
-        document.getElementById("box").innerHTML = `
-          <table class="table">
-            <tbody>
-              <tr><th style="width:220px;">ID</th><td>${escapeHtml(e.id ?? e.employeeId ?? e._id ?? id)}</td></tr>
-              <tr><th>Jméno</th><td>${escapeHtml(e.name ?? e.fullName ?? "—")}</td></tr>
-              <tr><th>Email</th><td>${escapeHtml(e.email ?? "—")}</td></tr>
-              <tr><th>Oddělení</th><td>${escapeHtml(e.department ?? e.team ?? "—")}</td></tr>
-              <tr><th>Role / pozice</th><td>${escapeHtml(e.role ?? e.position ?? "—")}</td></tr>
-            </tbody>
-          </table>
-
-          <div class="small" style="margin-top:12px;">
-            (Pozn.: Zobrazuju „best effort“ pole. Když máš v datech jiné názvy, upravíme mapování.)
-          </div>
-        `;
+        const e = await loadEmployee(id);
+        document.getElementById("state").textContent = "Načteno ✓";
+        renderEmployee(e, id);
       } catch (err) {
+        console.error(err);
         document.getElementById("state").textContent =
           "Nepodařilo se načíst detail. Zkontroluj endpoint /api/employees/:id";
-        console.error(err);
       }
     })();
   </script>

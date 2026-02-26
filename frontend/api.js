@@ -13,7 +13,7 @@
     if (window.WA_CONFIG && typeof window.WA_CONFIG.getApiBase === "function") {
       return window.WA_CONFIG.getApiBase();
     }
-    return "http://localhost:3000/api";
+    return "/api";
   }
 
   function isDevLocalApi() {
