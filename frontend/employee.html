@@ -52,14 +52,114 @@
       return d.toISOString().slice(0, 10);
     }
 
+    // ---------- AUTH / BILLING SIDE EFFECTS (aligned with frontend/api.js) ----------
+
+    function safeString(v) {
+      return (v ?? "").toString().trim();
+    }
+
+    function pageName() {
+      const p = (location.pathname || "").split("/").filter(Boolean).pop() || "";
+      return p.toLowerCase();
+    }
+
+    function isLoginRoute() {
+      const p = pageName();
+      return p === "login" || p === "login.html";
+    }
+
+    function isBillingRoute() {
+      const p = pageName();
+      return p === "billing" || p === "billing.html";
+    }
+
+    function rememberAfterLogin() {
+      try {
+        const target = `${location.pathname || ""}${location.search || ""}${location.hash || ""}`;
+        sessionStorage.setItem("wa_after_login", target);
+      } catch {}
+    }
+
+    function goToLogin() {
+      if (isLoginRoute()) return;
+      rememberAfterLogin();
+      try {
+        location.href = "/login";
+      } catch {
+        location.replace("/login");
+      }
+    }
+
+    function setGateCache(obj) {
+      try {
+        sessionStorage.setItem("wa_gate_cache", JSON.stringify(obj || {}));
+      } catch {}
+    }
+
+    function rememberPaywall(reason = "TrialExpired") {
+      try {
+        sessionStorage.setItem("wa_paywall", "1");
+        sessionStorage.setItem("wa_paywall_reason", safeString(reason) || "TrialExpired");
+        sessionStorage.setItem("wa_paywall_ts", String(Date.now()));
+      } catch {}
+    }
+
+    function goToBillingHub() {
+      if (isBillingRoute()) return;
+      try {
+        location.href = "/billing";
+      } catch {
+        location.replace("/billing");
+      }
+    }
+
+    function clearToken() {
+      try {
+        localStorage.removeItem("wa_auth_token");
+      } catch {}
+    }
+
     function getToken() {
       // sladěno s frontend/api.js
       return localStorage.getItem("wa_auth_token") || "";
     }
 
+    function getCompanyId() {
+      // minimální kompatibilita: api.js umí víc, tady stačí LS
+      return safeString(localStorage.getItem("wa_company_id"));
+    }
+
+    function handleAuthAndBillingSideEffects(status) {
+      const s = Number(status || 0);
+
+      if (s === 401) {
+        clearToken();
+        setGateCache({ ts: Date.now(), locked: false, reason: null });
+        goToLogin();
+        return;
+      }
+
+      // Billing lock (trial/past_due/unpaid/cancelled) → backend trialGuard vrací 402
+      if (s === 402) {
+        // Zachováme kompatibilitu s existujícím UI, které očekává TrialExpired.
+        // (Do budoucna můžeme přepnout na BillingLocked, až bude UI připravené.)
+        const reason = "TrialExpired";
+        setGateCache({ ts: Date.now(), locked: true, reason });
+        rememberPaywall(reason);
+        goToBillingHub();
+        return;
+      }
+    }
+
+    // ---------- LOCAL FETCH (for trainings endpoints) ----------
+
     async function apiFetch(path, { method = "GET", body = null } = {}) {
       const token = getToken();
       const headers = { "Accept": "application/json" };
+
+      const cid = getCompanyId();
+      if (cid) headers["x-company-id"] = cid;
+
       if (token) headers["Authorization"] = "Bearer " + token;
       if (body != null) headers["Content-Type"] = "application/json";
 
@@ -78,6 +178,9 @@
       }
 
       if (!res.ok) {
+        // sjednocené side effects (401/402)
+        handleAuthAndBillingSideEffects(res.status);
+
         const msg =
           (json && (json.error || json.message)) ||
           `HTTP ${res.status}`;
@@ -226,6 +329,7 @@
           } catch (err) {
             console.error(err);
             if (err?.status === 401) setTrMsg("Nepřihlášeno (401). Přihlas se znovu.", "error");
+            else if (err?.status === 402) setTrMsg("Přístup blokovaný billingem (402).", "error");
             else if (err?.status === 403) setTrMsg("Nemáš oprávnění (403).", "error");
             else setTrMsg(`Chyba: ${err.message}`, "error");
           }
@@ -272,6 +376,7 @@
         } catch (err) {
           console.error(err);
           if (err?.status === 401) setTrMsg("Nepřihlášeno (401). Přihlas se znovu.", "error");
+          else if (err?.status === 402) setTrMsg("Přístup blokovaný billingem (402).", "error");
           else if (err?.status === 403) setTrMsg("Nemáš oprávnění (403).", "error");
           else setTrMsg(`Chyba: ${err.message}`, "error");
         } finally {
