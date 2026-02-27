@@ -94,6 +94,13 @@
       elEmptyBox.innerHTML = "";
     }
 
+    function openEmployeeDetail(emp) {
+      const id = String(emp?.id ?? "").trim();
+      if (!id) return;
+      // Detail očekává canonical id (ne email)
+      location.href = `./employee.html?id=${encodeURIComponent(id)}`;
+    }
+
     function renderRows(list) {
       elBody.innerHTML = "";
       clearEmpty();
@@ -109,6 +116,10 @@
 
       for (const e of list) {
         const tr = document.createElement("tr");
+        tr.style.cursor = "pointer";
+        tr.title = "Otevřít detail zaměstnance";
+
+        tr.addEventListener("click", () => openEmployeeDetail(e));
 
         const tdName = document.createElement("td");
         tdName.textContent = e?.name ?? "—";
