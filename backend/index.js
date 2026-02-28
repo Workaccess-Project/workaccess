@@ -39,6 +39,10 @@ import { requireTenant } from "./middleware/require-tenant.js";
 // TRIAL GUARD
 import { trialGuard } from "./middleware/trial-guard.js";
 
+// OBSERVE GUARDS (no enforcement)
+import { roleGuardObserve } from "./middleware/role-guard-observe.js";
+import { featureGuardObserve } from "./middleware/feature-guard-observe.js";
+
 // ERROR HANDLER
 import { errorHandler } from "./middleware/error-handler.js";
 
@@ -303,6 +307,10 @@ app.use("/api/auth", authLimiter, authRouter);
 
 // --- Tenant enforcement for everything else ---
 app.use(requireTenant);
+
+// --- Observe guards (no enforcement, optional logging) ---
+app.use(roleGuardObserve);
+app.use(featureGuardObserve);
 
 // --- Trial guard ---
 app.use(trialGuard);
