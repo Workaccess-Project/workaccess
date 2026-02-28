@@ -14,11 +14,11 @@
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Tarif a přístup</h1>
         <div class="small" style="opacity:.85;">
-          Pokud trial vyprší, některé moduly mohou být uzamčené, dokud nebude aktivní tarif.
+          Pokud vyprší trial nebo firma narazí na limit tarifu, některé akce mohou být uzamčené, dokud nebude aktivní tarif.
         </div>
       </div>
 
-      <!-- Paywall / status box -->
+      <!-- Status / paywall box -->
       <div class="section" id="boxPaywall" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; justify-content:space-between;">
           <div style="min-width:240px;">
@@ -32,20 +32,19 @@
           </div>
         </div>
 
-        <!-- external info -->
-        <div id="externalNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
-          Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera/HR ve firmě.
+        <div id="noRightsNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
+          Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera ve firmě.
         </div>
       </div>
 
       <!-- Benefits -->
-      <div class="section" id="benefitsBox" style="border-top:1px solid var(--border); padding-top:12px;">
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Co získáte aktivací tarifu</div>
         <ul class="small" style="margin:0; padding-left:18px; line-height:1.55; opacity:.92;">
           <li>Plný přístup ke všem modulům i po skončení trialu.</li>
           <li>Hlídání expirací školení a oprávnění bez ruční práce.</li>
           <li>Bezpečné uchování dokumentů zaměstnanců a firmy.</li>
-          <li>Audit odeslaných dat (kdo, kdy, co).</li>
+          <li>Audit odeslaných změn (kdo, kdy, co).</li>
           <li>Notifikace a automatizace (digesty, upozornění).</li>
         </ul>
       </div>
@@ -58,7 +57,7 @@
       </div>
 
       <div class="section small" style="opacity:.7;">
-        Tip: Pokud tě systém přesměroval sem, firma má uzamčený přístup kvůli expirovanému trialu.
+        Tip: Pokud tě systém přesměroval sem, uložil si do session „důvod“ (trial nebo limit tarifu). Tady to zobrazíme jasně.
       </div>
     </div>
   </div>
@@ -66,7 +65,8 @@
   <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js"></script>
+  <!-- cache-bust aby se nebrala stará verze api.js z cache -->
+  <script src="./api.js?v=59.5"></script>
 
   <script>
     WA_NAV.renderNav("billing");
@@ -79,7 +79,7 @@
     const elBtnCancel = document.getElementById("btnCancel");
     const elBtnRefresh = document.getElementById("btnRefresh");
 
-    const elExternalNotice = document.getElementById("externalNotice");
+    const elNoRightsNotice = document.getElementById("noRightsNotice");
 
     const elStatusLine = document.getElementById("statusLine");
     const elDetails = document.getElementById("details");
@@ -131,12 +131,6 @@
       elBoxPaywall.style.background = bg;
     }
 
-    function hidePaywall() {
-      elBoxPaywall.style.display = "none";
-      elPaywallTitle.textContent = "—";
-      elPaywallText.textContent = "";
-    }
-
     function setDetailsHtml(html) {
       elDetails.innerHTML = html || "";
     }
@@ -158,24 +152,91 @@
       } catch {}
     }
 
-    function isExternalRole() {
+    function roleKey() {
       try {
-        return (WA_NAV.getRole() || "") === "external";
+        return String(WA_NAV.getRole() || "").trim();
       } catch {
-        return false;
+        return "";
       }
     }
 
-    function applyRoleUi() {
-      const external = isExternalRole();
-      elExternalNotice.style.display = external ? "" : "none";
+    function canManageBilling(role) {
+      // backend je dnes requireRole(["manager"]) – admin/owner bereme jako kompatibilní, pokud existuje
+      return ["manager", "admin", "owner"].includes(String(role || "").toLowerCase());
+    }
 
-      if (external) {
+    function applyRoleUi() {
+      const role = roleKey();
+      const canManage = canManageBilling(role);
+
+      elNoRightsNotice.style.display = canManage ? "none" : "";
+      if (!canManage) {
         elBtnActivate.style.display = "none";
         elBtnCancel.style.display = "none";
       }
+      return { role, canManage };
+    }
 
-      return external;
+    function computeFromStatus(s) {
+      // backend: { billing, isLocked, legacy: { trial, subscription } }
+      const billing = s?.billing || null;
+      const legacyTrial = s?.legacy?.trial || null;
+      const legacySub = s?.legacy?.subscription || null;
+
+      const plan = (billing?.plan || legacySub?.plan || "").toString().trim(); // "basic"/"pro"/"enterprise"/"trial"
+      const billingStatus = (billing?.billingStatus || "").toString().trim(); // "active"/...
+
+      const trialEndsAt = (billing?.trialEndsAt || legacyTrial?.end || "").toString().trim();
+      const trialExpired = (() => {
+        if (billing && String(billing.plan || "").toLowerCase() === "trial") {
+          if (!trialEndsAt) return false;
+          return new Date(trialEndsAt).getTime() < Date.now();
+        }
+        return !!legacyTrial?.expired;
+      })();
+
+      const subActive = (() => {
+        // Canonical: aktivní tarif = billingStatus active a plan není "trial"
+        if (billing) {
+          const p = String(billing.plan || "").toLowerCase();
+          if (billingStatus.toLowerCase() === "active" && p && p !== "trial") return true;
+        }
+        // Fallback: legacy snapshot
+        return !!legacySub?.active;
+      })();
+
+      const subEnd = (legacySub?.end || "").toString().trim();
+
+      const locked = !!s?.isLocked || (trialExpired && !subActive);
+
+      return { plan, billingStatus, trialEndsAt, trialExpired, subActive, subEnd, locked };
+    }
+
+    function showHintIfAny({ canManage }) {
+      const hint = readPaywallHint();
+      if (!hint.flagged) return null;
+
+      const r = String(hint.reason || "").trim();
+      if (r === "USER_LIMIT_REACHED") {
+        showPaywall(
+          "Limit uživatelů dosažen",
+          canManage
+            ? "Firma narazila na limit uživatelů pro aktuální tarif. Pro pokračování je potřeba vyšší tarif."
+            : "Firma narazila na limit uživatelů pro aktuální tarif. Kontaktujte prosím manažera ve firmě.",
+          "warn"
+        );
+        return r;
+      }
+
+      // default: TrialExpired
+      showPaywall(
+        canManage ? "Trial vypršel" : "Trial vypršel (bez oprávnění)",
+        canManage
+          ? "Trial vypršel – pro pokračování aktivuj tarif."
+          : "Trial vypršel – přístup firmy je uzamčený. Kontaktuj prosím manažera ve firmě.",
+        "error"
+      );
+      return r || "TrialExpired";
     }
 
     async function refresh() {
@@ -183,66 +244,60 @@
       elBtnActivate.disabled = false;
       elBtnCancel.disabled = false;
 
-      const external = applyRoleUi();
+      const ui = applyRoleUi();
 
-      // Pokud sem přišel redirect z gate, ukážeme vysvětlení hned (ještě před fetch)
-      const hint = readPaywallHint();
-      if (hint.flagged) {
-        const t = external ? "Přístup omezen (externista)" : "Přístup omezen";
-        const msg = external
-          ? "Trial vypršel – přístup firmy je uzamčený. Kontaktuj prosím manažera/HR, ať aktivuje tarif."
-          : "Trial vypršel – pro pokračování aktivuj tarif.";
-        showPaywall(t, msg, "error");
-      }
+      // Pokud sem přišel redirect z gate, ukaž hned (ještě před fetchem)
+      showHintIfAny(ui);
 
       try {
         const s = await WA_API.getBillingStatus();
+        const st = computeFromStatus(s);
 
-        const trialEnd = s?.trial?.end || "";
-        const trialExpired = !!s?.trial?.expired;
-
-        const subActive = !!s?.subscription?.active;
-        const subEnd = s?.subscription?.end || "";
-        const plan = s?.subscription?.plan || "";
-
-        if (subActive) {
+        // UI rozhodnutí
+        if (st.subActive) {
           showPaywall(
             "Tarif aktivní",
-            `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`,
+            `Tarif: ${st.plan || "—"} • aktivní (billingStatus: ${st.billingStatus || "—"})`,
             "ok"
           );
-          elBtnCancel.style.display = external ? "none" : "";
+          elBtnCancel.style.display = ui.canManage ? "" : "none";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
-        } else if (trialExpired) {
-          if (external) {
+        } else if (st.locked || st.trialExpired) {
+          if (ui.canManage) {
             showPaywall(
-              "Trial vypršel (externista)",
-              `Trial vypršel ${fmtDate(trialEnd)}. Nemáš oprávnění spravovat tarif – kontaktuj manažera/HR.`,
-              "error"
-            );
-            elBtnActivate.style.display = "none";
-            elBtnCancel.style.display = "none";
-          } else {
-            showPaywall(
-              "Trial vypršel",
-              `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivuj tarif.`,
+              "Přístup uzamčen",
+              st.trialExpired
+                ? `Trial vypršel ${fmtDate(st.trialEndsAt) || "—"}. Pro pokračování aktivuj tarif.`
+                : "Přístup firmy je omezený kvůli billing statusu. Aktivuj tarif.",
               "error"
             );
             elBtnActivate.style.display = "";
             elBtnCancel.style.display = "none";
+          } else {
+            showPaywall(
+              "Přístup uzamčen",
+              "Nemáš oprávnění spravovat tarif. Kontaktuj prosím manažera ve firmě.",
+              "error"
+            );
+            elBtnActivate.style.display = "none";
+            elBtnCancel.style.display = "none";
           }
         } else {
-          const left = daysLeft(trialEnd);
+          const left = daysLeft(st.trialEndsAt);
           if (left != null) {
             const kind = left <= 3 ? "warn" : "info";
             showPaywall(
               "Trial běží",
-              `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dní).`,
+              `Trial končí ${fmtDate(st.trialEndsAt)} (zbývá ~${left} dnů).`,
               kind
             );
           } else {
-            hidePaywall();
+            showPaywall(
+              "Stav tarifu",
+              "Trial/platba nejsou jednoznačné. Zkontroluj prosím company.billing v tenant datech.",
+              "warn"
+            );
           }
 
           elBtnActivate.style.display = "none";
@@ -252,18 +307,20 @@
 
         setDetailsHtml(`
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <span class="pill">role: ${esc(WA_NAV.getRole())}</span>
-            <span class="pill">trial: ${esc(trialExpired ? "expired" : "active")}</span>
-            <span class="pill">trialEnd: ${esc(trialEnd ? fmtDate(trialEnd) : "—")}</span>
-            <span class="pill">subscription: ${esc(subActive ? "active" : "inactive")}</span>
-            <span class="pill">plan: ${esc(plan || "—")}</span>
-            <span class="pill">subEnd: ${esc(subEnd ? fmtDate(subEnd) : "—")}</span>
+            <span class="pill">role: ${esc(ui.role || "—")}</span>
+            <span class="pill">locked: ${esc(st.locked ? "yes" : "no")}</span>
+            <span class="pill">trial: ${esc(st.trialExpired ? "expired" : "active")}</span>
+            <span class="pill">trialEnd: ${esc(st.trialEndsAt ? fmtDate(st.trialEndsAt) : "—")}</span>
+            <span class="pill">subscription: ${esc(st.subActive ? "active" : "inactive")}</span>
+            <span class="pill">plan: ${esc(st.plan || "—")}</span>
+            <span class="pill">billingStatus: ${esc(st.billingStatus || "—")}</span>
+            <span class="pill">subEnd(legacy): ${esc(st.subEnd ? fmtDate(st.subEnd) : "—")}</span>
           </div>
         `);
 
         elStatusLine.textContent = "OK";
       } catch (e) {
-        showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "warn");
+        showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "error");
         setDetailsHtml(`<span class="pill">error</span> ${esc(e?.message || e)}`);
         elStatusLine.textContent = "Chyba";
       }
