@@ -1,7 +1,7 @@
 // frontend/api.js
 // Centralizovaná gateway pro volání backendu.
 //
-// Produkční disciplína (BOX #51):
+// Produkční disciplína:
 // - JWT je primární auth (wa_auth_token).
 // - V produkci (reverse proxy /api) nepoužíváme DEMO x-role fallback.
 // - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na /login (pretty URL).
@@ -92,6 +92,7 @@
       };
     }
 
+    // DEV fallback jen pokud jedeme proti localhost API
     if (isDevLocalApi()) {
       return {
         ...base,
@@ -293,7 +294,7 @@
     const msg = body?.error || body?.message || `${res.status} ${res.statusText}`;
     const err = new Error(msg);
     err.status = res.status;
-    err.code = body?.error || null;
+    err.code = body?.code || body?.error || null;
     err.body = body || null;
     return err;
   }
@@ -309,6 +310,15 @@
     if (isTrialExpiredError(err)) {
       setGateCache({ ts: Date.now(), locked: true, reason: "TrialExpired" });
       rememberPaywall("TrialExpired");
+      if (!isAllowlistedPage()) goToBillingHub();
+      return;
+    }
+
+    // User limit enforcement (BOX #58) používá také 402
+    // Pokud přijde 402 z /employees kvůli limitu, chceme stejné chování: redirect na billing.
+    if (Number(err?.status || 0) === 402) {
+      setGateCache({ ts: Date.now(), locked: true, reason: safeString(err?.body?.error) || "BillingRequired" });
+      rememberPaywall(safeString(err?.body?.code) || "BillingRequired");
       if (!isAllowlistedPage()) goToBillingHub();
       return;
     }
@@ -368,12 +378,21 @@
 
   const billingCancel = () => apiFetch("/billing/cancel", { method: "POST" });
 
-  // --- EXISTING ENDPOINTS ---
+  // --- CORE DATA ---
   const getMe = () => apiFetch("/me");
 
+  // --- EMPLOYEES ---
   const getEmployees = () => apiFetch("/employees");
   const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
 
+  const createEmployee = (payload = {}) =>
+    apiFetch("/employees", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+
+  // --- ITEMS ---
   const getItems = () => apiFetch("/items");
   const addItem = (text) =>
     apiFetch("/items", {
@@ -448,8 +467,13 @@
 
     // data
     getMe,
+
+    // employees
     getEmployees,
     getEmployee,
+    createEmployee,
+
+    // items
     getItems,
     addItem,
     toggleItem,

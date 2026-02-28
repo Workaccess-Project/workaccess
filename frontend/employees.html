@@ -13,7 +13,7 @@
 
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Zaměstnanci</h1>
-        <div class="small">Seznam je z backendu: <code>/api/employees</code></div>
+        <div class="small" style="opacity:.9;">Přehled zaměstnanců ve firmě</div>
       </div>
 
       <div class="section">
@@ -28,7 +28,55 @@
           style="flex:1; min-width:260px;"
           autocomplete="off"
         />
-        <button class="waBtn--primary" id="btnLoad">Načíst</button>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <button class="waBtn--primary" id="btnAdd">Přidat zaměstnance</button>
+          <button id="btnLoad">Obnovit</button>
+        </div>
+      </div>
+
+      <!-- Add form -->
+      <div class="section" id="addBox" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+          <strong>Přidat zaměstnance</strong>
+          <button id="btnAddClose">Zavřít</button>
+        </div>
+
+        <div class="small" style="opacity:.85; margin-top:8px;">
+          Vyplň minimum: jméno a e-mail. Ostatní můžeš doplnit později.
+        </div>
+
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:12px;">
+          <div>
+            <label class="small" for="addName">Jméno</label>
+            <input id="addName" type="text" placeholder="Jan Novák" />
+          </div>
+          <div>
+            <label class="small" for="addEmail">Email</label>
+            <input id="addEmail" type="email" placeholder="jan@firma.cz" />
+          </div>
+          <div>
+            <label class="small" for="addDept">Oddělení</label>
+            <input id="addDept" type="text" placeholder="např. Výroba / Obchod" />
+          </div>
+          <div>
+            <label class="small" for="addPos">Pozice</label>
+            <input id="addPos" type="text" placeholder="např. Technik" />
+          </div>
+          <div>
+            <label class="small" for="addRole">Role</label>
+            <select id="addRole">
+              <option value="hr">HR</option>
+              <option value="manager" selected>Manager</option>
+              <option value="security">Security</option>
+              <option value="external">External</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:10px;">
+            <button class="waBtn--primary" id="btnAddSubmit" style="flex:1;">Vytvořit</button>
+          </div>
+        </div>
+
+        <div id="addMsg" class="small" style="margin-top:10px;"></div>
       </div>
 
       <div class="section small" id="meta"></div>
@@ -68,6 +116,28 @@
     const elBody = document.getElementById("tbody");
     const elEmptyBox = document.getElementById("emptyBox");
 
+    // add UI
+    const elAddBox = document.getElementById("addBox");
+    const elBtnAdd = document.getElementById("btnAdd");
+    const elBtnAddClose = document.getElementById("btnAddClose");
+    const elBtnAddSubmit = document.getElementById("btnAddSubmit");
+    const elAddMsg = document.getElementById("addMsg");
+
+    const elAddName = document.getElementById("addName");
+    const elAddEmail = document.getElementById("addEmail");
+    const elAddDept = document.getElementById("addDept");
+    const elAddPos = document.getElementById("addPos");
+    const elAddRole = document.getElementById("addRole");
+
+    function esc(s) {
+      return String(s ?? "")
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
     function roleLabel(roleKey) {
       const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
       return map[roleKey] || roleKey;
@@ -97,7 +167,6 @@
     function openEmployeeDetail(emp) {
       const id = String(emp?.id ?? "").trim();
       if (!id) return;
-      // Detail očekává canonical id (ne email)
       location.href = `./employee.html?id=${encodeURIComponent(id)}`;
     }
 
@@ -118,7 +187,6 @@
         const tr = document.createElement("tr");
         tr.style.cursor = "pointer";
         tr.title = "Otevřít detail zaměstnance";
-
         tr.addEventListener("click", () => openEmployeeDetail(e));
 
         const tdName = document.createElement("td");
@@ -149,6 +217,31 @@
     function setControlsEnabled(enabled) {
       elBtnLoad.disabled = !enabled;
       elQ.disabled = !enabled;
+
+      elBtnAdd.disabled = !enabled;
+      elBtnAddClose.disabled = !enabled;
+      elBtnAddSubmit.disabled = !enabled;
+    }
+
+    function showAddBox(show) {
+      elAddBox.style.display = show ? "" : "none";
+      elAddMsg.textContent = "";
+      elAddMsg.style.color = "";
+
+      if (show) {
+        setTimeout(() => elAddName.focus(), 50);
+      }
+    }
+
+    function validateAddForm() {
+      const name = normalize(elAddName.value);
+      const email = normalize(elAddEmail.value);
+
+      if (!name) return { ok: false, message: "Vyplň jméno." };
+      if (!email) return { ok: false, message: "Vyplň e-mail." };
+      if (!email.includes("@")) return { ok: false, message: "E-mail nevypadá správně." };
+
+      return { ok: true };
     }
 
     async function load() {
@@ -191,10 +284,60 @@
       }
     }
 
+    async function submitAdd() {
+      const v = validateAddForm();
+      if (!v.ok) {
+        elAddMsg.textContent = v.message;
+        elAddMsg.style.color = "#fb7185";
+        return;
+      }
+
+      elAddMsg.textContent = "Vytvářím…";
+      elAddMsg.style.color = "";
+
+      setControlsEnabled(false);
+
+      try {
+        const payload = {
+          name: String(elAddName.value || "").trim(),
+          email: String(elAddEmail.value || "").trim(),
+          role: String(elAddRole.value || "manager").trim(),
+          department: String(elAddDept.value || "").trim(),
+          position: String(elAddPos.value || "").trim(),
+        };
+
+        await WA_API.createEmployee(payload);
+
+        elAddMsg.textContent = "Hotovo. Obnovuji seznam…";
+        elAddMsg.style.color = "#2dd4bf";
+
+        // reset
+        elAddName.value = "";
+        elAddEmail.value = "";
+        elAddDept.value = "";
+        elAddPos.value = "";
+        elAddRole.value = "manager";
+
+        showAddBox(false);
+        await load();
+      } catch (e) {
+        // 402 bude automaticky řešen redirectem na billing (api.js side effect).
+        const msg = WA_UI_STATE.friendlyError(e);
+        elAddMsg.textContent = msg;
+        elAddMsg.style.color = "#fb7185";
+      } finally {
+        setControlsEnabled(true);
+      }
+    }
+
     elBtnLoad.addEventListener("click", load);
     elQ.addEventListener("keydown", (e) => {
       if (e.key === "Enter") load();
     });
+
+    elBtnAdd.addEventListener("click", () => showAddBox(true));
+    elBtnAddClose.addEventListener("click", () => showAddBox(false));
+    elBtnAddSubmit.addEventListener("click", submitAdd);
 
     // init
     load();
