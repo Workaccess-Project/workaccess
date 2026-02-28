@@ -104,7 +104,9 @@
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
   <script src="./js/wa_ui_state.js"></script>
-  <script src="./api.js"></script>
+
+  <!-- cache-bust: vynutí načtení nové verze api.js -->
+  <script src="./api.js?v=59.4"></script>
 
   <script>
     WA_NAV.renderNav("employees");
@@ -128,15 +130,6 @@
     const elAddDept = document.getElementById("addDept");
     const elAddPos = document.getElementById("addPos");
     const elAddRole = document.getElementById("addRole");
-
-    function esc(s) {
-      return String(s ?? "")
-        .replaceAll("&", "&amp;")
-        .replaceAll("<", "&lt;")
-        .replaceAll(">", "&gt;")
-        .replaceAll('"', "&quot;")
-        .replaceAll("'", "&#039;");
-    }
 
     function roleLabel(roleKey) {
       const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
@@ -321,7 +314,6 @@
         showAddBox(false);
         await load();
       } catch (e) {
-        // 402 bude automaticky řešen redirectem na billing (api.js side effect).
         const msg = WA_UI_STATE.friendlyError(e);
         elAddMsg.textContent = msg;
         elAddMsg.style.color = "#fb7185";
