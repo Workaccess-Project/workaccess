@@ -29,12 +29,34 @@ function asArray(v) {
   return Array.isArray(v) ? v : [];
 }
 
+function safeString(v) {
+  return (v ?? "").toString().trim();
+}
+
 function normalizeEmployeeBody(body = {}) {
+  const name = safeString(body?.name ?? body?.username) || "-";
+  const email = safeString(body?.email);
+
+  // FE používá "department". Dřív se ukládalo i jako "company".
+  const department =
+    safeString(body?.department ?? body?.company) ||
+    safeString(body?.team) ||
+    "-";
+
+  const position =
+    safeString(body?.position ?? body?.jobTitle ?? body?.role) || "-";
+
+  const status = safeString(body?.status) || "-";
+
   return {
-    name: (body?.name ?? body?.username ?? "").toString().trim() || "-",
-    email: (body?.email ?? "").toString().trim() || "",
-    company: (body?.company ?? body?.department ?? "").toString().trim() || "-",
-    position: (body?.position ?? body?.role ?? "").toString().trim() || "-",
+    name,
+    email,
+    department,
+    position,
+    status,
+
+    // backward compat: některé starší části mohly číst "company"
+    company: department,
   };
 }
 
@@ -43,6 +65,7 @@ function ensureTrainingIds(employees) {
 
   for (const emp of employees) {
     const trainings = asArray(emp?.trainings);
+
     for (const t of trainings) {
       if (!t.id) {
         t.id = makeId("trn");
@@ -52,6 +75,7 @@ function ensureTrainingIds(employees) {
       if (t.validFrom != null) t.validFrom = String(t.validFrom);
       if (t.validTo != null) t.validTo = String(t.validTo);
     }
+
     if (emp.trainings !== trainings) {
       emp.trainings = trainings;
       changed = true;
@@ -82,16 +106,33 @@ function findById(arr, id) {
 }
 
 function getMaxEmployeesForPlan(planRaw) {
-  const p = (planRaw ?? "").toString().trim().toLowerCase();
-  if (p === "pro") return 10;
+  const p = safeString(planRaw).toLowerCase();
+
   if (p === "enterprise") return Infinity;
+  if (p === "pro") return 10;
 
   // SAFE DEFAULTS (trial + basic -> 3)
   if (p === "trial") return 3;
   if (p === "basic") return 3;
 
+  // legacy mapping (kdyby někde zůstalo)
+  if (p === "free") return 3;
+
   // Unknown plan -> safest is basic limit
   return 3;
+}
+
+function resolvePlanForLimits(companyProfile) {
+  // primárně v36 billing
+  const p36 = safeString(companyProfile?.billing?.plan);
+  if (p36) return p36;
+
+  // legacy fallback
+  const legacy = safeString(companyProfile?.plan);
+  if (legacy) return legacy;
+
+  // nejbezpečnější default
+  return "basic";
 }
 
 // --- API ---
@@ -106,9 +147,11 @@ export async function getEmployeeById({ companyId, id }) {
 }
 
 export async function createEmployee({ companyId, actorRole, body }) {
-  // Enforce plan user limit (SAFE: uses FE-supported 402 redirect to /billing)
+  // Enforce plan user limit (SAFE: FE má 402 -> redirect /billing)
   const company = await getCompanyProfile(companyId);
-  const maxUsers = getMaxEmployeesForPlan(company?.billing?.plan);
+
+  const plan = resolvePlanForLimits(company);
+  const maxUsers = getMaxEmployeesForPlan(plan);
 
   const employees = await readEmployees(companyId);
   const currentCount = employees.length;
@@ -122,7 +165,8 @@ export async function createEmployee({ companyId, actorRole, body }) {
       message: "User limit reached for current plan. Upgrade required.",
       current: currentCount,
       max: maxUsers,
-      plan: company?.billing?.plan ?? "",
+      plan,
+      companyId,
     };
     throw err;
   }
@@ -164,12 +208,19 @@ export async function updateEmployee({ companyId, actorRole, id, body }) {
   }
 
   const before = { ...employees[idx] };
+
+  // patch jen “profile” fields
   const patch = normalizeEmployeeBody({ ...before, ...body });
+
+  // trainings opravíme jen když je FE pošle jako array
+  const nextTrainings = Array.isArray(body?.trainings)
+    ? body.trainings
+    : asArray(employees[idx].trainings);
 
   const next = {
     ...employees[idx],
     ...patch,
-    trainings: asArray(body?.trainings) ? body.trainings : asArray(employees[idx].trainings),
+    trainings: nextTrainings,
     updatedAt: nowIso(),
   };
 
@@ -249,7 +300,6 @@ export async function addTraining({ companyId, actorRole, employeeId, body }) {
     throw err;
   }
 
-  const empBefore = { ...employees[idx] };
   const trainings = asArray(employees[idx].trainings);
 
   const createdTraining = { id: makeId("trn"), name, validFrom, validTo };
