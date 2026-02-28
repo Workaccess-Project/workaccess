@@ -18,7 +18,7 @@
         </div>
       </div>
 
-      <!-- Status / paywall box -->
+      <!-- Paywall / status box -->
       <div class="section" id="boxPaywall" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; justify-content:space-between;">
           <div style="min-width:240px;">
@@ -32,13 +32,14 @@
           </div>
         </div>
 
-        <div id="noRightsNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
-          Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera ve firmě.
+        <!-- external info -->
+        <div id="externalNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
+          Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera/HR ve firmě.
         </div>
       </div>
 
       <!-- Benefits -->
-      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+      <div class="section" id="benefitsBox" style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Co získáte aktivací tarifu</div>
         <ul class="small" style="margin:0; padding-left:18px; line-height:1.55; opacity:.92;">
           <li>Plný přístup ke všem modulům i po skončení trialu.</li>
@@ -65,8 +66,7 @@
   <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <!-- cache-bust aby se nebrala stará verze api.js z cache -->
-  <script src="./api.js?v=59.5"></script>
+  <script src="./api.js?v=59.6"></script>
 
   <script>
     WA_NAV.renderNav("billing");
@@ -79,7 +79,7 @@
     const elBtnCancel = document.getElementById("btnCancel");
     const elBtnRefresh = document.getElementById("btnRefresh");
 
-    const elNoRightsNotice = document.getElementById("noRightsNotice");
+    const elExternalNotice = document.getElementById("externalNotice");
 
     const elStatusLine = document.getElementById("statusLine");
     const elDetails = document.getElementById("details");
@@ -131,6 +131,12 @@
       elBoxPaywall.style.background = bg;
     }
 
+    function hidePaywall() {
+      elBoxPaywall.style.display = "none";
+      elPaywallTitle.textContent = "—";
+      elPaywallText.textContent = "";
+    }
+
     function setDetailsHtml(html) {
       elDetails.innerHTML = html || "";
     }
@@ -152,91 +158,67 @@
       } catch {}
     }
 
-    function roleKey() {
+    function isExternalRole() {
       try {
-        return String(WA_NAV.getRole() || "").trim();
+        return (WA_NAV.getRole() || "") === "external";
       } catch {
-        return "";
+        return false;
       }
-    }
-
-    function canManageBilling(role) {
-      // backend je dnes requireRole(["manager"]) – admin/owner bereme jako kompatibilní, pokud existuje
-      return ["manager", "admin", "owner"].includes(String(role || "").toLowerCase());
     }
 
     function applyRoleUi() {
-      const role = roleKey();
-      const canManage = canManageBilling(role);
+      const external = isExternalRole();
+      elExternalNotice.style.display = external ? "" : "none";
 
-      elNoRightsNotice.style.display = canManage ? "none" : "";
-      if (!canManage) {
+      if (external) {
         elBtnActivate.style.display = "none";
         elBtnCancel.style.display = "none";
       }
-      return { role, canManage };
+
+      return external;
     }
 
-    function computeFromStatus(s) {
-      // backend: { billing, isLocked, legacy: { trial, subscription } }
-      const billing = s?.billing || null;
+    function pickBillingSnapshot(s) {
+      // v36 canonical
+      const billing = (s && typeof s.billing === "object") ? s.billing : null;
+      const plan = String(billing?.plan || "").trim();
+      const billingStatus = String(billing?.billingStatus || "").trim();
+      const trialEndsAt = String(billing?.trialEndsAt || "").trim();
+
+      // legacy snapshot (backend returns under legacy.*)
       const legacyTrial = s?.legacy?.trial || null;
       const legacySub = s?.legacy?.subscription || null;
 
-      const plan = (billing?.plan || legacySub?.plan || "").toString().trim(); // "basic"/"pro"/"enterprise"/"trial"
-      const billingStatus = (billing?.billingStatus || "").toString().trim(); // "active"/...
+      const legacyTrialEnd = String(legacyTrial?.end || "").trim();
+      const legacyTrialExpired = !!legacyTrial?.expired;
 
-      const trialEndsAt = (billing?.trialEndsAt || legacyTrial?.end || "").toString().trim();
-      const trialExpired = (() => {
-        if (billing && String(billing.plan || "").toLowerCase() === "trial") {
-          if (!trialEndsAt) return false;
-          return new Date(trialEndsAt).getTime() < Date.now();
-        }
-        return !!legacyTrial?.expired;
-      })();
+      const legacySubActive = !!legacySub?.active;
+      const legacySubEnd = String(legacySub?.end || "").trim();
+      const legacyPlan = String(legacySub?.plan || "").trim();
 
-      const subActive = (() => {
-        // Canonical: aktivní tarif = billingStatus active a plan není "trial"
-        if (billing) {
-          const p = String(billing.plan || "").toLowerCase();
-          if (billingStatus.toLowerCase() === "active" && p && p !== "trial") return true;
-        }
-        // Fallback: legacy snapshot
-        return !!legacySub?.active;
-      })();
+      // canonical: aktivní tarif = billingStatus active a plan není trial
+      const subActive =
+        (billingStatus.toLowerCase() === "active" && plan && plan.toLowerCase() !== "trial") ||
+        legacySubActive;
 
-      const subEnd = (legacySub?.end || "").toString().trim();
+      // trial state
+      const trialEnd = trialEndsAt || legacyTrialEnd || "";
+      const trialExpired =
+        legacyTrialExpired ||
+        (plan.toLowerCase() === "trial" && trialEnd && new Date(trialEnd).getTime() < Date.now());
 
+      // locked: backend canonical + fallback
       const locked = !!s?.isLocked || (trialExpired && !subActive);
 
-      return { plan, billingStatus, trialEndsAt, trialExpired, subActive, subEnd, locked };
-    }
-
-    function showHintIfAny({ canManage }) {
-      const hint = readPaywallHint();
-      if (!hint.flagged) return null;
-
-      const r = String(hint.reason || "").trim();
-      if (r === "USER_LIMIT_REACHED") {
-        showPaywall(
-          "Limit uživatelů dosažen",
-          canManage
-            ? "Firma narazila na limit uživatelů pro aktuální tarif. Pro pokračování je potřeba vyšší tarif."
-            : "Firma narazila na limit uživatelů pro aktuální tarif. Kontaktujte prosím manažera ve firmě.",
-          "warn"
-        );
-        return r;
-      }
-
-      // default: TrialExpired
-      showPaywall(
-        canManage ? "Trial vypršel" : "Trial vypršel (bez oprávnění)",
-        canManage
-          ? "Trial vypršel – pro pokračování aktivuj tarif."
-          : "Trial vypršel – přístup firmy je uzamčený. Kontaktuj prosím manažera ve firmě.",
-        "error"
-      );
-      return r || "TrialExpired";
+      return {
+        plan: plan || legacyPlan || "",
+        billingStatus,
+        trialEnd,
+        trialExpired,
+        subActive,
+        subEndLegacy: legacySubEnd,
+        locked
+      };
     }
 
     async function refresh() {
@@ -244,60 +226,74 @@
       elBtnActivate.disabled = false;
       elBtnCancel.disabled = false;
 
-      const ui = applyRoleUi();
+      const external = applyRoleUi();
 
-      // Pokud sem přišel redirect z gate, ukaž hned (ještě před fetchem)
-      showHintIfAny(ui);
+      // Hint z gate (trial nebo limit tarifu)
+      const hint = readPaywallHint();
+      if (hint.flagged) {
+        const r = String(hint.reason || "").trim();
+
+        if (r === "USER_LIMIT_REACHED") {
+          showPaywall(
+            "Limit uživatelů dosažen",
+            external
+              ? "Firma narazila na limit uživatelů pro aktuální tarif. Kontaktuj prosím manažera/HR."
+              : "Firma narazila na limit uživatelů pro aktuální tarif. Pro pokračování je potřeba vyšší tarif.",
+            "warn"
+          );
+        } else {
+          const t = external ? "Přístup omezen (externista)" : "Přístup omezen";
+          const msg = external
+            ? "Přístup firmy je uzamčený. Kontaktuj prosím manažera/HR, ať aktivuje tarif."
+            : "Přístup firmy je uzamčený – pro pokračování aktivuj tarif.";
+          showPaywall(t, msg, "error");
+        }
+      }
 
       try {
         const s = await WA_API.getBillingStatus();
-        const st = computeFromStatus(s);
+        const snap = pickBillingSnapshot(s);
 
-        // UI rozhodnutí
-        if (st.subActive) {
+        if (snap.subActive) {
           showPaywall(
             "Tarif aktivní",
-            `Tarif: ${st.plan || "—"} • aktivní (billingStatus: ${st.billingStatus || "—"})`,
+            `Tarif: ${snap.plan || "—"} • aktivní (billingStatus: ${snap.billingStatus || "—"})`,
             "ok"
           );
-          elBtnCancel.style.display = ui.canManage ? "" : "none";
+          elBtnCancel.style.display = external ? "none" : "";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
-        } else if (st.locked || st.trialExpired) {
-          if (ui.canManage) {
+        } else if (snap.locked || snap.trialExpired) {
+          if (external) {
             showPaywall(
-              "Přístup uzamčen",
-              st.trialExpired
-                ? `Trial vypršel ${fmtDate(st.trialEndsAt) || "—"}. Pro pokračování aktivuj tarif.`
-                : "Přístup firmy je omezený kvůli billing statusu. Aktivuj tarif.",
-              "error"
-            );
-            elBtnActivate.style.display = "";
-            elBtnCancel.style.display = "none";
-          } else {
-            showPaywall(
-              "Přístup uzamčen",
-              "Nemáš oprávnění spravovat tarif. Kontaktuj prosím manažera ve firmě.",
+              "Přístup uzamčen (externista)",
+              `Trial vypršel ${snap.trialEnd ? fmtDate(snap.trialEnd) : "—"}. Nemáš oprávnění spravovat tarif – kontaktuj manažera/HR.`,
               "error"
             );
             elBtnActivate.style.display = "none";
             elBtnCancel.style.display = "none";
+          } else {
+            showPaywall(
+              "Přístup uzamčen",
+              snap.trialEnd
+                ? `Trial vypršel ${fmtDate(snap.trialEnd)}. Pro pokračování aktivuj tarif.`
+                : "Přístup firmy je omezený – pro pokračování aktivuj tarif.",
+              "error"
+            );
+            elBtnActivate.style.display = "";
+            elBtnCancel.style.display = "none";
           }
         } else {
-          const left = daysLeft(st.trialEndsAt);
-          if (left != null) {
+          const left = daysLeft(snap.trialEnd);
+          if (left != null && snap.trialEnd) {
             const kind = left <= 3 ? "warn" : "info";
             showPaywall(
               "Trial běží",
-              `Trial končí ${fmtDate(st.trialEndsAt)} (zbývá ~${left} dnů).`,
+              `Trial končí ${fmtDate(snap.trialEnd)} (zbývá ~${left} dnů).`,
               kind
             );
           } else {
-            showPaywall(
-              "Stav tarifu",
-              "Trial/platba nejsou jednoznačné. Zkontroluj prosím company.billing v tenant datech.",
-              "warn"
-            );
+            hidePaywall();
           }
 
           elBtnActivate.style.display = "none";
@@ -307,20 +303,20 @@
 
         setDetailsHtml(`
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <span class="pill">role: ${esc(ui.role || "—")}</span>
-            <span class="pill">locked: ${esc(st.locked ? "yes" : "no")}</span>
-            <span class="pill">trial: ${esc(st.trialExpired ? "expired" : "active")}</span>
-            <span class="pill">trialEnd: ${esc(st.trialEndsAt ? fmtDate(st.trialEndsAt) : "—")}</span>
-            <span class="pill">subscription: ${esc(st.subActive ? "active" : "inactive")}</span>
-            <span class="pill">plan: ${esc(st.plan || "—")}</span>
-            <span class="pill">billingStatus: ${esc(st.billingStatus || "—")}</span>
-            <span class="pill">subEnd(legacy): ${esc(st.subEnd ? fmtDate(st.subEnd) : "—")}</span>
+            <span class="pill">role: ${esc(WA_NAV.getRole())}</span>
+            <span class="pill">locked: ${esc(snap.locked ? "yes" : "no")}</span>
+            <span class="pill">trial: ${esc(snap.trialExpired ? "expired" : "active")}</span>
+            <span class="pill">trialEnd: ${esc(snap.trialEnd ? fmtDate(snap.trialEnd) : "—")}</span>
+            <span class="pill">subscription: ${esc(snap.subActive ? "active" : "inactive")}</span>
+            <span class="pill">plan: ${esc(snap.plan || "—")}</span>
+            <span class="pill">billingStatus: ${esc(snap.billingStatus || "—")}</span>
+            <span class="pill">subEnd(legacy): ${esc(snap.subEndLegacy ? fmtDate(snap.subEndLegacy) : "—")}</span>
           </div>
         `);
 
         elStatusLine.textContent = "OK";
       } catch (e) {
-        showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "error");
+        showPaywall("Nelze načíst billing status", `Chyba: ${esc(e?.message || e)}`, "warn");
         setDetailsHtml(`<span class="pill">error</span> ${esc(e?.message || e)}`);
         elStatusLine.textContent = "Chyba";
       }
