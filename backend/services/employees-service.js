@@ -1,6 +1,7 @@
 // backend/services/employees-service.js
 import { readTenantEntity, writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
+import { getCompanyProfile } from "../data-company.js";
 
 const ENTITY = "employees";
 
@@ -30,10 +31,10 @@ function asArray(v) {
 
 function normalizeEmployeeBody(body = {}) {
   return {
-    name: (body?.name ?? body?.username ?? "").toString().trim() || "—",
+    name: (body?.name ?? body?.username ?? "").toString().trim() || "-",
     email: (body?.email ?? "").toString().trim() || "",
-    company: (body?.company ?? body?.department ?? "").toString().trim() || "—",
-    position: (body?.position ?? body?.role ?? "").toString().trim() || "—",
+    company: (body?.company ?? body?.department ?? "").toString().trim() || "-",
+    position: (body?.position ?? body?.role ?? "").toString().trim() || "-",
   };
 }
 
@@ -80,6 +81,19 @@ function findById(arr, id) {
   return arr.find((x) => String(x.id) === String(id)) || null;
 }
 
+function getMaxEmployeesForPlan(planRaw) {
+  const p = (planRaw ?? "").toString().trim().toLowerCase();
+  if (p === "pro") return 10;
+  if (p === "enterprise") return Infinity;
+
+  // SAFE DEFAULTS (trial + basic -> 3)
+  if (p === "trial") return 3;
+  if (p === "basic") return 3;
+
+  // Unknown plan -> safest is basic limit
+  return 3;
+}
+
 // --- API ---
 
 export async function listEmployees({ companyId }) {
@@ -92,7 +106,27 @@ export async function getEmployeeById({ companyId, id }) {
 }
 
 export async function createEmployee({ companyId, actorRole, body }) {
+  // Enforce plan user limit (SAFE: uses FE-supported 402 redirect to /billing)
+  const company = await getCompanyProfile(companyId);
+  const maxUsers = getMaxEmployeesForPlan(company?.billing?.plan);
+
   const employees = await readEmployees(companyId);
+  const currentCount = employees.length;
+
+  if (currentCount >= maxUsers) {
+    const err = new Error("User limit reached for current plan.");
+    err.status = 402;
+    err.payload = {
+      error: "BillingRequired",
+      code: "USER_LIMIT_REACHED",
+      message: "User limit reached for current plan. Upgrade required.",
+      current: currentCount,
+      max: maxUsers,
+      plan: company?.billing?.plan ?? "",
+    };
+    throw err;
+  }
+
   const base = normalizeEmployeeBody(body);
 
   const item = {
@@ -197,7 +231,11 @@ function requireTrainingFields(body) {
     e.status = 400;
     throw e;
   }
-  return { name: String(name).trim(), validFrom: String(validFrom).trim(), validTo: String(validTo).trim() };
+  return {
+    name: String(name).trim(),
+    validFrom: String(validFrom).trim(),
+    validTo: String(validTo).trim(),
+  };
 }
 
 export async function addTraining({ companyId, actorRole, employeeId, body }) {
