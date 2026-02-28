@@ -19,100 +19,51 @@
             <div class="small" id="billingBannerText" style="opacity:0.9;"></div>
           </div>
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <button class="waBtn--primary" id="btnBillingActivate" style="display:none;">Aktivovat tarif (demo)</button>
+            <button class="waBtn--primary" id="btnGoBilling" style="display:none;">Přejít na billing</button>
             <button id="btnBillingRefresh">Obnovit</button>
           </div>
         </div>
       </div>
 
       <div class="section">
-        <h1 style="font-size:18px; margin:0;">Dashboard – expirace školení</h1>
-        <div class="small">GET <code>/api/reports/trainings</code> • Audit v2: filtry + stránkování + export</div>
+        <h1 style="font-size:18px; margin:0;">Dashboard</h1>
+        <div class="small" style="opacity:.9;">Rychlý přehled a nejdůležitější akce</div>
       </div>
 
-      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <label class="small" for="days">Dní dopředu:</label>
-          <input id="days" type="number" min="1" max="365" value="30" style="width:90px;" />
-          <button class="waBtn--primary" id="btnLoad">Načíst</button>
-        </div>
-
-        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-          <span class="small">Audit:</span>
-          <span class="pill" id="auditRolePill">—</span>
-          <button id="btnAudit">Načíst audit</button>
-        </div>
+      <div class="section" style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+        <button class="waBtn--primary" id="btnEmployees">Zaměstnanci</button>
+        <button id="btnCompliance">Compliance</button>
+        <button id="btnBilling">Billing</button>
+        <span class="small" id="metaLine" style="opacity:.8;"></span>
       </div>
 
-      <!-- audit filtry -->
-      <div class="section" id="auditFilters" style="display:none; border-top:1px solid var(--border); padding-top:12px;">
-        <div class="small" style="margin-bottom:8px;">Filtry auditu (v2)</div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-          <label class="small" for="audLimit">Limit:</label>
-          <input id="audLimit" type="number" min="1" max="200" value="20" style="width:90px;" />
-
-          <label class="small" for="audActor">Actor role:</label>
-          <select id="audActor" style="min-width:160px;">
-            <option value="">(vše)</option>
-            <option value="hr">hr</option>
-            <option value="manager">manager</option>
-            <option value="security">security</option>
-            <option value="external">external</option>
-          </select>
-
-          <label class="small" for="audAction">Action (prefix):</label>
-          <input id="audAction" type="text" placeholder="např. employee." style="min-width:220px;" />
-
-          <label class="small" for="audEntityType">Entity type:</label>
-          <input id="audEntityType" type="text" placeholder="employee / training / item" style="min-width:190px;" />
-
-          <label class="small" for="audEntityId">Entity id:</label>
-          <input id="audEntityId" type="text" placeholder="id…" style="min-width:190px;" />
-        </div>
-
-        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; margin-top:10px;">
-          <button class="waBtn--primary" id="btnAuditReload">Filtrovat</button>
-          <button id="btnAuditMore" disabled>Načíst další</button>
-          <button id="btnAuditExport">Export CSV</button>
-          <span class="small" id="audStatus" style="opacity:0.8;"></span>
-        </div>
-      </div>
-
-      <div class="section small" id="metaLine"></div>
-
-      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px;">
+      <div class="section" style="display:grid; grid-template-columns: 1fr 1fr 1fr; gap:10px;">
         <div class="card" style="padding:12px;">
           <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>Propadlé</strong>
-            <span class="pill" id="cntExpired">0</span>
-          </div>
-          <div id="boxExpired" class="small" style="margin-top:10px;"></div>
-        </div>
-
-        <div class="card" style="padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>Končí brzy</strong>
-            <span class="pill" id="cntSoon">0</span>
-          </div>
-          <div id="boxSoon" class="small" style="margin-top:10px;"></div>
-        </div>
-
-        <div class="card" style="padding:12px;">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>Audit (poslední změny)</strong>
-            <span class="pill" id="cntAudit">0</span>
-          </div>
-          <div id="boxAudit" class="small" style="margin-top:10px;"></div>
-        </div>
-
-        <!-- Compliance přehled (klikací) -->
-        <div class="card" id="complianceCard" style="padding:12px; cursor:pointer;" title="Klikni pro detail compliance">
-          <div style="display:flex; justify-content:space-between; align-items:center;">
-            <strong>Compliance přehled</strong>
+            <strong>Compliance</strong>
             <span class="pill" id="cntCompliance">0</span>
           </div>
           <div id="boxCompliance" class="small" style="margin-top:10px;">Načítám…</div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Stav tarifu</strong>
+            <span class="pill" id="pillPlan">—</span>
+          </div>
+          <div id="boxPlan" class="small" style="margin-top:10px;">Načítám…</div>
+        </div>
+
+        <div class="card" style="padding:12px;">
+          <div style="display:flex; justify-content:space-between; align-items:center;">
+            <strong>Rychlé tipy</strong>
+            <span class="pill">pilot</span>
+          </div>
+          <div class="small" style="margin-top:10px; opacity:.9;">
+            <div>• Začni přidáním zaměstnanců</div>
+            <div>• Zkontroluj compliance přehled</div>
+            <div>• Pokud narazíš na limit, otevři billing</div>
+          </div>
         </div>
       </div>
     </div>
@@ -125,48 +76,27 @@
   <script>
     WA_NAV.renderNav("dashboard");
 
-    const elDays = document.getElementById("days");
-    const elBtnLoad = document.getElementById("btnLoad");
-    const elBtnAudit = document.getElementById("btnAudit");
     const elMetaLine = document.getElementById("metaLine");
 
-    const elAuditRolePill = document.getElementById("auditRolePill");
-
-    const elCntExpired = document.getElementById("cntExpired");
-    const elCntSoon = document.getElementById("cntSoon");
-    const elCntAudit = document.getElementById("cntAudit");
-
-    const elBoxExpired = document.getElementById("boxExpired");
-    const elBoxSoon = document.getElementById("boxSoon");
-    const elBoxAudit = document.getElementById("boxAudit");
-
+    // compliance
     const elCntCompliance = document.getElementById("cntCompliance");
     const elBoxCompliance = document.getElementById("boxCompliance");
-    const elComplianceCard = document.getElementById("complianceCard");
+
+    // plan
+    const elPillPlan = document.getElementById("pillPlan");
+    const elBoxPlan = document.getElementById("boxPlan");
+
+    // actions
+    const elBtnEmployees = document.getElementById("btnEmployees");
+    const elBtnCompliance = document.getElementById("btnCompliance");
+    const elBtnBilling = document.getElementById("btnBilling");
 
     // billing banner
     const elBillingBanner = document.getElementById("billingBanner");
     const elBillingBannerTitle = document.getElementById("billingBannerTitle");
     const elBillingBannerText = document.getElementById("billingBannerText");
-    const elBtnBillingActivate = document.getElementById("btnBillingActivate");
+    const elBtnGoBilling = document.getElementById("btnGoBilling");
     const elBtnBillingRefresh = document.getElementById("btnBillingRefresh");
-
-    // audit controls
-    const elAuditFilters = document.getElementById("auditFilters");
-    const elAudLimit = document.getElementById("audLimit");
-    const elAudActor = document.getElementById("audActor");
-    const elAudAction = document.getElementById("audAction");
-    const elAudEntityType = document.getElementById("audEntityType");
-    const elAudEntityId = document.getElementById("audEntityId");
-
-    const elBtnAuditReload = document.getElementById("btnAuditReload");
-    const elBtnAuditMore = document.getElementById("btnAuditMore");
-    const elBtnAuditExport = document.getElementById("btnAuditExport");
-    const elAudStatus = document.getElementById("audStatus");
-
-    let AUDIT_NEXT_CURSOR = null;
-    let AUDIT_LAST_PARAMS = null;
-    let AUDIT_ITEMS = [];
 
     function esc(s) {
       return String(s ?? "")
@@ -175,11 +105,6 @@
         .replaceAll(">", "&gt;")
         .replaceAll('"', "&quot;")
         .replaceAll("'", "&#039;");
-    }
-
-    function roleLabel(roleKey) {
-      const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
-      return map[roleKey] || roleKey;
     }
 
     function fmtDate(iso) {
@@ -199,7 +124,7 @@
       return Math.ceil(diffMs / (24 * 60 * 60 * 1000));
     }
 
-    function showBanner({ title, text, kind = "info", showActivate = false } = {}) {
+    function showBanner({ title, text, kind = "info", showGoBilling = false } = {}) {
       elBillingBanner.style.display = "";
       elBillingBannerTitle.textContent = title || "—";
       elBillingBannerText.textContent = text || "";
@@ -219,117 +144,7 @@
       elBillingBanner.style.borderColor = border;
       elBillingBanner.style.background = bg;
 
-      elBtnBillingActivate.style.display = showActivate ? "" : "none";
-    }
-
-    function setCounts(expired, soon, audit) {
-      elCntExpired.textContent = String(expired);
-      elCntSoon.textContent = String(soon);
-      elCntAudit.textContent = String(audit);
-    }
-
-    function renderTrainingsStub(role) {
-      elBoxExpired.innerHTML = `<div class="pill">role: ${esc(role)}</div>`;
-      elBoxSoon.innerHTML = `Nic.`;
-    }
-
-    function buildAuditParams(includeCursor) {
-      const limit = Math.max(1, Math.min(200, Number(elAudLimit.value || 20) || 20));
-      const actorRole = (elAudActor.value || "").trim();
-      const action = (elAudAction.value || "").trim();
-      const entityType = (elAudEntityType.value || "").trim();
-      const entityId = (elAudEntityId.value || "").trim();
-
-      const params = { limit };
-      if (actorRole) params.actorRole = actorRole;
-      if (action) params.action = action;
-      if (entityType) params.entityType = entityType;
-      if (entityId) params.entityId = entityId;
-      if (includeCursor && AUDIT_NEXT_CURSOR) params.cursor = AUDIT_NEXT_CURSOR;
-
-      return params;
-    }
-
-    function renderAuditList(list) {
-      elCntAudit.textContent = String(list.length);
-
-      elBoxAudit.innerHTML = list.length
-        ? list.slice(0, 50).map((x) => {
-            const ts = esc(x.ts || "");
-            const action = esc(x.action || "");
-            const role = esc(x.actorRole || "");
-            const entity = esc(x.entityType || "");
-            const id = esc(x.entityId || "");
-            return `
-              <div style="padding:8px 0; border-top:1px solid var(--border);">
-                <div>
-                  <span class="pill">${ts}</span>
-                  <span class="pill">${action}</span>
-                  <span class="pill">role: ${role}</span>
-                </div>
-                <div class="small">Změna: ${entity}${id ? " • " + id : ""}</div>
-              </div>
-            `;
-          }).join("")
-        : "Nic.";
-    }
-
-    function isTrialExpiredError(e) {
-      return e && (e.status === 402 || e.code === "TrialExpired" || String(e.message || "").includes("TrialExpired"));
-    }
-
-    async function refreshBillingBanner() {
-      try {
-        const s = await WA_API.getBillingStatus();
-
-        const trialEnd = s?.trial?.end || "";
-        const trialExpired = !!s?.trial?.expired;
-
-        const subActive = !!s?.subscription?.active;
-        const subEnd = s?.subscription?.end || "";
-        const plan = s?.subscription?.plan || "";
-
-        if (subActive) {
-          showBanner({
-            kind: "ok",
-            title: "Tarif aktivní",
-            text: `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`,
-            showActivate: false,
-          });
-          return;
-        }
-
-        if (trialExpired) {
-          showBanner({
-            kind: "error",
-            title: "Trial vypršel",
-            text: `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování aktivuj tarif.`,
-            showActivate: true,
-          });
-          return;
-        }
-
-        const left = daysLeft(trialEnd);
-        if (left != null) {
-          const kind = left <= 3 ? "warn" : "info";
-          showBanner({
-            kind,
-            title: "Trial běží",
-            text: `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dní).`,
-            showActivate: false,
-          });
-          return;
-        }
-
-        elBillingBanner.style.display = "none";
-      } catch (e) {
-        showBanner({
-          kind: "warn",
-          title: "Nelze načíst billing status",
-          text: `Chyba: ${esc(e?.message || e)}`,
-          showActivate: false,
-        });
-      }
+      elBtnGoBilling.style.display = showGoBilling ? "" : "none";
     }
 
     function renderComplianceOverview(c) {
@@ -352,16 +167,77 @@
         <div style="${red}">Propadlé: <strong>${expired}</strong></div>
         <div style="${orange}">Končí brzy: <strong>${soon}</strong></div>
         <div>Chybí vytvořit: <strong>${missing}</strong></div>
-        <div class="small" style="opacity:.75; margin-top:6px;">Klikni pro detail →</div>
+        <div class="small" style="opacity:.75; margin-top:6px;">Otevři detail v Compliance →</div>
       `;
     }
 
+    async function refreshBillingStatus() {
+      try {
+        const s = await WA_API.getBillingStatus();
+
+        const trialEnd = s?.trial?.end || "";
+        const trialExpired = !!s?.trial?.expired;
+
+        const subActive = !!s?.subscription?.active;
+        const subEnd = s?.subscription?.end || "";
+        const plan = s?.subscription?.plan || "";
+
+        if (subActive) {
+          elPillPlan.textContent = plan || "aktivní";
+          elBoxPlan.textContent = `Tarif je aktivní do ${fmtDate(subEnd)}.`;
+          showBanner({
+            kind: "ok",
+            title: "Tarif aktivní",
+            text: `Tarif: ${plan || "—"} • aktivní do ${fmtDate(subEnd)}`,
+            showGoBilling: false,
+          });
+          return;
+        }
+
+        elPillPlan.textContent = plan || "trial";
+
+        if (trialExpired) {
+          elBoxPlan.textContent = `Trial vypršel ${fmtDate(trialEnd)}. Pro pokračování je potřeba aktivovat tarif.`;
+          showBanner({
+            kind: "error",
+            title: "Trial vypršel",
+            text: `Trial vypršel ${fmtDate(trialEnd)}. Otevři billing a aktivuj tarif.`,
+            showGoBilling: true,
+          });
+          return;
+        }
+
+        const left = daysLeft(trialEnd);
+        if (left != null) {
+          elBoxPlan.textContent = `Trial končí ${fmtDate(trialEnd)} (zbývá přibližně ${left} dní).`;
+          showBanner({
+            kind: left <= 3 ? "warn" : "info",
+            title: "Trial běží",
+            text: `Trial končí ${fmtDate(trialEnd)} (zbývá ~${left} dní).`,
+            showGoBilling: false,
+          });
+          return;
+        }
+
+        elBoxPlan.textContent = "Stav tarifu není dostupný.";
+        elBillingBanner.style.display = "none";
+      } catch (e) {
+        elPillPlan.textContent = "—";
+        elBoxPlan.textContent = "Nelze načíst billing status.";
+        showBanner({
+          kind: "warn",
+          title: "Nelze načíst billing status",
+          text: `Chyba: ${esc(e?.message || e)}`,
+          showGoBilling: false,
+        });
+      }
+    }
+
     async function refreshMeAndUi() {
-      await refreshBillingBanner();
+      // billing
+      await refreshBillingStatus();
 
-      const role = WA_NAV.getRole();
-      elAuditRolePill.textContent = roleLabel(role);
-
+      // compliance
       try {
         const c = await WA_API.getComplianceOverview();
         renderComplianceOverview(c);
@@ -370,196 +246,35 @@
         elBoxCompliance.innerHTML = `<span class="pill">Chyba</span> ${esc(e?.message || e)}`;
       }
 
+      // me
       try {
         const me = await WA_API.getMe();
-        const backendRole = me?.role || role;
-
-        elMetaLine.textContent =
-          `Dnes: ${new Date().toISOString().slice(0, 10)} • okno: ${Number(elDays.value || 30)} dní • role: ${roleLabel(backendRole)}`;
-
-        const canAudit = backendRole !== "external";
-        elBtnAudit.style.display = canAudit ? "" : "none";
-        elAuditFilters.style.display = canAudit ? "" : "none";
-
-        renderTrainingsStub(backendRole);
-        setCounts(0, 0, 0);
-        elBoxAudit.innerHTML = "—";
-        elAudStatus.textContent = "";
-        AUDIT_NEXT_CURSOR = null;
-        AUDIT_LAST_PARAMS = null;
-        AUDIT_ITEMS = [];
-        elBtnAuditMore.disabled = true;
+        const role = me?.role || WA_NAV.getRole() || "—";
+        const cid = me?.companyId || WA_NAV.getCompanyId?.() || "";
+        const today = new Date().toISOString().slice(0, 10);
+        elMetaLine.textContent = `Dnes: ${today} • role: ${role}${cid ? " • tenant: " + cid : ""}`;
       } catch (e) {
-        if (isTrialExpiredError(e)) {
-          showBanner({
-            kind: "error",
-            title: "Trial vypršel",
-            text: "Pro pokračování aktivuj tarif (tlačítko nahoře).",
-            showActivate: true,
-          });
-
-          elMetaLine.textContent = "Trial vypršel – část funkcí je uzamčená.";
-          elBtnAudit.style.display = "none";
-          elAuditFilters.style.display = "none";
-          elBoxExpired.innerHTML = "—";
-          elBoxSoon.innerHTML = "—";
-          elBoxAudit.innerHTML = "—";
-          setCounts(0, 0, 0);
-          return;
-        }
-
-        throw e;
+        elMetaLine.textContent = "Nelze načíst profil. Zkus obnovit stránku nebo se znovu přihlásit.";
       }
     }
 
-    async function loadAuditFirstPage() {
-      elBtnAudit.disabled = true;
-      elBtnAuditReload.disabled = true;
-      elBtnAuditMore.disabled = true;
-      elBtnAuditExport.disabled = true;
-      elAudStatus.textContent = "Načítám…";
+    elBtnEmployees.addEventListener("click", () => {
+      window.location.href = "./employees.html";
+    });
 
-      try {
-        AUDIT_NEXT_CURSOR = null;
-        AUDIT_ITEMS = [];
-
-        const params = buildAuditParams(false);
-        AUDIT_LAST_PARAMS = { ...params };
-
-        const data = await WA_API.getAudit(params);
-        const items = Array.isArray(data?.items) ? data.items : [];
-
-        AUDIT_ITEMS = items;
-        AUDIT_NEXT_CURSOR = data?.nextCursor || null;
-
-        renderAuditList(AUDIT_ITEMS);
-
-        elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
-        elAudStatus.textContent = `Načteno: ${items.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
-      } catch (e) {
-        if (isTrialExpiredError(e)) {
-          showBanner({
-            kind: "error",
-            title: "Trial vypršel",
-            text: "Audit je uzamčený – aktivuj tarif.",
-            showActivate: true,
-          });
-          elAudStatus.textContent = "Trial vypršel.";
-          return;
-        }
-
-        elBoxAudit.innerHTML = `<span class="pill">Chyba</span> ${esc(e?.message || e)}`;
-        elCntAudit.textContent = "0";
-        elAudStatus.textContent = "";
-      } finally {
-        elBtnAudit.disabled = false;
-        elBtnAuditReload.disabled = false;
-        elBtnAuditExport.disabled = false;
-      }
-    }
-
-    async function loadAuditMore() {
-      if (!AUDIT_NEXT_CURSOR || !AUDIT_LAST_PARAMS) return;
-
-      elBtnAuditMore.disabled = true;
-      elAudStatus.textContent = "Načítám další…";
-
-      try {
-        const params = { ...AUDIT_LAST_PARAMS, cursor: AUDIT_NEXT_CURSOR };
-        const data = await WA_API.getAudit(params);
-        const items = Array.isArray(data?.items) ? data.items : [];
-
-        AUDIT_ITEMS = AUDIT_ITEMS.concat(items);
-        AUDIT_NEXT_CURSOR = data?.nextCursor || null;
-
-        renderAuditList(AUDIT_ITEMS);
-
-        elBtnAuditMore.disabled = !AUDIT_NEXT_CURSOR;
-        elAudStatus.textContent = `Celkem: ${AUDIT_ITEMS.length}${AUDIT_NEXT_CURSOR ? " • další stránka k dispozici" : ""}`;
-      } catch (e) {
-        if (isTrialExpiredError(e)) {
-          showBanner({
-            kind: "error",
-            title: "Trial vypršel",
-            text: "Audit je uzamčený – aktivuj tarif.",
-            showActivate: true,
-          });
-          elAudStatus.textContent = "Trial vypršel.";
-          return;
-        }
-
-        elAudStatus.textContent = `Chyba: ${esc(e?.message || e)}`;
-      }
-    }
-
-    async function exportAuditCsv() {
-      if (!AUDIT_LAST_PARAMS) {
-        AUDIT_LAST_PARAMS = buildAuditParams(false);
-      }
-
-      elBtnAuditExport.disabled = true;
-      elAudStatus.textContent = "Generuji CSV…";
-
-      try {
-        const blob = await WA_API.fetchAuditCsv(AUDIT_LAST_PARAMS);
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = "audit.csv";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-
-        elAudStatus.textContent = "CSV staženo.";
-      } catch (e) {
-        if (isTrialExpiredError(e)) {
-          showBanner({
-            kind: "error",
-            title: "Trial vypršel",
-            text: "Export je uzamčený – aktivuj tarif.",
-            showActivate: true,
-          });
-          elAudStatus.textContent = "Trial vypršel.";
-          return;
-        }
-
-        elAudStatus.textContent = `Chyba exportu: ${esc(e?.message || e)}`;
-      } finally {
-        elBtnAuditExport.disabled = false;
-      }
-    }
-
-    elComplianceCard.addEventListener("click", () => {
+    elBtnCompliance.addEventListener("click", () => {
       window.location.href = "./compliance.html";
     });
 
-    elBtnLoad.addEventListener("click", refreshMeAndUi);
+    elBtnBilling.addEventListener("click", () => {
+      window.location.href = "./billing.html";
+    });
 
-    elBtnAudit.addEventListener("click", loadAuditFirstPage);
-    elBtnAuditReload.addEventListener("click", loadAuditFirstPage);
-    elBtnAuditMore.addEventListener("click", loadAuditMore);
-    elBtnAuditExport.addEventListener("click", exportAuditCsv);
+    elBtnGoBilling.addEventListener("click", () => {
+      window.location.href = "./billing.html";
+    });
 
     elBtnBillingRefresh.addEventListener("click", refreshMeAndUi);
-
-    elBtnBillingActivate.addEventListener("click", async () => {
-      elBtnBillingActivate.disabled = true;
-      try {
-        await WA_API.billingActivate("basic", 30);
-        await refreshMeAndUi();
-      } catch (e) {
-        showBanner({
-          kind: "error",
-          title: "Aktivace se nepovedla",
-          text: `Chyba: ${esc(e?.message || e)}`,
-          showActivate: true,
-        });
-      } finally {
-        elBtnBillingActivate.disabled = false;
-      }
-    });
 
     (async () => {
       try {
@@ -569,7 +284,7 @@
           kind: "error",
           title: "Dashboard nelze inicializovat",
           text: "Nelze načíst data ze serveru. Zkus obnovit stránku nebo se znovu přihlásit.",
-          showActivate: false,
+          showGoBilling: false,
         });
         elMetaLine.textContent = "Chyba inicializace – nelze načíst data.";
       }
