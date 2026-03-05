@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 // backend/index.js
 
 import express from "express";
@@ -29,6 +29,9 @@ import billingRouter from "./routes/billing.js";
 import companyDocumentTemplatesRouter from "./routes/companyDocumentTemplates.js";
 import companyComplianceDocumentsRouter from "./routes/companyComplianceDocuments.js";
 import companyComplianceOverviewRouter from "./routes/companyComplianceOverview.js";
+
+// ✅ Stripe webhook router (public, requires raw body)
+import stripeWebhookRouter from "./routes/stripe-webhook.js";
 
 // AUTH (middleware)
 import { authMiddleware } from "./auth.js";
@@ -129,8 +132,6 @@ const corsOptions = {
 };
 
 // --- Security headers ---
-// CSP can be tricky with static HTML/inline scripts; keep it off for MVP hardening layer.
-// (We can add CSP later once we map frontend requirements.)
 app.use(
   helmet({
     contentSecurityPolicy: false,
@@ -141,11 +142,17 @@ app.use(
 // --- Middlewares ---
 app.use(cors(corsOptions));
 
+// ✅ Stripe webhook MUST be mounted BEFORE express.json()
+app.use(
+  "/api/stripe",
+  express.raw({ type: "application/json" }),
+  stripeWebhookRouter
+);
+
 // Request body size limit (anti payload abuse)
 app.use(express.json({ limit: "200kb" }));
 
 // ✅ Request logging discipline (API only)
-// Goal: keep production logs readable (avoid 401 noise), keep security/ops signals.
 app.use((req, res, next) => {
   if (!req.originalUrl?.startsWith("/api")) return next();
 
@@ -156,10 +163,8 @@ app.use((req, res, next) => {
     const method = req.method;
     const url = req.originalUrl;
 
-    // 5xx are logged by errorHandler to stderr (PM2 error log)
     if (status >= 500) return;
 
-    // Avoid JWT noise: log 401 only for login attempts
     if (status === 401) {
       if (method === "POST" && url.startsWith("/api/auth/login")) {
         console.warn(`${method} ${url} -> ${status} (${ms}ms)`);
@@ -167,13 +172,11 @@ app.use((req, res, next) => {
       return;
     }
 
-    // Keep useful signals
     if (status === 403 || status === 429) {
       console.warn(`${method} ${url} -> ${status} (${ms}ms)`);
       return;
     }
 
-    // Everything else: no-op (keeps logs clean)
     return;
   });
 
@@ -208,8 +211,8 @@ app.use("/api", (req, res, next) => {
 
 // --- Rate limiting ---
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 600, // per IP
+  windowMs: 15 * 60 * 1000,
+  max: 600,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -220,7 +223,7 @@ const apiLimiter = rateLimit({
 
 const publicLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 120, // per IP
+  max: 120,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -231,7 +234,7 @@ const publicLimiter = rateLimit({
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 60, // per IP
+  max: 60,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
@@ -279,13 +282,11 @@ app.get("/api/version", (req, res) => {
 });
 
 // --- Ops self-test (localhost only, gated) ---
-// Enable by setting OPS_TESTS=1 (intentionally OFF by default).
 app.get("/api/_ops/throw", (req, res) => {
   if (!OPS_TESTS) {
     return res.status(404).json({ error: "NotFound", message: "Not found." });
   }
 
-  // only allow from localhost (backend listens on 127.0.0.1 anyway, but keep guard explicit)
   const ip = (req.ip ?? "").toString();
   if (ip && ip !== "127.0.0.1" && ip !== "::1" && !ip.endsWith("127.0.0.1")) {
     return res.status(403).json({ error: "Forbidden", message: "Localhost only." });
@@ -294,7 +295,7 @@ app.get("/api/_ops/throw", (req, res) => {
   throw new Error("OPS_TEST_THROW");
 });
 
-// Now apply global API limiter (does not affect / and static frontend)
+// Now apply global API limiter
 app.use("/api", apiLimiter);
 
 // --- Public routes (no auth, no tenant) ---
@@ -332,7 +333,7 @@ app.use("/api/company-document-templates", companyDocumentTemplatesRouter);
 app.use("/api/company-compliance-documents", companyComplianceDocumentsRouter);
 app.use("/api/company-compliance/overview", companyComplianceOverviewRouter);
 
-// ✅ API 404 fallback (JSON, never HTML) — must be before errorHandler
+// ✅ API 404 fallback (JSON, never HTML)
 app.use("/api", (req, res) => {
   return res.status(404).json({
     error: "NotFound",
