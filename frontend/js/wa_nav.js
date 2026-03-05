@@ -1,6 +1,10 @@
 // frontend/js/wa_nav.js
 // Produkce: JWT_ONLY → role se bere z JWT tokenu (wa_auth_token), role switch je vypnutý.
 // Dev fallback: pokud token není, použije se wa_role_key (DEMO).
+//
+// BOX #82:
+// - Přidáno tlačítko "Odhlásit" (jen když existuje JWT token)
+// - Odhlášení smaže wa_auth_token + wa_company_id (+ demo role) a přesměruje na index.html
 
 (() => {
   function safeString(v) {
@@ -14,6 +18,17 @@
       return safeString(localStorage.getItem("wa_auth_token"));
     } catch {
       return "";
+    }
+  }
+
+  function clearAuthStorage() {
+    try {
+      localStorage.removeItem("wa_auth_token");
+      localStorage.removeItem("wa_company_id");
+      // DEMO role key – prevent confusion after logout
+      localStorage.removeItem("wa_role_key");
+    } catch {
+      // ignore
     }
   }
 
@@ -119,14 +134,25 @@
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <span class="small" style="opacity:.8;">Role:</span>
           <span class="pill">${esc(roleLabel(role))}</span>
+
           ${
             tok
-              ? ""
+              ? `<button id="waLogoutBtn" title="Odhlásit">Odhlásit</button>`
               : `<button id="waRoleBtn" title="DEMO only">Změnit roli</button>`
           }
         </div>
       </div>
     `;
+
+    // Logout jen když je token
+    const logoutBtn = document.getElementById("waLogoutBtn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", () => {
+        clearAuthStorage();
+        // redirect to a guaranteed existing page; unauth flow should kick in there
+        window.location.href = "./index.html";
+      });
+    }
 
     // Role switch jen když není token (DEMO/dev)
     const btn = document.getElementById("waRoleBtn");

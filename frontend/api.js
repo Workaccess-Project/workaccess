@@ -7,6 +7,9 @@
 // - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na /login (pretty URL).
 // - Billing gate (402 TrialExpired) zachován.
 // - CSV export sjednocen do stejného error handleru.
+//
+// BOX #68:
+// - Frontend handling 403 ROLE_LOCK + FEATURE_LOCK (store reason + safe redirect)
 
 (() => {
   function apiBase() {
@@ -197,9 +200,7 @@
   function isTrialExpiredError(e) {
     return (
       !!e &&
-      (e.status === 402 ||
-        e.code === "TrialExpired" ||
-        String(e.message || "").includes("TrialExpired"))
+      (e.status === 402 || e.code === "TrialExpired" || String(e.message || "").includes("TrialExpired"))
     );
   }
 
@@ -317,10 +318,42 @@
     // User limit enforcement (BOX #58) používá také 402
     // Pokud přijde 402 z /employees kvůli limitu, chceme stejné chování: redirect na billing.
     if (Number(err?.status || 0) === 402) {
-      setGateCache({ ts: Date.now(), locked: true, reason: safeString(err?.body?.error) || "BillingRequired" });
+      setGateCache({
+        ts: Date.now(),
+        locked: true,
+        reason: safeString(err?.body?.error) || "BillingRequired",
+      });
       rememberPaywall(safeString(err?.body?.code) || "BillingRequired");
       if (!isAllowlistedPage()) goToBillingHub();
       return;
+    }
+
+    // ---------- 403 FORBIDDEN (ROLE / FEATURE) ----------
+    if (Number(err?.status || 0) === 403) {
+      const code = safeString(err?.body?.code || err?.code || "");
+
+      if (code === "ROLE_LOCK" || code === "FEATURE_LOCK") {
+        try {
+          sessionStorage.setItem("wa_forbidden", "1");
+          sessionStorage.setItem("wa_forbidden_code", code);
+          sessionStorage.setItem("wa_forbidden_ts", String(Date.now()));
+
+          // Volitelně: pár detailů pro UI (nesmí být huge)
+          const details = err?.body?.details ? JSON.stringify(err.body.details).slice(0, 2000) : "";
+          sessionStorage.setItem("wa_forbidden_details", details);
+        } catch {}
+
+        // Bezpečný fallback: držíme uživatele na dashboardu, který existuje
+        const p = pageName();
+        if (p !== "dashboard" && p !== "dashboard.html") {
+          try {
+            location.href = "/dashboard";
+          } catch {
+            location.replace("/dashboard");
+          }
+        }
+        return;
+      }
     }
   }
 
