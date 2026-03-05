@@ -17,6 +17,12 @@
 // - Adds SAFE server logs for checkout session creation output
 //   (companyId, plan, sessionId, url, successUrl, cancelUrl)
 // - No secrets logged, no billing changes
+//
+// BOX #84:
+// - SAFE endpoint to create Stripe Customer Portal session
+// - Manager only, tenant-safe
+// - Ensures customerId, returns { url }
+// - Does NOT change billingStatus (webhook lifecycle mapping stays source-of-truth)
 
 import express from "express";
 import Stripe from "stripe";
@@ -25,7 +31,7 @@ import { getCompanyProfile } from "../data-company.js";
 import { writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
 import { BILLING_PLANS, BILLING_STATUS, validateBillingProfile } from "../src/billing/billingModel.js";
-import { ensureStripeCustomer } from "../services/stripe-service.js";
+import { ensureStripeCustomer, createCustomerPortalSession } from "../services/stripe-service.js";
 
 const router = express.Router();
 
@@ -439,158 +445,156 @@ router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (
 });
 
 /**
- * POST /api/billing/activate
+ * POST /api/billing/stripe/customer-portal
  * WRITE: manager only
  *
- * Body:
- *  - plan: "basic"|"pro"|"enterprise" (string)  (trial is not activated here)
+ * SAFE:
+ * - Ensures Stripe customerId exists
+ * - Creates Stripe Customer Portal session
+ * - Returns { ok, companyId, url }
+ * - Does NOT change billingStatus / plan (webhook lifecycle mapping stays source-of-truth)
  *
- * Effects:
- * - Sets company.billing.plan + billingStatus=active
- * - Keeps legacy subscription fields updated (manual provider) for compatibility
+ * Requires env:
+ *  - STRIPE_SECRET_KEY
+ *  - STRIPE_PORTAL_RETURN_URL
  */
-router.post("/activate", requireRole(["manager"]), async (req, res) => {
+router.post("/stripe/customer-portal", requireRole(["manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
 
   const before = await getCompanyProfile(companyId);
+  const billingBefore = before?.billing ?? null;
 
-  const plan = normalizePlanToV36(req.body?.plan);
-  if (plan === BILLING_PLANS.TRIAL) {
-    return res.status(400).json({
-      error: "BadRequest",
-      code: "PLAN_INVALID",
-      message: "Activate expects a paid plan (basic/pro/enterprise).",
-      allowed: [BILLING_PLANS.BASIC, BILLING_PLANS.PRO, BILLING_PLANS.ENTERPRISE],
+  let customerId = safeString(billingBefore?.stripe?.customerId);
+
+  // Ensure customerId (same safe pattern as checkout)
+  if (!customerId) {
+    try {
+      const ensured = await ensureStripeCustomer({
+        companyId,
+        companyProfile: before,
+        billingProfile: billingBefore,
+      });
+      customerId = safeString(ensured?.customerId);
+    } catch (e) {
+      const msg = safeString(e?.message) || "Stripe customer ensure failed.";
+      const code = safeString(e?.code) || "STRIPE_ERROR";
+      console.error("[billing.customer-portal]", code, msg);
+
+      const status = code === "STRIPE_NOT_CONFIGURED" ? 500 : 502;
+      return res.status(status).json({
+        error: "StripeError",
+        code,
+        message:
+          code === "STRIPE_NOT_CONFIGURED"
+            ? "Stripe is not configured on this server."
+            : "Stripe operation failed.",
+      });
+    }
+
+    // Persist ensured customerId (safe write, no billingStatus changes)
+    if (customerId) {
+      const now = nowIso();
+      const nextCompany = {
+        ...before,
+        billing: {
+          ...(before.billing || {}),
+          stripe: {
+            ...((before.billing && before.billing.stripe) || {}),
+            customerId,
+          },
+          updatedAt: now,
+        },
+        updatedAt: now,
+      };
+
+      const v = validateBillingProfile(nextCompany.billing);
+      if (v.ok) {
+        nextCompany.billing = v.normalized;
+        await writeTenantEntity(companyId, "company", nextCompany);
+
+        try {
+          await auditLog({
+            companyId,
+            actorRole: req.role,
+            action: "stripe.customer.ensure",
+            entityType: "company",
+            entityId: companyId,
+            meta: { created: true, note: "ensured by customer portal" },
+            before: { billing: before.billing ?? null },
+            after: { billing: nextCompany.billing ?? null },
+          });
+        } catch (e) {
+          console.error("[billing.customer-portal] AUDIT_WRITE_FAILED", safeString(e?.message));
+          // Do not fail
+        }
+      }
+    }
+  }
+
+  if (!customerId) {
+    return res.status(502).json({
+      error: "StripeError",
+      code: "STRIPE_CUSTOMER_MISSING",
+      message: "Failed to ensure Stripe customerId.",
     });
   }
 
-  const now = nowIso();
+  let portal;
+  try {
+    portal = await createCustomerPortalSession({ customerId });
+  } catch (e) {
+    const msg = safeString(e?.message) || "Stripe portal session failed.";
+    const code = safeString(e?.code) || "STRIPE_ERROR";
+    console.error("[billing.customer-portal]", code, msg);
 
-  const subscriptionEnd = (() => {
-    const untilIso = parseIsoOrEmpty(req.body?.until);
-    const daysRaw = Number(req.body?.days);
-    const days = Number.isFinite(daysRaw) ? Math.max(1, Math.min(3650, Math.floor(daysRaw))) : 30;
-    if (untilIso) return untilIso;
-    return new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
-  })();
-
-  const nextCompany = {
-    ...before,
-    billing: {
-      ...(before.billing || {}),
-      plan,
-      billingStatus: BILLING_STATUS.ACTIVE,
-      updatedAt: now,
-    },
-
-    // legacy compatibility (manual subscription mirror)
-    subscriptionStatus: "active",
-    plan: plan === BILLING_PLANS.ENTERPRISE ? "pro" : plan, // legacy doesn't have enterprise
-    paymentProvider: "manual",
-    subscriptionStart: now,
-    subscriptionEnd,
-
-    updatedAt: now,
-  };
-
-  const v = validateBillingProfile(nextCompany.billing);
-  if (!v.ok) {
-    return res.status(500).json({
-      error: "BillingInvalid",
-      message: "Internal billing profile validation failed.",
-      errors: v.errors,
+    const status = code === "STRIPE_NOT_CONFIGURED" ? 500 : 502;
+    return res.status(status).json({
+      error: "StripeError",
+      code,
+      message:
+        code === "STRIPE_NOT_CONFIGURED"
+          ? "Stripe is not configured on this server."
+          : "Stripe operation failed.",
     });
   }
-  nextCompany.billing = v.normalized;
 
-  await writeTenantEntity(companyId, "company", nextCompany);
+  const url = safeString(portal?.url);
+  if (!url) {
+    return res.status(502).json({
+      error: "StripeError",
+      code: "STRIPE_PORTAL_URL_EMPTY",
+      message: "Stripe portal returned empty URL.",
+    });
+  }
 
-  await auditLog({
+  // SAFE runtime trace (no secrets)
+  console.log("[stripe.portal.create.ok]", {
     companyId,
-    actorRole: req.role,
-    action: "billing.activate",
-    entityType: "company",
-    entityId: companyId,
-    meta: { plan, paymentProvider: "manual" },
-    before: {
-      billing: before.billing ?? null,
-      legacy: { subscriptionStatus: before.subscriptionStatus ?? "none", plan: before.plan ?? "free" },
-    },
-    after: {
-      billing: nextCompany.billing ?? null,
-      legacy: { subscriptionStatus: nextCompany.subscriptionStatus, plan: nextCompany.plan },
-    },
+    customerId,
   });
 
-  res.json({
+  try {
+    await auditLog({
+      companyId,
+      actorRole: req.role,
+      action: "stripe.portal.create",
+      entityType: "stripe",
+      entityId: null,
+      meta: {
+        customerId,
+      },
+      before: { billing: before?.billing ?? null },
+      after: { billing: before?.billing ?? null },
+    });
+  } catch (e) {
+    console.error("[billing.customer-portal] AUDIT_WRITE_FAILED", safeString(e?.message));
+    // Do not fail response
+  }
+
+  return res.json({
     ok: true,
     companyId,
-    billing: nextCompany.billing,
-  });
-});
-
-/**
- * POST /api/billing/cancel
- * WRITE: manager only
- *
- * Effects:
- * - Sets v36 billingStatus=cancelled
- * - Mirrors legacy subscriptionStatus=canceled
- */
-router.post("/cancel", requireRole(["manager"]), async (req, res) => {
-  const companyId = req.auth.companyId;
-
-  const before = await getCompanyProfile(companyId);
-  const now = nowIso();
-
-  const nextCompany = {
-    ...before,
-    billing: {
-      ...(before.billing || {}),
-      billingStatus: BILLING_STATUS.CANCELLED,
-      updatedAt: now,
-    },
-
-    // legacy mirror
-    subscriptionStatus: "canceled",
-    subscriptionEnd: now,
-
-    updatedAt: now,
-  };
-
-  const v = validateBillingProfile(nextCompany.billing);
-  if (!v.ok) {
-    return res.status(500).json({
-      error: "BillingInvalid",
-      message: "Internal billing profile validation failed.",
-      errors: v.errors,
-    });
-  }
-  nextCompany.billing = v.normalized;
-
-  await writeTenantEntity(companyId, "company", nextCompany);
-
-  await auditLog({
-    companyId,
-    actorRole: req.role,
-    action: "billing.cancel",
-    entityType: "company",
-    entityId: companyId,
-    meta: {},
-    before: {
-      billing: before.billing ?? null,
-      legacy: { subscriptionStatus: before.subscriptionStatus ?? "none", plan: before.plan ?? "free" },
-    },
-    after: {
-      billing: nextCompany.billing ?? null,
-      legacy: { subscriptionStatus: nextCompany.subscriptionStatus, plan: nextCompany.plan ?? "" },
-    },
-  });
-
-  res.json({
-    ok: true,
-    companyId,
-    billing: nextCompany.billing,
+    url,
   });
 });
 

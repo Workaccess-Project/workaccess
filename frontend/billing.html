@@ -14,7 +14,8 @@
       <div class="section">
         <h1 style="font-size:18px; margin:0;">Tarif a přístup</h1>
         <div class="small" style="opacity:.85;">
-          Pokud vyprší trial nebo firma narazí na limit tarifu, některé akce mohou být uzamčené, dokud nebude aktivní tarif.
+          Pokud vyprší trial nebo firma narazí na limit tarifu, některé akce mohou být uzamčené,
+          dokud nebude aktivní tarif.
         </div>
       </div>
 
@@ -28,6 +29,7 @@
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
             <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif (demo)</button>
             <button id="btnCancel" style="display:none;">Zrušit tarif (demo)</button>
+            <button id="btnPortal" style="display:none;">Spravovat předplatné (Stripe)</button>
             <button id="btnRefresh">Obnovit</button>
           </div>
         </div>
@@ -35,6 +37,11 @@
         <!-- external info -->
         <div id="externalNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
           Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera/HR ve firmě.
+        </div>
+
+        <!-- hr/security info -->
+        <div id="nonManagerNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
+          Správu předplatného (Stripe) může provádět pouze manažer.
         </div>
       </div>
 
@@ -66,7 +73,7 @@
   <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=59.6"></script>
+  <script src="./api.js?v=84"></script>
 
   <script>
     WA_NAV.renderNav("billing");
@@ -77,9 +84,11 @@
 
     const elBtnActivate = document.getElementById("btnActivate");
     const elBtnCancel = document.getElementById("btnCancel");
+    const elBtnPortal = document.getElementById("btnPortal");
     const elBtnRefresh = document.getElementById("btnRefresh");
 
     const elExternalNotice = document.getElementById("externalNotice");
+    const elNonManagerNotice = document.getElementById("nonManagerNotice");
 
     const elStatusLine = document.getElementById("statusLine");
     const elDetails = document.getElementById("details");
@@ -158,24 +167,42 @@
       } catch {}
     }
 
-    function isExternalRole() {
+    function getRoleKey() {
       try {
-        return (WA_NAV.getRole() || "") === "external";
+        return String(WA_NAV.getRole() || "").trim();
       } catch {
-        return false;
+        return "";
       }
     }
 
+    function isExternalRole() {
+      return getRoleKey() === "external";
+    }
+
+    function isManagerRole() {
+      return getRoleKey() === "manager";
+    }
+
     function applyRoleUi() {
-      const external = isExternalRole();
+      const role = getRoleKey();
+      const external = role === "external";
+      const manager = role === "manager";
+
       elExternalNotice.style.display = external ? "" : "none";
 
+      // Non-manager notice: hr/security/external (ale external má vlastní text)
+      elNonManagerNotice.style.display = (!manager && !external) ? "" : "none";
+
+      // Stripe portal pouze pro manager
+      elBtnPortal.style.display = manager ? "" : "none";
+
+      // demo buttons: external je nesmí vidět
       if (external) {
         elBtnActivate.style.display = "none";
         elBtnCancel.style.display = "none";
       }
 
-      return external;
+      return { role, external, manager };
     }
 
     function pickBillingSnapshot(s) {
@@ -196,18 +223,15 @@
       const legacySubEnd = String(legacySub?.end || "").trim();
       const legacyPlan = String(legacySub?.plan || "").trim();
 
-      // canonical: aktivní tarif = billingStatus active a plan není trial
       const subActive =
         (billingStatus.toLowerCase() === "active" && plan && plan.toLowerCase() !== "trial") ||
         legacySubActive;
 
-      // trial state
       const trialEnd = trialEndsAt || legacyTrialEnd || "";
       const trialExpired =
         legacyTrialExpired ||
         (plan.toLowerCase() === "trial" && trialEnd && new Date(trialEnd).getTime() < Date.now());
 
-      // locked: backend canonical + fallback
       const locked = !!s?.isLocked || (trialExpired && !subActive);
 
       return {
@@ -225,10 +249,10 @@
       elStatusLine.textContent = "Načítám…";
       elBtnActivate.disabled = false;
       elBtnCancel.disabled = false;
+      elBtnPortal.disabled = false;
 
-      const external = applyRoleUi();
+      const roleUi = applyRoleUi();
 
-      // Hint z gate (trial nebo limit tarifu)
       const hint = readPaywallHint();
       if (hint.flagged) {
         const r = String(hint.reason || "").trim();
@@ -236,14 +260,14 @@
         if (r === "USER_LIMIT_REACHED") {
           showPaywall(
             "Limit uživatelů dosažen",
-            external
+            roleUi.external
               ? "Firma narazila na limit uživatelů pro aktuální tarif. Kontaktuj prosím manažera/HR."
               : "Firma narazila na limit uživatelů pro aktuální tarif. Pro pokračování je potřeba vyšší tarif.",
             "warn"
           );
         } else {
-          const t = external ? "Přístup omezen (externista)" : "Přístup omezen";
-          const msg = external
+          const t = roleUi.external ? "Přístup omezen (externista)" : "Přístup omezen";
+          const msg = roleUi.external
             ? "Přístup firmy je uzamčený. Kontaktuj prosím manažera/HR, ať aktivuje tarif."
             : "Přístup firmy je uzamčený – pro pokračování aktivuj tarif.";
           showPaywall(t, msg, "error");
@@ -260,11 +284,11 @@
             `Tarif: ${snap.plan || "—"} • aktivní (billingStatus: ${snap.billingStatus || "—"})`,
             "ok"
           );
-          elBtnCancel.style.display = external ? "none" : "";
+          elBtnCancel.style.display = roleUi.external ? "none" : "";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
         } else if (snap.locked || snap.trialExpired) {
-          if (external) {
+          if (roleUi.external) {
             showPaywall(
               "Přístup uzamčen (externista)",
               `Trial vypršel ${snap.trialEnd ? fmtDate(snap.trialEnd) : "—"}. Nemáš oprávnění spravovat tarif – kontaktuj manažera/HR.`,
@@ -280,7 +304,7 @@
                 : "Přístup firmy je omezený – pro pokračování aktivuj tarif.",
               "error"
             );
-            elBtnActivate.style.display = "";
+            elBtnActivate.style.display = roleUi.manager ? "" : "none";
             elBtnCancel.style.display = "none";
           }
         } else {
@@ -303,7 +327,7 @@
 
         setDetailsHtml(`
           <div style="display:flex; gap:10px; flex-wrap:wrap;">
-            <span class="pill">role: ${esc(WA_NAV.getRole())}</span>
+            <span class="pill">role: ${esc(getRoleKey())}</span>
             <span class="pill">locked: ${esc(snap.locked ? "yes" : "no")}</span>
             <span class="pill">trial: ${esc(snap.trialExpired ? "expired" : "active")}</span>
             <span class="pill">trialEnd: ${esc(snap.trialEnd ? fmtDate(snap.trialEnd) : "—")}</span>
@@ -352,6 +376,23 @@
         elStatusLine.textContent = "Chyba zrušení";
       } finally {
         elBtnCancel.disabled = false;
+      }
+    });
+
+    // BOX #84: Stripe Customer Portal (redirect) — manager only
+    elBtnPortal.addEventListener("click", async () => {
+      elBtnPortal.disabled = true;
+      elStatusLine.textContent = "Otevírám Stripe portál…";
+      try {
+        const r = await WA_API.billingCustomerPortal();
+        const url = (r && typeof r.url === "string") ? r.url.trim() : "";
+        if (!url) throw new Error("Stripe portal URL is missing.");
+        window.location.href = url;
+      } catch (e) {
+        showPaywall("Portál se nepovedlo otevřít", `Chyba: ${esc(e?.message || e)}`, "warn");
+        elStatusLine.textContent = "Chyba portálu";
+      } finally {
+        elBtnPortal.disabled = false;
       }
     });
 

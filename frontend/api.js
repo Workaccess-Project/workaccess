@@ -10,6 +10,9 @@
 //
 // BOX #68:
 // - Frontend handling 403 ROLE_LOCK + FEATURE_LOCK (store reason + safe redirect)
+//
+// BOX #84:
+// - Stripe Customer Portal helper: POST /billing/stripe/customer-portal
 
 (() => {
   function apiBase() {
@@ -411,6 +414,14 @@
 
   const billingCancel = () => apiFetch("/billing/cancel", { method: "POST" });
 
+  // BOX #84: Stripe Customer Portal
+  const billingCustomerPortal = () =>
+    apiFetch("/billing/stripe/customer-portal", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    });
+
   // --- CORE DATA ---
   const getMe = () => apiFetch("/me");
 
@@ -494,6 +505,7 @@
     getBillingStatus,
     billingActivate,
     billingCancel,
+    billingCustomerPortal,
 
     // gate
     ensureBillingGate,

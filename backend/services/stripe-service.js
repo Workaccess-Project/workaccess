@@ -1,7 +1,9 @@
 ﻿// backend/services/stripe-service.js
 // SAFE Stripe helper used by billing routes.
 // - Ensures Stripe customer exists (idempotent)
-// - Does NOT create subscriptions
+// - Creates Stripe Checkout sessions
+// - Creates Stripe Customer Portal sessions
+// - Does NOT create subscriptions directly
 // - Does NOT change billingStatus (webhook lifecycle does that)
 
 import Stripe from "stripe";
@@ -12,17 +14,16 @@ function safeString(v) {
 
 function stripeClientOrThrow() {
   const key = safeString(process.env.STRIPE_SECRET_KEY);
+
   if (!key) {
     const err = new Error("Stripe is not configured (missing STRIPE_SECRET_KEY).");
     err.code = "STRIPE_NOT_CONFIGURED";
     throw err;
   }
-  // Do not force apiVersion to avoid runtime mismatch
+
   return new Stripe(key);
 }
 
-// Tries to pick a reasonable email/name if present in your company profile.
-// We keep it defensive because company profile shape may evolve.
 function pickCustomerEmail(companyProfile) {
   return (
     safeString(companyProfile?.email) ||
@@ -42,18 +43,12 @@ function pickCustomerName(companyProfile, companyId) {
 }
 
 /**
- * ensureStripeCustomer({ companyId, companyProfile, billingProfile })
- *
- * Returns:
- *  { created: false, customerId } if already present in billingProfile
- *  { created: true,  customerId } if created in Stripe
- *
- * Throws error with code:
- *  - STRIPE_NOT_CONFIGURED
- *  - STRIPE_ERROR (generic)
+ * ensureStripeCustomer
  */
 export async function ensureStripeCustomer({ companyId, companyProfile, billingProfile }) {
+
   const cid = safeString(companyId);
+
   if (!cid) {
     const err = new Error("Missing companyId.");
     err.code = "STRIPE_ERROR";
@@ -61,6 +56,7 @@ export async function ensureStripeCustomer({ companyId, companyProfile, billingP
   }
 
   const existing = safeString(billingProfile?.stripe?.customerId);
+
   if (existing) {
     return { created: false, customerId: existing };
   }
@@ -71,7 +67,9 @@ export async function ensureStripeCustomer({ companyId, companyProfile, billingP
   const name = pickCustomerName(companyProfile, cid);
 
   let customer;
+
   try {
+
     customer = await stripe.customers.create({
       name: name || undefined,
       email: email || undefined,
@@ -80,18 +78,89 @@ export async function ensureStripeCustomer({ companyId, companyProfile, billingP
         source: "workaccess",
       },
     });
+
   } catch (e) {
+
     const err = new Error(safeString(e?.message) || "Stripe customer create failed.");
     err.code = safeString(e?.code) || "STRIPE_ERROR";
     throw err;
+
   }
 
   const customerId = safeString(customer?.id);
+
   if (!customerId) {
+
     const err = new Error("Stripe returned empty customer id.");
     err.code = "STRIPE_ERROR";
     throw err;
+
   }
 
   return { created: true, customerId };
+}
+
+/**
+ * createCustomerPortalSession
+ *
+ * Creates Stripe Billing Portal session.
+ * Used for:
+ * - change payment method
+ * - cancel subscription
+ * - download invoices
+ */
+export async function createCustomerPortalSession({ customerId }) {
+
+  const cid = safeString(customerId);
+
+  if (!cid) {
+
+    const err = new Error("Missing Stripe customerId.");
+    err.code = "STRIPE_ERROR";
+    throw err;
+
+  }
+
+  const returnUrl = safeString(process.env.STRIPE_PORTAL_RETURN_URL);
+
+  if (!returnUrl) {
+
+    const err = new Error("Missing STRIPE_PORTAL_RETURN_URL.");
+    err.code = "STRIPE_ERROR";
+    throw err;
+
+  }
+
+  const stripe = stripeClientOrThrow();
+
+  let session;
+
+  try {
+
+    session = await stripe.billingPortal.sessions.create({
+      customer: cid,
+      return_url: returnUrl,
+    });
+
+  } catch (e) {
+
+    const err = new Error(safeString(e?.message) || "Stripe portal session failed.");
+    err.code = safeString(e?.code) || "STRIPE_ERROR";
+    throw err;
+
+  }
+
+  const url = safeString(session?.url);
+
+  if (!url) {
+
+    const err = new Error("Stripe portal returned empty URL.");
+    err.code = "STRIPE_ERROR";
+    throw err;
+
+  }
+
+  return {
+    url,
+  };
 }
