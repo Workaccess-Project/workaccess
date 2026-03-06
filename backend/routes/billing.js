@@ -23,6 +23,13 @@
 // - Manager only, tenant-safe
 // - Ensures customerId, returns { url }
 // - Does NOT change billingStatus (webhook lifecycle mapping stays source-of-truth)
+//
+// BOX #86:
+// - Protected tenant-safe Stripe webhook observability endpoint
+// - GET /api/billing/stripe/debug/events
+// - Manager only
+// - Returns only events for tenant from JWT/companyId
+// - No global cross-tenant output
 
 import express from "express";
 import Stripe from "stripe";
@@ -30,8 +37,16 @@ import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
 import { writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
-import { BILLING_PLANS, BILLING_STATUS, validateBillingProfile } from "../src/billing/billingModel.js";
-import { ensureStripeCustomer, createCustomerPortalSession } from "../services/stripe-service.js";
+import {
+  BILLING_PLANS,
+  BILLING_STATUS,
+  validateBillingProfile,
+} from "../src/billing/billingModel.js";
+import {
+  ensureStripeCustomer,
+  createCustomerPortalSession,
+} from "../services/stripe-service.js";
+import { getStripeDebugEventsForCompany } from "../services/stripe-debug-buffer.js";
 
 const router = express.Router();
 
@@ -76,7 +91,13 @@ function normalizePlanToV36(planRaw) {
 
 function computeLockedFromBilling(billing) {
   const st = safeString(billing?.billingStatus);
-  if ([BILLING_STATUS.PAST_DUE, BILLING_STATUS.UNPAID, BILLING_STATUS.CANCELLED].includes(st)) {
+  if (
+    [
+      BILLING_STATUS.PAST_DUE,
+      BILLING_STATUS.UNPAID,
+      BILLING_STATUS.CANCELLED,
+    ].includes(st)
+  ) {
     return true;
   }
 
@@ -152,6 +173,26 @@ router.get("/status", async (req, res) => {
 });
 
 /**
+ * GET /api/billing/stripe/debug/events
+ * READ: manager only
+ *
+ * Tenant-safe Stripe webhook observability.
+ * Returns only events whose resolved companyId matches req.auth.companyId.
+ * Does NOT expose global cross-tenant event buffer.
+ */
+router.get("/stripe/debug/events", requireRole(["manager"]), async (req, res) => {
+  const companyId = req.auth.companyId;
+  const events = getStripeDebugEventsForCompany(companyId);
+
+  return res.json({
+    ok: true,
+    companyId,
+    count: events.length,
+    events,
+  });
+});
+
+/**
  * POST /api/billing/stripe/ensure-customer
  * WRITE: manager only
  *
@@ -221,7 +262,8 @@ router.post("/stripe/ensure-customer", requireRole(["manager"]), async (req, res
   if (!v.ok) {
     return res.status(500).json({
       error: "BillingInvalid",
-      message: "Internal billing profile validation failed after stripe customer ensure.",
+      message:
+        "Internal billing profile validation failed after stripe customer ensure.",
       errors: v.errors,
     });
   }
@@ -382,7 +424,8 @@ router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (
       },
     });
   } catch (e) {
-    const msg = safeString(e?.message) || "Stripe checkout session create failed.";
+    const msg =
+      safeString(e?.message) || "Stripe checkout session create failed.";
     console.error("[billing.create-checkout-session] STRIPE_ERROR", msg);
     console.error("[stripe.checkout.create.fail]", {
       companyId,
@@ -431,7 +474,10 @@ router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (
       after: { billing: before?.billing ?? null },
     });
   } catch (e) {
-    console.error("[billing.create-checkout-session] AUDIT_WRITE_FAILED", safeString(e?.message));
+    console.error(
+      "[billing.create-checkout-session] AUDIT_WRITE_FAILED",
+      safeString(e?.message)
+    );
     // Do not fail response
   }
 
@@ -524,7 +570,10 @@ router.post("/stripe/customer-portal", requireRole(["manager"]), async (req, res
             after: { billing: nextCompany.billing ?? null },
           });
         } catch (e) {
-          console.error("[billing.customer-portal] AUDIT_WRITE_FAILED", safeString(e?.message));
+          console.error(
+            "[billing.customer-portal] AUDIT_WRITE_FAILED",
+            safeString(e?.message)
+          );
           // Do not fail
         }
       }
@@ -587,7 +636,10 @@ router.post("/stripe/customer-portal", requireRole(["manager"]), async (req, res
       after: { billing: before?.billing ?? null },
     });
   } catch (e) {
-    console.error("[billing.customer-portal] AUDIT_WRITE_FAILED", safeString(e?.message));
+    console.error(
+      "[billing.customer-portal] AUDIT_WRITE_FAILED",
+      safeString(e?.message)
+    );
     // Do not fail response
   }
 

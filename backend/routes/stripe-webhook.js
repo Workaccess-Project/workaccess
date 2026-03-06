@@ -1,11 +1,16 @@
 // backend/routes/stripe-webhook.js
 //
-// BOX #85 – Stripe Webhook Hardening
+// BOX #85 - Stripe Webhook Hardening
 // - Verifies Stripe signature (requires raw body)
 // - Ignores irrelevant Stripe events (prevents log spam)
 // - For relevant events: resolves tenant by metadata.companyId or by customerId lookup
 // - Never fails webhook delivery because tenant is missing (returns 200 to prevent retries)
 // - Writes tenant-scoped audit when companyId is resolved
+//
+// BOX #86:
+// - Writes best-effort observability records to shared in-memory buffer
+// - Does NOT expose any public debug endpoint here
+// - Read access is provided only from protected tenant-safe billing API
 
 import express from "express";
 import Stripe from "stripe";
@@ -14,6 +19,7 @@ import { fileURLToPath } from "url";
 import { promises as fs } from "fs";
 
 import { auditLog } from "../data-audit.js";
+import { pushStripeDebugEvent } from "../services/stripe-debug-buffer.js";
 
 const router = express.Router();
 
@@ -188,8 +194,21 @@ router.post("/webhook", async (req, res) => {
 
   const isRelevant = RELEVANT_EVENT_TYPES.has(type);
 
-  // ✅ Ignore irrelevant events silently (prevents log spam)
+  // Ignore irrelevant events silently (prevents log spam)
   if (!isRelevant) {
+    pushStripeDebugEvent({
+      eventId,
+      type,
+      relevant: false,
+      ignored: true,
+      reason: "irrelevant_event_type",
+      companyId: companyId || null,
+      customerId: customerId || null,
+      subscriptionId: subscriptionId || null,
+      stripeObject: stripeObject || null,
+      objectId: objectId || null,
+    });
+
     return res.json({ received: true, ignored: true });
   }
 
@@ -199,6 +218,21 @@ router.post("/webhook", async (req, res) => {
   }
 
   if (!companyId) {
+    pushStripeDebugEvent({
+      eventId,
+      type,
+      relevant: true,
+      ignored: true,
+      reason: customerId
+        ? "tenant_not_found_for_customer"
+        : "missing_customer_id",
+      companyId: null,
+      customerId: customerId || null,
+      subscriptionId: subscriptionId || null,
+      stripeObject: stripeObject || null,
+      objectId: objectId || null,
+    });
+
     // Relevant event, but tenant not found. Do NOT fail webhook delivery.
     const key = `TENANT_NOT_FOUND:${type}:${customerId || "no_customer"}`;
     if (shouldLogNoisyOnce(key)) {
@@ -214,6 +248,19 @@ router.post("/webhook", async (req, res) => {
     }
     return res.json({ received: true, ignored: true });
   }
+
+  pushStripeDebugEvent({
+    eventId,
+    type,
+    relevant: true,
+    ignored: false,
+    reason: "processed",
+    companyId,
+    customerId: customerId || null,
+    subscriptionId: subscriptionId || null,
+    stripeObject: stripeObject || null,
+    objectId: objectId || null,
+  });
 
   // Minimal ops log for relevant events (now tenant-resolved)
   console.log(
