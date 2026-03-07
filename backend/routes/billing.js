@@ -30,6 +30,10 @@
 // - Manager only
 // - Returns only events for tenant from JWT/companyId
 // - No global cross-tenant output
+//
+// BOX #89:
+// - Uses shared Stripe price mapping helper
+// - Removes local plan -> priceId mapping duplication
 
 import express from "express";
 import Stripe from "stripe";
@@ -42,6 +46,7 @@ import {
   BILLING_STATUS,
   validateBillingProfile,
 } from "../src/billing/billingModel.js";
+import { priceIdForPlan } from "../src/billing/stripePriceMapping.js";
 import {
   ensureStripeCustomer,
   createCustomerPortalSession,
@@ -114,13 +119,6 @@ function stripeClientOrNull() {
   if (!key) return null;
   // Do not force apiVersion to avoid runtime mismatch
   return new Stripe(key);
-}
-
-function priceIdForPlan(plan) {
-  const p = safeString(plan).toLowerCase();
-  if (p === "basic") return safeString(process.env.STRIPE_PRICE_BASIC);
-  if (p === "pro") return safeString(process.env.STRIPE_PRICE_PRO);
-  return "";
 }
 
 function publicAppBaseUrl() {

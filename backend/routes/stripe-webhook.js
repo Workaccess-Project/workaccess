@@ -17,6 +17,11 @@
 // - Sync source-of-truth into company.billing.*
 // - Keeps legacy subscription fields in sync for compatibility
 // - Never fails webhook delivery because billing sync write fails
+//
+// BOX #89:
+// - Uses shared Stripe price mapping helper
+// - Removes local priceId -> plan mapping duplication
+// - Keeps webhook plan resolution aligned with checkout mapping
 
 import express from "express";
 import Stripe from "stripe";
@@ -33,6 +38,7 @@ import {
   BILLING_STATUS,
   validateBillingProfile,
 } from "../src/billing/billingModel.js";
+import { planFromPriceId } from "../src/billing/stripePriceMapping.js";
 
 const router = express.Router();
 
@@ -112,19 +118,6 @@ function normalizePlanFromRaw(planRaw, fallback = "") {
   if (p === "free") return BILLING_PLANS.TRIAL;
   if (p === "basic") return BILLING_PLANS.BASIC;
   if (p === "pro") return BILLING_PLANS.PRO;
-
-  return safeString(fallback);
-}
-
-function planFromPriceId(priceId, fallback = "") {
-  const pid = safeString(priceId);
-  if (!pid) return safeString(fallback);
-
-  const basic = safeString(process.env.STRIPE_PRICE_BASIC);
-  const pro = safeString(process.env.STRIPE_PRICE_PRO);
-
-  if (basic && pid === basic) return BILLING_PLANS.BASIC;
-  if (pro && pid === pro) return BILLING_PLANS.PRO;
 
   return safeString(fallback);
 }
