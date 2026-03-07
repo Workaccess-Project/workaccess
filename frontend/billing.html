@@ -19,7 +19,6 @@
         </div>
       </div>
 
-      <!-- Paywall / status box -->
       <div class="section" id="boxPaywall" style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;">
         <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:flex-start; justify-content:space-between;">
           <div style="min-width:240px;">
@@ -27,25 +26,21 @@
             <div class="small" id="paywallText" style="opacity:0.9; margin-top:6px;"></div>
           </div>
           <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-            <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif (demo)</button>
-            <button id="btnCancel" style="display:none;">Zrušit tarif (demo)</button>
+            <button class="waBtn--primary" id="btnActivate" style="display:none;">Aktivovat tarif</button>
             <button id="btnPortal" style="display:none;">Spravovat předplatné (Stripe)</button>
             <button id="btnRefresh">Obnovit</button>
           </div>
         </div>
 
-        <!-- external info -->
         <div id="externalNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
           Nemáte oprávnění spravovat tarif. Kontaktujte prosím manažera/HR ve firmě.
         </div>
 
-        <!-- hr/security info -->
         <div id="nonManagerNotice" class="small" style="display:none; margin-top:10px; padding-top:10px; border-top:1px solid var(--border); opacity:.9;">
           Správu předplatného (Stripe) může provádět pouze manažer.
         </div>
       </div>
 
-      <!-- Benefits -->
       <div class="section" id="benefitsBox" style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Co získáte aktivací tarifu</div>
         <ul class="small" style="margin:0; padding-left:18px; line-height:1.55; opacity:.92;">
@@ -57,7 +52,6 @@
         </ul>
       </div>
 
-      <!-- Raw details -->
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Technický stav (pro kontrolu)</div>
         <div id="details" class="small"></div>
@@ -70,10 +64,9 @@
     </div>
   </div>
 
-  <!-- DŮLEŽITÉ pořadí: config -> nav -> api -->
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=84"></script>
+  <script src="./api.js?v=88.1"></script>
 
   <script>
     WA_NAV.renderNav("billing");
@@ -83,7 +76,6 @@
     const elPaywallText = document.getElementById("paywallText");
 
     const elBtnActivate = document.getElementById("btnActivate");
-    const elBtnCancel = document.getElementById("btnCancel");
     const elBtnPortal = document.getElementById("btnPortal");
     const elBtnRefresh = document.getElementById("btnRefresh");
 
@@ -175,44 +167,29 @@
       }
     }
 
-    function isExternalRole() {
-      return getRoleKey() === "external";
-    }
-
-    function isManagerRole() {
-      return getRoleKey() === "manager";
-    }
-
     function applyRoleUi() {
       const role = getRoleKey();
       const external = role === "external";
       const manager = role === "manager";
 
       elExternalNotice.style.display = external ? "" : "none";
-
-      // Non-manager notice: hr/security/external (ale external má vlastní text)
       elNonManagerNotice.style.display = (!manager && !external) ? "" : "none";
 
-      // Stripe portal pouze pro manager
       elBtnPortal.style.display = manager ? "" : "none";
 
-      // demo buttons: external je nesmí vidět
       if (external) {
         elBtnActivate.style.display = "none";
-        elBtnCancel.style.display = "none";
       }
 
       return { role, external, manager };
     }
 
     function pickBillingSnapshot(s) {
-      // v36 canonical
       const billing = (s && typeof s.billing === "object") ? s.billing : null;
       const plan = String(billing?.plan || "").trim();
       const billingStatus = String(billing?.billingStatus || "").trim();
       const trialEndsAt = String(billing?.trialEndsAt || "").trim();
 
-      // legacy snapshot (backend returns under legacy.*)
       const legacyTrial = s?.legacy?.trial || null;
       const legacySub = s?.legacy?.subscription || null;
 
@@ -248,7 +225,6 @@
     async function refresh() {
       elStatusLine.textContent = "Načítám…";
       elBtnActivate.disabled = false;
-      elBtnCancel.disabled = false;
       elBtnPortal.disabled = false;
 
       const roleUi = applyRoleUi();
@@ -284,7 +260,6 @@
             `Tarif: ${snap.plan || "—"} • aktivní (billingStatus: ${snap.billingStatus || "—"})`,
             "ok"
           );
-          elBtnCancel.style.display = roleUi.external ? "none" : "";
           elBtnActivate.style.display = "none";
           clearPaywallHint();
         } else if (snap.locked || snap.trialExpired) {
@@ -295,7 +270,6 @@
               "error"
             );
             elBtnActivate.style.display = "none";
-            elBtnCancel.style.display = "none";
           } else {
             showPaywall(
               "Přístup uzamčen",
@@ -305,7 +279,6 @@
               "error"
             );
             elBtnActivate.style.display = roleUi.manager ? "" : "none";
-            elBtnCancel.style.display = "none";
           }
         } else {
           const left = daysLeft(snap.trialEnd);
@@ -320,8 +293,7 @@
             hidePaywall();
           }
 
-          elBtnActivate.style.display = "none";
-          elBtnCancel.style.display = "none";
+          elBtnActivate.style.display = roleUi.manager ? "" : "none";
           clearPaywallHint();
         }
 
@@ -350,36 +322,20 @@
 
     elBtnActivate.addEventListener("click", async () => {
       elBtnActivate.disabled = true;
-      elStatusLine.textContent = "Aktivuji…";
+      elStatusLine.textContent = "Připravuji Stripe Checkout…";
       try {
-        await WA_API.billingActivate("basic", 30);
-        await refresh();
+        const r = await WA_API.billingCreateCheckoutSession("basic");
+        const url = (r && typeof r.url === "string") ? r.url.trim() : "";
+        if (!url) throw new Error("Stripe checkout URL is missing.");
+        window.location.href = url;
       } catch (e) {
-        showPaywall("Aktivace se nepovedla", `Chyba: ${esc(e?.message || e)}`, "error");
-        elStatusLine.textContent = "Chyba aktivace";
+        showPaywall("Checkout se nepovedlo otevřít", `Chyba: ${esc(e?.message || e)}`, "error");
+        elStatusLine.textContent = "Chyba checkoutu";
       } finally {
         elBtnActivate.disabled = false;
       }
     });
 
-    elBtnCancel.addEventListener("click", async () => {
-      const ok = confirm("Opravdu zrušit tarif (demo)?");
-      if (!ok) return;
-
-      elBtnCancel.disabled = true;
-      elStatusLine.textContent = "Ruším…";
-      try {
-        await WA_API.billingCancel();
-        await refresh();
-      } catch (e) {
-        showPaywall("Zrušení se nepovedlo", `Chyba: ${esc(e?.message || e)}`, "error");
-        elStatusLine.textContent = "Chyba zrušení";
-      } finally {
-        elBtnCancel.disabled = false;
-      }
-    });
-
-    // BOX #84: Stripe Customer Portal (redirect) — manager only
     elBtnPortal.addEventListener("click", async () => {
       elBtnPortal.disabled = true;
       elStatusLine.textContent = "Otevírám Stripe portál…";

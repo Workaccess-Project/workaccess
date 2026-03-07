@@ -13,6 +13,9 @@
 //
 // BOX #84:
 // - Stripe Customer Portal helper: POST /billing/stripe/customer-portal
+//
+// BOX #88.1:
+// - Stripe Checkout helper: POST /billing/stripe/create-checkout-session
 
 (() => {
   function apiBase() {
@@ -142,7 +145,6 @@
   }
 
   function isLoginRoute() {
-    // Podporujeme jak /login (pretty) tak /login.html (přímý soubor)
     const p = pageName();
     return p === "login" || p === "login.html";
   }
@@ -230,7 +232,7 @@
     if (!cid) return { ok: true, skipped: true };
 
     const cache = getGateCache();
-    if (cache && typeof cache.ts === "number" && Date.now() - cache.ts < 60_000) {
+    if (cache && typeof cache.ts === "number" && Date.now() - cache.ts < 60000) {
       if (cache.locked) {
         rememberPaywall(cache.reason || "TrialExpired");
         goToBillingHub();
@@ -289,7 +291,6 @@
     }
   }
 
-  // Gate spustíme hned (asynchronně)
   ensureBillingGate();
 
   // ---------- CORE ERROR HANDLING ----------
@@ -318,8 +319,6 @@
       return;
     }
 
-    // User limit enforcement (BOX #58) používá také 402
-    // Pokud přijde 402 z /employees kvůli limitu, chceme stejné chování: redirect na billing.
     if (Number(err?.status || 0) === 402) {
       setGateCache({
         ts: Date.now(),
@@ -331,7 +330,6 @@
       return;
     }
 
-    // ---------- 403 FORBIDDEN (ROLE / FEATURE) ----------
     if (Number(err?.status || 0) === 403) {
       const code = safeString(err?.body?.code || err?.code || "");
 
@@ -341,12 +339,10 @@
           sessionStorage.setItem("wa_forbidden_code", code);
           sessionStorage.setItem("wa_forbidden_ts", String(Date.now()));
 
-          // Volitelně: pár detailů pro UI (nesmí být huge)
           const details = err?.body?.details ? JSON.stringify(err.body.details).slice(0, 2000) : "";
           sessionStorage.setItem("wa_forbidden_details", details);
         } catch {}
 
-        // Bezpečný fallback: držíme uživatele na dashboardu, který existuje
         const p = pageName();
         if (p !== "dashboard" && p !== "dashboard.html") {
           try {
@@ -414,12 +410,18 @@
 
   const billingCancel = () => apiFetch("/billing/cancel", { method: "POST" });
 
-  // BOX #84: Stripe Customer Portal
   const billingCustomerPortal = () =>
     apiFetch("/billing/stripe/customer-portal", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({}),
+    });
+
+  const billingCreateCheckoutSession = (plan = "basic") =>
+    apiFetch("/billing/stripe/create-checkout-session", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan }),
     });
 
   // --- CORE DATA ---
@@ -506,6 +508,7 @@
     billingActivate,
     billingCancel,
     billingCustomerPortal,
+    billingCreateCheckoutSession,
 
     // gate
     ensureBillingGate,
