@@ -1,4 +1,4 @@
-// backend/routes/stripe-webhook.js
+﻿// backend/routes/stripe-webhook.js
 //
 // BOX #85 - Stripe Webhook Hardening
 // - Verifies Stripe signature (requires raw body)
@@ -11,6 +11,12 @@
 // - Writes best-effort observability records to shared in-memory buffer
 // - Does NOT expose any public debug endpoint here
 // - Read access is provided only from protected tenant-safe billing API
+//
+// BOX #87:
+// - Adds Stripe billing lifecycle synchronization
+// - Sync source-of-truth into company.billing.*
+// - Keeps legacy subscription fields in sync for compatibility
+// - Never fails webhook delivery because billing sync write fails
 
 import express from "express";
 import Stripe from "stripe";
@@ -18,8 +24,15 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { promises as fs } from "fs";
 
+import { getCompanyProfile } from "../data-company.js";
+import { writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
 import { pushStripeDebugEvent } from "../services/stripe-debug-buffer.js";
+import {
+  BILLING_PLANS,
+  BILLING_STATUS,
+  validateBillingProfile,
+} from "../src/billing/billingModel.js";
 
 const router = express.Router();
 
@@ -33,6 +46,10 @@ function looksLikeCompanyId(v) {
   return /^[a-zA-Z0-9_-]+$/.test(s);
 }
 
+function nowIso() {
+  return new Date().toISOString();
+}
+
 function stripeClientOrNull() {
   const key = safeString(process.env.STRIPE_SECRET_KEY);
   if (!key) return null;
@@ -42,7 +59,9 @@ function stripeClientOrNull() {
 const RELEVANT_EVENT_TYPES = new Set([
   "checkout.session.completed",
   "customer.subscription.updated",
+  "customer.subscription.deleted",
   "invoice.payment_failed",
+  "invoice.payment_succeeded",
 ]);
 
 // Rate-limit noisy logs (in-memory, best-effort)
@@ -55,6 +74,95 @@ function shouldLogNoisyOnce(key) {
   if (prev && now - prev < NOISY_LOG_TTL_MS) return false;
   noisyLogCache.set(key, now);
   return true;
+}
+
+function toIsoFromUnixSeconds(v) {
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  return new Date(n * 1000).toISOString();
+}
+
+function parseIsoOrEmpty(v) {
+  const s = safeString(v);
+  if (!s) return "";
+  const d = new Date(s);
+  if (String(d) === "Invalid Date") return "";
+  return d.toISOString();
+}
+
+function findPriceIdInStripeObject(obj) {
+  const direct = safeString(obj?.items?.data?.[0]?.price?.id);
+  if (direct) return direct;
+
+  const invoiceLine = safeString(obj?.lines?.data?.[0]?.price?.id);
+  if (invoiceLine) return invoiceLine;
+
+  return "";
+}
+
+function normalizePlanFromRaw(planRaw, fallback = "") {
+  const p = safeString(planRaw).toLowerCase();
+
+  if (p === BILLING_PLANS.TRIAL) return BILLING_PLANS.TRIAL;
+  if (p === BILLING_PLANS.BASIC) return BILLING_PLANS.BASIC;
+  if (p === BILLING_PLANS.PRO) return BILLING_PLANS.PRO;
+  if (p === BILLING_PLANS.ENTERPRISE) return BILLING_PLANS.ENTERPRISE;
+
+  // legacy compatibility
+  if (p === "free") return BILLING_PLANS.TRIAL;
+  if (p === "basic") return BILLING_PLANS.BASIC;
+  if (p === "pro") return BILLING_PLANS.PRO;
+
+  return safeString(fallback);
+}
+
+function planFromPriceId(priceId, fallback = "") {
+  const pid = safeString(priceId);
+  if (!pid) return safeString(fallback);
+
+  const basic = safeString(process.env.STRIPE_PRICE_BASIC);
+  const pro = safeString(process.env.STRIPE_PRICE_PRO);
+
+  if (basic && pid === basic) return BILLING_PLANS.BASIC;
+  if (pro && pid === pro) return BILLING_PLANS.PRO;
+
+  return safeString(fallback);
+}
+
+function mapStripeSubscriptionStatusToBillingStatus(stripeStatus, fallback = "") {
+  const s = safeString(stripeStatus).toLowerCase();
+
+  if (s === "trialing") return BILLING_STATUS.TRIALING;
+  if (s === "active") return BILLING_STATUS.ACTIVE;
+  if (s === "past_due") return BILLING_STATUS.PAST_DUE;
+  if (s === "unpaid") return BILLING_STATUS.UNPAID;
+  if (s === "canceled") return BILLING_STATUS.CANCELLED;
+  if (s === "cancelled") return BILLING_STATUS.CANCELLED;
+  if (s === "incomplete_expired") return BILLING_STATUS.UNPAID;
+
+  return safeString(fallback);
+}
+
+function mapBillingStatusToLegacySubscriptionStatus(billingStatus, fallback = "none") {
+  const st = safeString(billingStatus);
+
+  if (st === BILLING_STATUS.ACTIVE) return "active";
+  if (st === BILLING_STATUS.TRIALING) return "active";
+  if (st === BILLING_STATUS.PAST_DUE) return "past_due";
+  if (st === BILLING_STATUS.UNPAID) return "past_due";
+  if (st === BILLING_STATUS.CANCELLED) return "canceled";
+
+  return safeString(fallback) || "none";
+}
+
+function mapBillingPlanToLegacyPlan(plan, fallback = "free") {
+  const p = safeString(plan);
+
+  if (p === BILLING_PLANS.TRIAL) return "free";
+  if (p === BILLING_PLANS.BASIC) return "basic";
+  if (p === BILLING_PLANS.PRO) return "pro";
+
+  return safeString(fallback) || "free";
 }
 
 async function findCompanyIdByStripeCustomerId(customerId) {
@@ -117,11 +225,340 @@ function extractCustomerId(obj) {
 function extractSubscriptionId(obj) {
   const s = obj?.subscription;
   if (typeof s === "string") return safeString(s);
+
+  const id = safeString(obj?.id);
+  if (safeString(obj?.object) === "subscription" && id) return id;
+
   return "";
 }
 
 function extractObjectId(obj) {
   return safeString(obj?.id);
+}
+
+function buildLifecyclePatch({ type, obj, profile }) {
+  const prevBilling = profile?.billing ?? {};
+  const prevStripe = prevBilling?.stripe ?? {};
+
+  const customerId =
+    extractCustomerId(obj) ||
+    safeString(prevStripe?.customerId);
+
+  const subscriptionId =
+    extractSubscriptionId(obj) ||
+    safeString(prevStripe?.subscriptionId);
+
+  const priceId =
+    findPriceIdInStripeObject(obj) ||
+    safeString(prevStripe?.priceId);
+
+  const metadataPlan = normalizePlanFromRaw(obj?.metadata?.plan);
+  const planFromPrice = planFromPriceId(priceId);
+  const prevPlan = normalizePlanFromRaw(prevBilling?.plan, BILLING_PLANS.TRIAL);
+
+  let nextPlan = metadataPlan || planFromPrice || prevPlan || BILLING_PLANS.TRIAL;
+  let nextStatus = safeString(prevBilling?.billingStatus) || BILLING_STATUS.TRIALING;
+  let nextTrialEndsAt = parseIsoOrEmpty(prevBilling?.trialEndsAt);
+
+  let subscriptionStart =
+    parseIsoOrEmpty(profile?.subscriptionStart) ||
+    toIsoFromUnixSeconds(obj?.start_date) ||
+    toIsoFromUnixSeconds(obj?.current_period_start);
+
+  let subscriptionEnd =
+    parseIsoOrEmpty(profile?.subscriptionEnd) ||
+    toIsoFromUnixSeconds(obj?.current_period_end);
+
+  if (type === "checkout.session.completed") {
+    if (!safeString(subscriptionStart)) {
+      subscriptionStart = nowIso();
+    }
+
+    if (metadataPlan) {
+      nextPlan = metadataPlan;
+    }
+
+    return {
+      billing: {
+        plan: nextPlan || prevPlan || BILLING_PLANS.TRIAL,
+        billingStatus: nextStatus,
+        trialEndsAt: nextPlan === BILLING_PLANS.TRIAL ? nextTrialEndsAt : null,
+        stripe: {
+          customerId: customerId || null,
+          subscriptionId: subscriptionId || null,
+          priceId: priceId || null,
+        },
+      },
+      legacy: {
+        subscriptionStatus: safeString(profile?.subscriptionStatus) || "none",
+        plan: safeString(profile?.plan) || "free",
+        paymentProvider:
+          customerId || subscriptionId
+            ? "stripe"
+            : safeString(profile?.paymentProvider),
+        subscriptionStart: subscriptionStart || "",
+        subscriptionEnd: subscriptionEnd || "",
+      },
+      meta: {
+        resolvedPlan: nextPlan || null,
+        resolvedBillingStatus: nextStatus || null,
+        customerId: customerId || null,
+        subscriptionId: subscriptionId || null,
+        priceId: priceId || null,
+      },
+    };
+  }
+
+  if (type === "invoice.payment_succeeded") {
+    nextStatus = BILLING_STATUS.ACTIVE;
+    if (planFromPrice) nextPlan = planFromPrice;
+
+    return {
+      billing: {
+        plan: nextPlan || prevPlan || BILLING_PLANS.BASIC,
+        billingStatus: nextStatus,
+        trialEndsAt: nextPlan === BILLING_PLANS.TRIAL ? nextTrialEndsAt : null,
+        stripe: {
+          customerId: customerId || null,
+          subscriptionId: subscriptionId || null,
+          priceId: priceId || null,
+        },
+      },
+      legacy: {
+        subscriptionStatus: "active",
+        plan: mapBillingPlanToLegacyPlan(nextPlan, profile?.plan),
+        paymentProvider: "stripe",
+        subscriptionStart: subscriptionStart || parseIsoOrEmpty(profile?.subscriptionStart) || "",
+        subscriptionEnd: subscriptionEnd || parseIsoOrEmpty(profile?.subscriptionEnd) || "",
+      },
+      meta: {
+        resolvedPlan: nextPlan || null,
+        resolvedBillingStatus: nextStatus,
+        customerId: customerId || null,
+        subscriptionId: subscriptionId || null,
+        priceId: priceId || null,
+      },
+    };
+  }
+
+  if (type === "invoice.payment_failed") {
+    nextStatus = BILLING_STATUS.PAST_DUE;
+    if (planFromPrice) nextPlan = planFromPrice;
+
+    return {
+      billing: {
+        plan: nextPlan || prevPlan || BILLING_PLANS.BASIC,
+        billingStatus: nextStatus,
+        trialEndsAt: nextPlan === BILLING_PLANS.TRIAL ? nextTrialEndsAt : null,
+        stripe: {
+          customerId: customerId || null,
+          subscriptionId: subscriptionId || null,
+          priceId: priceId || null,
+        },
+      },
+      legacy: {
+        subscriptionStatus: "past_due",
+        plan: mapBillingPlanToLegacyPlan(nextPlan, profile?.plan),
+        paymentProvider: "stripe",
+        subscriptionStart: subscriptionStart || parseIsoOrEmpty(profile?.subscriptionStart) || "",
+        subscriptionEnd: subscriptionEnd || parseIsoOrEmpty(profile?.subscriptionEnd) || "",
+      },
+      meta: {
+        resolvedPlan: nextPlan || null,
+        resolvedBillingStatus: nextStatus,
+        customerId: customerId || null,
+        subscriptionId: subscriptionId || null,
+        priceId: priceId || null,
+      },
+    };
+  }
+
+  if (type === "customer.subscription.updated") {
+    const stripeStatus = safeString(obj?.status);
+    nextStatus = mapStripeSubscriptionStatusToBillingStatus(
+      stripeStatus,
+      nextStatus || BILLING_STATUS.TRIALING
+    );
+
+    if (planFromPrice) nextPlan = planFromPrice;
+    if (metadataPlan) nextPlan = metadataPlan;
+
+    const trialEnd = toIsoFromUnixSeconds(obj?.trial_end);
+    if (nextPlan === BILLING_PLANS.TRIAL) {
+      nextTrialEndsAt = trialEnd || nextTrialEndsAt;
+    } else {
+      nextTrialEndsAt = null;
+    }
+
+    subscriptionStart =
+      toIsoFromUnixSeconds(obj?.start_date) ||
+      toIsoFromUnixSeconds(obj?.current_period_start) ||
+      subscriptionStart;
+
+    subscriptionEnd =
+      toIsoFromUnixSeconds(obj?.current_period_end) ||
+      subscriptionEnd;
+
+    return {
+      billing: {
+        plan: nextPlan || prevPlan || BILLING_PLANS.BASIC,
+        billingStatus: nextStatus,
+        trialEndsAt: nextPlan === BILLING_PLANS.TRIAL ? nextTrialEndsAt : null,
+        stripe: {
+          customerId: customerId || null,
+          subscriptionId: subscriptionId || null,
+          priceId: priceId || null,
+        },
+      },
+      legacy: {
+        subscriptionStatus: mapBillingStatusToLegacySubscriptionStatus(
+          nextStatus,
+          profile?.subscriptionStatus
+        ),
+        plan: mapBillingPlanToLegacyPlan(nextPlan, profile?.plan),
+        paymentProvider: "stripe",
+        subscriptionStart: subscriptionStart || "",
+        subscriptionEnd: subscriptionEnd || "",
+      },
+      meta: {
+        stripeStatus: stripeStatus || null,
+        resolvedPlan: nextPlan || null,
+        resolvedBillingStatus: nextStatus || null,
+        customerId: customerId || null,
+        subscriptionId: subscriptionId || null,
+        priceId: priceId || null,
+      },
+    };
+  }
+
+  if (type === "customer.subscription.deleted") {
+    const endedAt =
+      toIsoFromUnixSeconds(obj?.ended_at) ||
+      toIsoFromUnixSeconds(obj?.canceled_at) ||
+      toIsoFromUnixSeconds(obj?.current_period_end) ||
+      nowIso();
+
+    if (planFromPrice) nextPlan = planFromPrice;
+
+    return {
+      billing: {
+        plan: nextPlan || prevPlan || BILLING_PLANS.BASIC,
+        billingStatus: BILLING_STATUS.CANCELLED,
+        trialEndsAt: nextPlan === BILLING_PLANS.TRIAL ? nextTrialEndsAt : null,
+        stripe: {
+          customerId: customerId || null,
+          subscriptionId: subscriptionId || null,
+          priceId: priceId || null,
+        },
+      },
+      legacy: {
+        subscriptionStatus: "canceled",
+        plan: mapBillingPlanToLegacyPlan(nextPlan, profile?.plan),
+        paymentProvider: "stripe",
+        subscriptionStart:
+          subscriptionStart || parseIsoOrEmpty(profile?.subscriptionStart) || "",
+        subscriptionEnd: endedAt,
+      },
+      meta: {
+        resolvedPlan: nextPlan || null,
+        resolvedBillingStatus: BILLING_STATUS.CANCELLED,
+        customerId: customerId || null,
+        subscriptionId: subscriptionId || null,
+        priceId: priceId || null,
+      },
+    };
+  }
+
+  return null;
+}
+
+async function syncCompanyBillingFromStripeEvent({ companyId, type, obj, eventId }) {
+  const profile = await getCompanyProfile(companyId);
+  const patch = buildLifecyclePatch({ type, obj, profile });
+
+  if (!patch) {
+    return { ok: true, changed: false, reason: "no_lifecycle_patch" };
+  }
+
+  const now = nowIso();
+
+  const nextCompany = {
+    ...profile,
+    billing: {
+      ...(profile.billing || {}),
+      ...(patch.billing || {}),
+      stripe: {
+        ...((profile.billing && profile.billing.stripe) || {}),
+        ...((patch.billing && patch.billing.stripe) || {}),
+      },
+      updatedAt: now,
+    },
+    subscriptionStatus: safeString(patch.legacy?.subscriptionStatus ?? profile.subscriptionStatus),
+    plan: safeString(patch.legacy?.plan ?? profile.plan),
+    paymentProvider: safeString(patch.legacy?.paymentProvider ?? profile.paymentProvider),
+    subscriptionStart: parseIsoOrEmpty(patch.legacy?.subscriptionStart ?? profile.subscriptionStart),
+    subscriptionEnd: parseIsoOrEmpty(patch.legacy?.subscriptionEnd ?? profile.subscriptionEnd),
+    updatedAt: now,
+  };
+
+  const validation = validateBillingProfile(nextCompany.billing);
+  if (!validation.ok) {
+    const err = new Error("Billing profile validation failed after Stripe lifecycle sync.");
+    err.code = "BILLING_INVALID";
+    err.details = validation.errors;
+    throw err;
+  }
+  nextCompany.billing = validation.normalized;
+
+  const beforeSnapshot = {
+    billing: profile?.billing ?? null,
+    subscriptionStatus: profile?.subscriptionStatus ?? null,
+    plan: profile?.plan ?? null,
+    paymentProvider: profile?.paymentProvider ?? null,
+    subscriptionStart: profile?.subscriptionStart ?? null,
+    subscriptionEnd: profile?.subscriptionEnd ?? null,
+  };
+
+  const afterSnapshot = {
+    billing: nextCompany?.billing ?? null,
+    subscriptionStatus: nextCompany?.subscriptionStatus ?? null,
+    plan: nextCompany?.plan ?? null,
+    paymentProvider: nextCompany?.paymentProvider ?? null,
+    subscriptionStart: nextCompany?.subscriptionStart ?? null,
+    subscriptionEnd: nextCompany?.subscriptionEnd ?? null,
+  };
+
+  const changed = JSON.stringify(beforeSnapshot) !== JSON.stringify(afterSnapshot);
+
+  if (!changed) {
+    return { ok: true, changed: false, reason: "no_state_change", meta: patch.meta };
+  }
+
+  await writeTenantEntity(companyId, "company", nextCompany);
+
+  try {
+    await auditLog({
+      companyId,
+      actorRole: "system",
+      action: "stripe.billing.lifecycle_sync",
+      entityType: "company",
+      entityId: companyId,
+      meta: {
+        eventId: eventId || null,
+        type,
+        ...(patch.meta || {}),
+      },
+      before: beforeSnapshot,
+      after: afterSnapshot,
+    });
+  } catch (e) {
+    console.error(
+      "[stripe-webhook] BILLING_AUDIT_WRITE_FAILED",
+      safeString(e?.message)
+    );
+  }
+
+  return { ok: true, changed: true, meta: patch.meta };
 }
 
 // Public readiness endpoint (NO secrets, only booleans)
@@ -266,6 +703,28 @@ router.post("/webhook", async (req, res) => {
   console.log(
     `[stripe-webhook] received event=${eventId} type=${type} companyId=${companyId} customer=${customerId || "n/a"} subscription=${subscriptionId || "n/a"}`
   );
+
+  // BOX #87: lifecycle sync (best-effort; never fail webhook)
+  try {
+    const sync = await syncCompanyBillingFromStripeEvent({
+      companyId,
+      type,
+      obj,
+      eventId,
+    });
+
+    if (sync?.changed) {
+      console.log(
+        `[stripe-webhook] billing-sync event=${eventId} type=${type} companyId=${companyId} status=${safeString(sync?.meta?.resolvedBillingStatus) || "n/a"} plan=${safeString(sync?.meta?.resolvedPlan) || "n/a"}`
+      );
+    }
+  } catch (e) {
+    console.error(
+      "[stripe-webhook] BILLING_SYNC_FAILED",
+      safeString(e?.message),
+      Array.isArray(e?.details) ? e.details.join(" | ") : ""
+    );
+  }
 
   // Tenant audit (best-effort; never fail webhook)
   try {

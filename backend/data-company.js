@@ -1,4 +1,4 @@
-// backend/data-company.js
+﻿// backend/data-company.js
 import { readTenantEntity, writeTenantEntity } from "./data/tenant-store.js";
 import {
   createDefaultBillingProfile,
@@ -145,26 +145,69 @@ function normalizeCompanyBody(body = {}, prev = {}) {
   };
 }
 
+function normalizeLegacyPlanToBilling(planRaw) {
+  const p = safeString(planRaw).toLowerCase();
+
+  if (p === "free") return BILLING_PLANS.TRIAL;
+  if (p === "trial") return BILLING_PLANS.TRIAL;
+  if (p === "basic") return BILLING_PLANS.BASIC;
+  if (p === "pro") return BILLING_PLANS.PRO;
+  if (p === "enterprise") return BILLING_PLANS.ENTERPRISE;
+
+  return "";
+}
+
+function normalizeLegacyStatusToBilling(statusRaw) {
+  const s = safeString(statusRaw).toLowerCase();
+
+  if (s === "active") return BILLING_STATUS.ACTIVE;
+  if (s === "past_due") return BILLING_STATUS.PAST_DUE;
+  if (s === "unpaid") return BILLING_STATUS.UNPAID;
+  if (s === "canceled") return BILLING_STATUS.CANCELLED;
+  if (s === "cancelled") return BILLING_STATUS.CANCELLED;
+
+  return "";
+}
+
 /**
  * Builds a canonical v36 billing profile with safe migration from legacy fields.
  */
-function buildBillingProfileFromCompany(mergedCompany) {
+function buildBillingProfileFromCompany(mergedCompany, storedBilling) {
   const createdAtIso = mergedCompany?.createdAt ? normalizeIsoDateString(mergedCompany.createdAt) : "";
   const createdAt = createdAtIso ? new Date(createdAtIso) : new Date();
 
-  // 1) If billing already exists -> validate; if invalid -> reset to default
-  if (mergedCompany?.billing) {
-    const v = validateBillingProfile(mergedCompany.billing);
+  // 1) If persisted billing already exists -> validate; if invalid -> reset
+  if (storedBilling && typeof storedBilling === "object") {
+    const v = validateBillingProfile(storedBilling);
     if (v.ok) return v.normalized;
 
-    // invalid -> reset (but keep original for debugging / audit)
     return {
       ...createDefaultBillingProfile({ now: createdAt, trialDays: 14 }),
-      legacyInvalidBilling: mergedCompany.billing,
+      legacyInvalidBilling: storedBilling,
     };
   }
 
-  // 2) Legacy trialEnd migration (if present)
+  // 2) Legacy paid subscription migration
+  const legacyPlan = normalizeLegacyPlanToBilling(mergedCompany?.plan);
+  const legacyStatus = normalizeLegacyStatusToBilling(mergedCompany?.subscriptionStatus);
+  const legacySubscriptionEnd = normalizeIsoDateString(mergedCompany?.subscriptionEnd);
+
+  if (
+    legacyPlan &&
+    legacyPlan !== BILLING_PLANS.TRIAL &&
+    legacyStatus &&
+    legacySubscriptionEnd
+  ) {
+    return {
+      ...createDefaultBillingProfile({ now: createdAt, trialDays: 14 }),
+      plan: legacyPlan,
+      billingStatus: legacyStatus,
+      trialEndsAt: null,
+      updatedAt: nowIso(),
+    };
+  }
+
+  // 3) Legacy trialEnd migration (if present)
   const legacyTrialEnd = normalizeIsoDateString(mergedCompany?.trialEnd);
   if (legacyTrialEnd) {
     const now = new Date();
@@ -180,7 +223,7 @@ function buildBillingProfileFromCompany(mergedCompany) {
     };
   }
 
-  // 3) Default billing for legacy tenants without trial info
+  // 4) Default billing for legacy tenants without trial/subscription info
   return createDefaultBillingProfile({ now: createdAt, trialDays: 14 });
 }
 
@@ -201,9 +244,9 @@ export async function getCompanyProfile(companyId) {
     return def;
   }
 
-  // jemná migrace: doplníme missing fields včetně trial + alerts + subscription + billing(v36)
   const def = defaultCompany(cid);
-  const merged = { ...def, ...data };
+  const { billing: _ignoredDefaultBilling, ...defWithoutBilling } = def;
+  const merged = { ...defWithoutBilling, ...data };
 
   const aDef = defaultAlerts();
   const aData = merged?.alerts && typeof merged.alerts === "object" ? merged.alerts : {};
@@ -222,7 +265,7 @@ export async function getCompanyProfile(companyId) {
   merged.subscriptionEnd = sub.subscriptionEnd;
 
   // v36 billing normalize + migrate
-  merged.billing = buildBillingProfileFromCompany(merged);
+  merged.billing = buildBillingProfileFromCompany(merged, data?.billing);
 
   if (!merged.createdAt) merged.createdAt = def.createdAt;
   merged.updatedAt = merged.updatedAt || def.updatedAt;
