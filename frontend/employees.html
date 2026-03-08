@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="cs">
 <head>
   <meta charset="utf-8" />
@@ -106,7 +106,7 @@
   <script src="./js/wa_ui_state.js"></script>
 
   <!-- cache-bust: vynutí načtení nové verze api.js -->
-  <script src="./api.js?v=59.4"></script>
+  <script src="./api.js?v=99.0"></script>
 
   <script>
     WA_NAV.renderNav("employees");
@@ -132,7 +132,12 @@
     const elAddRole = document.getElementById("addRole");
 
     function roleLabel(roleKey) {
-      const map = { hr: "HR", manager: "Manažer", security: "Bezpečnost", external: "Externista" };
+      const map = {
+        hr: "HR",
+        manager: "Manažer",
+        security: "Bezpečnost",
+        external: "Externista"
+      };
       return map[roleKey] || roleKey;
     }
 
@@ -155,6 +160,44 @@
 
     function clearEmpty() {
       elEmptyBox.innerHTML = "";
+    }
+
+    function formatPlanLabel(plan) {
+      const p = String(plan || "").trim().toLowerCase();
+      if (p === "trial") return "Trial";
+      if (p === "basic") return "Basic";
+      if (p === "pro") return "Pro";
+      if (p === "enterprise") return "Enterprise";
+      return plan || "—";
+    }
+
+    function buildLimitsMeta(role, filteredCount, limits, fallbackUsed) {
+      const used = Number(limits?.employees?.used ?? fallbackUsed ?? 0);
+      const limitRaw = limits?.employees?.limit;
+      const remainingRaw = limits?.employees?.remaining;
+      const remaining = Number(remainingRaw ?? 0);
+      const plan = formatPlanLabel(limits?.plan || "");
+
+      const unlimited =
+        limitRaw === null ||
+        limitRaw === undefined ||
+        String(limitRaw).trim() === "" ||
+        Number(limitRaw) <= 0;
+
+      const limitLabel = unlimited ? "∞" : String(Number(limitRaw));
+
+      const parts = [
+        `Role: ${roleLabel(role)}`,
+        `Záznamů: ${filteredCount}`,
+        `Zaměstnanci: ${used} / ${limitLabel}`,
+        `Tarif: ${plan}`
+      ];
+
+      if (!unlimited && remaining <= 0) {
+        parts.push("Limit dosažen");
+      }
+
+      return parts.join(" • ");
     }
 
     function openEmployeeDetail(emp) {
@@ -259,10 +302,17 @@
         const all = await WA_API.getEmployees();
         const arr = Array.isArray(all) ? all : [];
 
+        let limits = null;
+        try {
+          limits = await WA_API.getBillingLimits();
+        } catch {
+          limits = null;
+        }
+
         const q = normalize(elQ.value);
         const filtered = arr.filter((x) => matchEmployee(x, q));
 
-        elMeta.textContent = `Role: ${roleLabel(role)} • Záznamů: ${filtered.length}`;
+        elMeta.textContent = buildLimitsMeta(role, filtered.length, limits, arr.length);
         renderRows(filtered);
 
         WA_UI_STATE.setState(elState, "ok", "OK");
