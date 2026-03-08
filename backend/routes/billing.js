@@ -9,7 +9,7 @@
 //
 // BOX #81:
 // - SAFE endpoint to create Stripe Checkout Session (subscription mode)
-// - Manager only, tenant-safe
+// - Manager/Admin only, tenant-safe
 // - Ensures customerId, returns { url, sessionId }
 // - Does NOT change billingStatus / subscriptionId (lifecycle mapping stays in webhook)
 //
@@ -20,7 +20,7 @@
 //
 // BOX #84:
 // - SAFE endpoint to create Stripe Customer Portal session
-// - Manager only, tenant-safe
+// - Manager/Admin only, tenant-safe
 // - Ensures customerId, returns { url }
 // - Does NOT change billingStatus (webhook lifecycle mapping stays source-of-truth)
 //
@@ -232,7 +232,7 @@ router.get("/stripe/debug/events", requireRole(["manager"]), async (req, res) =>
 
 /**
  * POST /api/billing/stripe/ensure-customer
- * WRITE: manager only
+ * WRITE: admin or manager
  *
  * SAFE:
  * - Ensures v36 billing.stripe.customerId exists.
@@ -240,7 +240,7 @@ router.get("/stripe/debug/events", requireRole(["manager"]), async (req, res) =>
  * - Does NOT create subscription.
  * - Does NOT change billingStatus or plan.
  */
-router.post("/stripe/ensure-customer", requireRole(["manager"]), async (req, res) => {
+router.post("/stripe/ensure-customer", requireRole(["admin", "manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
   const before = await getCompanyProfile(companyId);
 
@@ -330,7 +330,7 @@ router.post("/stripe/ensure-customer", requireRole(["manager"]), async (req, res
 
 /**
  * POST /api/billing/stripe/create-checkout-session
- * WRITE: manager only
+ * WRITE: admin or manager
  *
  * SAFE:
  * - Only allows plan: basic | pro
@@ -339,7 +339,7 @@ router.post("/stripe/ensure-customer", requireRole(["manager"]), async (req, res
  * - Returns { ok, companyId, plan, url, sessionId }
  * - Does NOT change billingStatus / subscriptionId here (webhook lifecycle mapping does that)
  */
-router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (req, res) => {
+router.post("/stripe/create-checkout-session", requireRole(["admin", "manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
 
   const plan = safeString(req.body?.plan).toLowerCase();
@@ -530,7 +530,7 @@ router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (
 
 /**
  * POST /api/billing/stripe/customer-portal
- * WRITE: manager only
+ * WRITE: admin or manager
  *
  * SAFE:
  * - Ensures Stripe customerId exists
@@ -542,7 +542,7 @@ router.post("/stripe/create-checkout-session", requireRole(["manager"]), async (
  *  - STRIPE_SECRET_KEY
  *  - STRIPE_PORTAL_RETURN_URL
  */
-router.post("/stripe/customer-portal", requireRole(["manager"]), async (req, res) => {
+router.post("/stripe/customer-portal", requireRole(["admin", "manager"]), async (req, res) => {
   const companyId = req.auth.companyId;
 
   const before = await getCompanyProfile(companyId);
