@@ -22,6 +22,11 @@
 // - Uses shared Stripe price mapping helper
 // - Removes local priceId -> plan mapping duplication
 // - Keeps webhook plan resolution aligned with checkout mapping
+//
+// BOX #90:
+// - Adds Billing Status Consistency Guard
+// - Sanitizes inconsistent plan/billingStatus combinations before validation/write
+// - Keeps Stripe lifecycle stable without changing architecture
 
 import express from "express";
 import Stripe from "stripe";
@@ -38,6 +43,7 @@ import {
   BILLING_STATUS,
   validateBillingProfile,
 } from "../src/billing/billingModel.js";
+import { sanitizeBillingState } from "../src/billing/billingConsistencyGuard.js";
 import { planFromPriceId } from "../src/billing/stripePriceMapping.js";
 
 const router = express.Router();
@@ -494,6 +500,12 @@ async function syncCompanyBillingFromStripeEvent({ companyId, type, obj, eventId
     updatedAt: now,
   };
 
+  const consistency = sanitizeBillingState(nextCompany.billing);
+  nextCompany.billing = {
+    ...consistency.billing,
+    updatedAt: now,
+  };
+
   const validation = validateBillingProfile(nextCompany.billing);
   if (!validation.ok) {
     const err = new Error("Billing profile validation failed after Stripe lifecycle sync.");
@@ -524,7 +536,16 @@ async function syncCompanyBillingFromStripeEvent({ companyId, type, obj, eventId
   const changed = JSON.stringify(beforeSnapshot) !== JSON.stringify(afterSnapshot);
 
   if (!changed) {
-    return { ok: true, changed: false, reason: "no_state_change", meta: patch.meta };
+    return {
+      ok: true,
+      changed: false,
+      reason: "no_state_change",
+      meta: {
+        ...(patch.meta || {}),
+        consistencyAdjusted: consistency.changed,
+        consistencyAdjustments: consistency.adjustments,
+      },
+    };
   }
 
   await writeTenantEntity(companyId, "company", nextCompany);
@@ -540,6 +561,8 @@ async function syncCompanyBillingFromStripeEvent({ companyId, type, obj, eventId
         eventId: eventId || null,
         type,
         ...(patch.meta || {}),
+        consistencyAdjusted: consistency.changed,
+        consistencyAdjustments: consistency.adjustments,
       },
       before: beforeSnapshot,
       after: afterSnapshot,
@@ -551,7 +574,15 @@ async function syncCompanyBillingFromStripeEvent({ companyId, type, obj, eventId
     );
   }
 
-  return { ok: true, changed: true, meta: patch.meta };
+  return {
+    ok: true,
+    changed: true,
+    meta: {
+      ...(patch.meta || {}),
+      consistencyAdjusted: consistency.changed,
+      consistencyAdjustments: consistency.adjustments,
+    },
+  };
 }
 
 // Public readiness endpoint (NO secrets, only booleans)
@@ -697,7 +728,7 @@ router.post("/webhook", async (req, res) => {
     `[stripe-webhook] received event=${eventId} type=${type} companyId=${companyId} customer=${customerId || "n/a"} subscription=${subscriptionId || "n/a"}`
   );
 
-  // BOX #87: lifecycle sync (best-effort; never fail webhook)
+  // BOX #87 + #90: lifecycle sync with consistency guard (best-effort; never fail webhook)
   try {
     const sync = await syncCompanyBillingFromStripeEvent({
       companyId,
@@ -709,6 +740,12 @@ router.post("/webhook", async (req, res) => {
     if (sync?.changed) {
       console.log(
         `[stripe-webhook] billing-sync event=${eventId} type=${type} companyId=${companyId} status=${safeString(sync?.meta?.resolvedBillingStatus) || "n/a"} plan=${safeString(sync?.meta?.resolvedPlan) || "n/a"}`
+      );
+    }
+
+    if (sync?.meta?.consistencyAdjusted) {
+      console.log(
+        `[stripe-webhook] consistency-guard event=${eventId} type=${type} companyId=${companyId} adjustments=${(sync.meta.consistencyAdjustments || []).join(",")}`
       );
     }
   } catch (e) {
