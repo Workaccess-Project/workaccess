@@ -34,12 +34,17 @@
 // BOX #89:
 // - Uses shared Stripe price mapping helper
 // - Removes local plan -> priceId mapping duplication
+//
+// BOX #92:
+// - Adds tenant-safe billing limits endpoint
+// - GET /api/billing/limits
+// - Read-only plan + employee usage snapshot for UI limit indicator
 
 import express from "express";
 import Stripe from "stripe";
 import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
-import { writeTenantEntity } from "../data/tenant-store.js";
+import { readTenantEntity, writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
 import {
   BILLING_PLANS,
@@ -127,6 +132,29 @@ function publicAppBaseUrl() {
   return "https://workaccess.cz";
 }
 
+function resolvePlanForLimits(companyProfile) {
+  const billingPlan = safeString(companyProfile?.billing?.plan).toLowerCase();
+  if (billingPlan) return billingPlan;
+
+  const legacyPlan = safeString(companyProfile?.plan).toLowerCase();
+  if (legacyPlan === "free") return "trial";
+  if (legacyPlan) return legacyPlan;
+
+  return "basic";
+}
+
+function getMaxEmployeesForPlan(planRaw) {
+  const plan = safeString(planRaw).toLowerCase();
+
+  if (plan === "enterprise") return null; // unlimited
+  if (plan === "pro") return 10;
+  if (plan === "trial") return 3;
+  if (plan === "basic") return 3;
+  if (plan === "free") return 3;
+
+  return 3;
+}
+
 /**
  * GET /api/billing/status
  * READ: for all roles (tenant scoped)
@@ -166,6 +194,37 @@ router.get("/status", async (req, res) => {
           !isExpiredIso(profile?.subscriptionEnd),
         expired: isExpiredIso(profile?.subscriptionEnd ?? ""),
       },
+    },
+  });
+});
+
+/**
+ * GET /api/billing/limits
+ * READ: for all roles (tenant scoped)
+ *
+ * Returns current tenant billing plan and employee usage limits.
+ * SAFE:
+ * - read-only
+ * - tenant-safe
+ * - no Stripe usage
+ * - no writes
+ */
+router.get("/limits", async (req, res) => {
+  const companyId = req.auth.companyId;
+  const company = await getCompanyProfile(companyId);
+  const employees = await readTenantEntity(companyId, "employees");
+
+  const plan = resolvePlanForLimits(company);
+  const current = Array.isArray(employees) ? employees.length : 0;
+  const max = getMaxEmployeesForPlan(plan);
+
+  return res.json({
+    companyId,
+    plan,
+    employees: {
+      current,
+      max,
+      unlimited: max == null,
     },
   });
 });

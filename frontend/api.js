@@ -1,12 +1,12 @@
 // frontend/api.js
-// Centralizovaná gateway pro volání backendu.
+// Centralized gateway for backend calls.
 //
-// Produkční disciplína:
-// - JWT je primární auth (wa_auth_token).
-// - V produkci (reverse proxy /api) nepoužíváme DEMO x-role fallback.
-// - Globální 401 handler: při 401 vyčisti token, ulož návratovou URL a přesměruj na /login (pretty URL).
-// - Billing gate (402 TrialExpired) zachován.
-// - CSV export sjednocen do stejného error handleru.
+// Production rules:
+// - JWT is the primary auth (wa_auth_token).
+// - In production (/api reverse proxy) do not use DEMO x-role fallback.
+// - Global 401 handler clears token, stores return URL, redirects to /login.
+// - Billing gate (402 TrialExpired) stays enabled.
+// - CSV export uses the same error handler.
 //
 // BOX #68:
 // - Frontend handling 403 ROLE_LOCK + FEATURE_LOCK (store reason + safe redirect)
@@ -16,6 +16,9 @@
 //
 // BOX #88.1:
 // - Stripe Checkout helper: POST /billing/stripe/create-checkout-session
+//
+// BOX #92:
+// - Billing limits helper: GET /billing/limits
 
 (() => {
   function apiBase() {
@@ -101,7 +104,7 @@
       };
     }
 
-    // DEV fallback jen pokud jedeme proti localhost API
+    // DEV fallback only when using localhost API
     if (isDevLocalApi()) {
       return {
         ...base,
@@ -400,6 +403,7 @@
 
   // --- BILLING ---
   const getBillingStatus = () => apiFetch("/billing/status");
+  const getBillingLimits = () => apiFetch("/billing/limits");
 
   const billingActivate = (plan = "basic", days = 30) =>
     apiFetch("/billing/activate", {
@@ -463,7 +467,8 @@
   // --- AUDIT ---
   const getAudit = (params = {}) => apiFetch(`/audit${buildQuery(params)}`);
 
-  const getAuditCsvUrl = (params = {}) => apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
+  const getAuditCsvUrl = (params = {}) =>
+    apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
 
   async function fetchAuditCsv(params = {}) {
     const url = apiBase() + `/audit${buildQuery({ ...params, format: "csv" })}`;
@@ -505,6 +510,7 @@
 
     // billing
     getBillingStatus,
+    getBillingLimits,
     billingActivate,
     billingCancel,
     billingCustomerPortal,
