@@ -2,6 +2,10 @@
 import { readTenantEntity, writeTenantEntity } from "../data/tenant-store.js";
 import { auditLog } from "../data-audit.js";
 import { getCompanyProfile } from "../data-company.js";
+import {
+  getEmployeeLimitsSnapshot,
+  getMaxEmployeesForPlan,
+} from "../src/billing/billingLimits.js";
 
 const ENTITY = "employees";
 
@@ -105,36 +109,6 @@ function findById(arr, id) {
   return arr.find((x) => String(x.id) === String(id)) || null;
 }
 
-function getMaxEmployeesForPlan(planRaw) {
-  const p = safeString(planRaw).toLowerCase();
-
-  if (p === "enterprise") return Infinity;
-  if (p === "pro") return 10;
-
-  // SAFE DEFAULTS (trial + basic -> 3)
-  if (p === "trial") return 3;
-  if (p === "basic") return 3;
-
-  // legacy mapping (kdyby někde zůstalo)
-  if (p === "free") return 3;
-
-  // Unknown plan -> safest is basic limit
-  return 3;
-}
-
-function resolvePlanForLimits(companyProfile) {
-  // primárně v36 billing
-  const p36 = safeString(companyProfile?.billing?.plan);
-  if (p36) return p36;
-
-  // legacy fallback
-  const legacy = safeString(companyProfile?.plan);
-  if (legacy) return legacy;
-
-  // nejbezpečnější default
-  return "basic";
-}
-
 // --- API ---
 
 export async function listEmployees({ companyId }) {
@@ -147,24 +121,31 @@ export async function getEmployeeById({ companyId, id }) {
 }
 
 export async function createEmployee({ companyId, actorRole, body }) {
-  // Enforce plan user limit (SAFE: FE má 402 -> redirect /billing)
+  // Enforce employee limit from shared billing helper (BOX #91)
   const company = await getCompanyProfile(companyId);
-
-  const plan = resolvePlanForLimits(company);
-  const maxUsers = getMaxEmployeesForPlan(plan);
-
   const employees = await readEmployees(companyId);
-  const currentCount = employees.length;
 
-  if (currentCount >= maxUsers) {
-    const err = new Error("User limit reached for current plan.");
+  const snapshot = getEmployeeLimitsSnapshot({
+    companyProfile: company,
+    employees,
+  });
+
+  const currentCount = snapshot.employees.current;
+  const maxEmployees = snapshot.employees.max;
+  const unlimited = snapshot.employees.unlimited;
+  const plan = snapshot.plan;
+
+  if (!unlimited && currentCount >= maxEmployees) {
+    const err = new Error("Employee limit reached for current plan.");
     err.status = 402;
     err.payload = {
+      ok: false,
       error: "BillingRequired",
-      code: "USER_LIMIT_REACHED",
-      message: "User limit reached for current plan. Upgrade required.",
+      code: "EMPLOYEE_LIMIT_REACHED",
+      message: "Employee limit reached for current plan. Upgrade required.",
       current: currentCount,
-      max: maxUsers,
+      max: maxEmployees,
+      maxEmployees,
       plan,
       companyId,
     };
@@ -190,7 +171,13 @@ export async function createEmployee({ companyId, actorRole, body }) {
     action: "employee.create",
     entityType: "employee",
     entityId: String(item.id),
-    meta: { employeeId: String(item.id) },
+    meta: {
+      employeeId: String(item.id),
+      plan,
+      employeeCountAfterCreate: currentCount + 1,
+      employeeLimit:
+        unlimited ? null : getMaxEmployeesForPlan(plan),
+    },
     before: null,
     after: item,
   });
@@ -333,9 +320,12 @@ export async function deleteTraining({ companyId, actorRole, employeeId, trainin
   }
 
   const trainings = asArray(employees[idx].trainings);
-  const beforeTraining = trainings.find((t) => String(t.id) === String(trainingId)) || null;
+  const beforeTraining =
+    trainings.find((t) => String(t.id) === String(trainingId)) || null;
 
-  const nextTrainings = trainings.filter((t) => String(t.id) !== String(trainingId));
+  const nextTrainings = trainings.filter(
+    (t) => String(t.id) !== String(trainingId)
+  );
   if (nextTrainings.length === trainings.length) {
     const err = new Error("Training not found");
     err.status = 404;

@@ -39,6 +39,10 @@
 // - Adds tenant-safe billing limits endpoint
 // - GET /api/billing/limits
 // - Read-only plan + employee usage snapshot for UI limit indicator
+//
+// BOX #91:
+// - Billing limits logic unified into shared helper
+// - Uses src/billing/billingLimits.js as source of truth
 
 import express from "express";
 import Stripe from "stripe";
@@ -52,6 +56,9 @@ import {
   validateBillingProfile,
 } from "../src/billing/billingModel.js";
 import { priceIdForPlan } from "../src/billing/stripePriceMapping.js";
+import {
+  getEmployeeLimitsSnapshot,
+} from "../src/billing/billingLimits.js";
 import {
   ensureStripeCustomer,
   createCustomerPortalSession,
@@ -132,29 +139,6 @@ function publicAppBaseUrl() {
   return "https://workaccess.cz";
 }
 
-function resolvePlanForLimits(companyProfile) {
-  const billingPlan = safeString(companyProfile?.billing?.plan).toLowerCase();
-  if (billingPlan) return billingPlan;
-
-  const legacyPlan = safeString(companyProfile?.plan).toLowerCase();
-  if (legacyPlan === "free") return "trial";
-  if (legacyPlan) return legacyPlan;
-
-  return "basic";
-}
-
-function getMaxEmployeesForPlan(planRaw) {
-  const plan = safeString(planRaw).toLowerCase();
-
-  if (plan === "enterprise") return null; // unlimited
-  if (plan === "pro") return 10;
-  if (plan === "trial") return 3;
-  if (plan === "basic") return 3;
-  if (plan === "free") return 3;
-
-  return 3;
-}
-
 /**
  * GET /api/billing/status
  * READ: for all roles (tenant scoped)
@@ -214,18 +198,15 @@ router.get("/limits", async (req, res) => {
   const company = await getCompanyProfile(companyId);
   const employees = await readTenantEntity(companyId, "employees");
 
-  const plan = resolvePlanForLimits(company);
-  const current = Array.isArray(employees) ? employees.length : 0;
-  const max = getMaxEmployeesForPlan(plan);
+  const snapshot = getEmployeeLimitsSnapshot({
+    companyProfile: company,
+    employees,
+  });
 
   return res.json({
     companyId,
-    plan,
-    employees: {
-      current,
-      max,
-      unlimited: max == null,
-    },
+    plan: snapshot.plan,
+    employees: snapshot.employees,
   });
 });
 
