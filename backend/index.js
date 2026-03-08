@@ -1,4 +1,4 @@
-import "dotenv/config";
+﻿import "dotenv/config";
 // backend/index.js
 
 import express from "express";
@@ -30,7 +30,7 @@ import companyDocumentTemplatesRouter from "./routes/companyDocumentTemplates.js
 import companyComplianceDocumentsRouter from "./routes/companyComplianceDocuments.js";
 import companyComplianceOverviewRouter from "./routes/companyComplianceOverview.js";
 
-// ✅ Stripe webhook router (public, requires raw body)
+// Stripe webhook router (public, requires raw body)
 import stripeWebhookRouter from "./routes/stripe-webhook.js";
 
 // AUTH (middleware)
@@ -42,6 +42,9 @@ import { requireTenant } from "./middleware/require-tenant.js";
 
 // TRIAL GUARD
 import { trialGuard } from "./middleware/trial-guard.js";
+
+// BILLING LOCK GUARD
+import { billingLockGuard } from "./middleware/billing-lock-guard.js";
 
 // OBSERVE GUARDS (no enforcement)
 import { roleGuardObserve } from "./middleware/role-guard-observe.js";
@@ -142,7 +145,7 @@ app.use(
 // --- Middlewares ---
 app.use(cors(corsOptions));
 
-// ✅ Stripe webhook MUST be mounted BEFORE express.json()
+// Stripe webhook MUST be mounted BEFORE express.json()
 app.use(
   "/api/stripe",
   express.raw({ type: "application/json" }),
@@ -152,7 +155,7 @@ app.use(
 // Request body size limit (anti payload abuse)
 app.use(express.json({ limit: "200kb" }));
 
-// ✅ Request logging discipline (API only)
+// Request logging discipline (API only)
 app.use((req, res, next) => {
   if (!req.originalUrl?.startsWith("/api")) return next();
 
@@ -243,7 +246,7 @@ const authLimiter = rateLimit({
   },
 });
 
-// ✅ Serve frontend static files
+// Serve frontend static files
 app.use(express.static(FRONTEND_DIR));
 
 // Optional: redirect root to login
@@ -317,6 +320,9 @@ app.use(featureGuardObserve);
 // --- Trial guard ---
 app.use(trialGuard);
 
+// --- Billing lock guard ---
+app.use(billingLockGuard);
+
 // --- Routes ---
 app.use("/api/items", itemsRouter);
 app.use("/api/employees", employeesRouter);
@@ -333,7 +339,7 @@ app.use("/api/company-document-templates", companyDocumentTemplatesRouter);
 app.use("/api/company-compliance-documents", companyComplianceDocumentsRouter);
 app.use("/api/company-compliance/overview", companyComplianceOverviewRouter);
 
-// ✅ API 404 fallback (JSON, never HTML)
+// API 404 fallback (JSON, never HTML)
 app.use("/api", (req, res) => {
   return res.status(404).json({
     error: "NotFound",
