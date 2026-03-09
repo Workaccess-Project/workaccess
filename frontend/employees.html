@@ -81,6 +81,24 @@
 
       <div class="section small" id="meta"></div>
 
+      <div
+        class="section"
+        id="limitBox"
+        style="display:none; border:1px solid var(--border); border-radius:12px; padding:12px;"
+      >
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center; justify-content:space-between;">
+          <div>
+            <div style="font-weight:700;">Employees limit reached</div>
+            <div class="small" style="opacity:.9; margin-top:6px;">
+              Upgrade plan to continue.
+            </div>
+          </div>
+          <div>
+            <button class="waBtn--primary" id="btnUpgradePlan">Upgrade tarifu</button>
+          </div>
+        </div>
+      </div>
+
       <div class="section">
         <table class="waTable" style="width:100%;">
           <thead>
@@ -106,7 +124,7 @@
   <script src="./js/wa_ui_state.js"></script>
 
   <!-- cache-bust: vynutí načtení nové verze api.js -->
-  <script src="./api.js?v=99.0"></script>
+  <script src="./api.js?v=100.1"></script>
 
   <script>
     WA_NAV.renderNav("employees");
@@ -117,6 +135,10 @@
     const elMeta = document.getElementById("meta");
     const elBody = document.getElementById("tbody");
     const elEmptyBox = document.getElementById("emptyBox");
+    const elLimitBox = document.getElementById("limitBox");
+    const elBtnUpgradePlan = document.getElementById("btnUpgradePlan");
+
+    let employeeLimitReached = false;
 
     // add UI
     const elAddBox = document.getElementById("addBox");
@@ -171,29 +193,53 @@
       return plan || "—";
     }
 
-    function buildLimitsMeta(role, filteredCount, limits, fallbackUsed) {
-      const used = Number(limits?.employees?.used ?? fallbackUsed ?? 0);
-      const limitRaw = limits?.employees?.limit;
-      const remainingRaw = limits?.employees?.remaining;
-      const remaining = Number(remainingRaw ?? 0);
-      const plan = formatPlanLabel(limits?.plan || "");
+    function getEmployeesLimitsSnapshot(limits, fallbackUsed) {
+      const emp = limits?.employees || {};
+
+      const used = Number(
+        emp.used ??
+        emp.current ??
+        fallbackUsed ??
+        0
+      );
+
+      const limitRaw =
+        emp.limit ??
+        emp.max ??
+        null;
 
       const unlimited =
+        emp.unlimited === true ||
         limitRaw === null ||
         limitRaw === undefined ||
-        String(limitRaw).trim() === "" ||
+        String(limitRaw).trim?.() === "" ||
         Number(limitRaw) <= 0;
 
-      const limitLabel = unlimited ? "∞" : String(Number(limitRaw));
+      const limit = unlimited ? null : Number(limitRaw);
+      const remaining =
+        unlimited ? null : Math.max(limit - used, 0);
+
+      return {
+        used,
+        limit,
+        unlimited,
+        remaining
+      };
+    }
+
+    function buildLimitsMeta(role, filteredCount, limits, fallbackUsed) {
+      const snap = getEmployeesLimitsSnapshot(limits, fallbackUsed);
+      const plan = formatPlanLabel(limits?.plan || "");
+      const limitLabel = snap.unlimited ? "∞" : String(snap.limit);
 
       const parts = [
         `Role: ${roleLabel(role)}`,
         `Záznamů: ${filteredCount}`,
-        `Zaměstnanci: ${used} / ${limitLabel}`,
+        `Zaměstnanci: ${snap.used} / ${limitLabel}`,
         `Tarif: ${plan}`
       ];
 
-      if (!unlimited && remaining <= 0) {
+      if (!snap.unlimited && snap.remaining === 0) {
         parts.push("Limit dosažen");
       }
 
@@ -204,6 +250,38 @@
       const id = String(emp?.id ?? "").trim();
       if (!id) return;
       location.href = `./employee.html?id=${encodeURIComponent(id)}`;
+    }
+
+    function setPaywallHint(reason) {
+      try {
+        sessionStorage.setItem("wa_paywall", "1");
+        sessionStorage.setItem("wa_paywall_reason", String(reason || "").trim());
+        sessionStorage.setItem("wa_paywall_ts", String(Date.now()));
+      } catch {}
+    }
+
+    function goToBillingForUpgrade() {
+      setPaywallHint("USER_LIMIT_REACHED");
+      location.href = "./billing.html";
+    }
+
+    function resetLimitUi() {
+      employeeLimitReached = false;
+      elLimitBox.style.display = "none";
+      elBtnAdd.title = "";
+    }
+
+    function applyLimitUi(limits, fallbackUsed) {
+      const snap = getEmployeesLimitsSnapshot(limits, fallbackUsed);
+
+      employeeLimitReached = !snap.unlimited && snap.remaining === 0;
+
+      elLimitBox.style.display = employeeLimitReached ? "" : "none";
+      elBtnAdd.title = employeeLimitReached
+        ? "Limit zaměstnanců dosažen – upgraduj tarif"
+        : "";
+
+      elBtnAdd.disabled = employeeLimitReached;
     }
 
     function renderRows(list) {
@@ -254,12 +332,18 @@
       elBtnLoad.disabled = !enabled;
       elQ.disabled = !enabled;
 
-      elBtnAdd.disabled = !enabled;
+      elBtnAdd.disabled = !enabled || employeeLimitReached;
       elBtnAddClose.disabled = !enabled;
       elBtnAddSubmit.disabled = !enabled;
+      elBtnUpgradePlan.disabled = !enabled;
     }
 
     function showAddBox(show) {
+      if (show && employeeLimitReached) {
+        goToBillingForUpgrade();
+        return;
+      }
+
       elAddBox.style.display = show ? "" : "none";
       elAddMsg.textContent = "";
       elAddMsg.style.color = "";
@@ -286,6 +370,7 @@
         WA_UI_STATE.setState(elState, "error", guard.message);
         elMeta.textContent = "";
         elBody.innerHTML = "";
+        resetLimitUi();
         WA_UI_STATE.renderEmpty(elEmptyBox, "Nelze načíst zaměstnance", guard.message);
         setControlsEnabled(true);
         return;
@@ -294,6 +379,7 @@
       setControlsEnabled(false);
       WA_UI_STATE.setState(elState, "loading", "Načítám…");
       clearEmpty();
+      resetLimitUi();
 
       try {
         const me = await WA_API.getMe();
@@ -313,6 +399,7 @@
         const filtered = arr.filter((x) => matchEmployee(x, q));
 
         elMeta.textContent = buildLimitsMeta(role, filtered.length, limits, arr.length);
+        applyLimitUi(limits, arr.length);
         renderRows(filtered);
 
         WA_UI_STATE.setState(elState, "ok", "OK");
@@ -321,6 +408,7 @@
         WA_UI_STATE.setState(elState, "error", msg);
         elMeta.textContent = "";
         elBody.innerHTML = "";
+        resetLimitUi();
         WA_UI_STATE.renderEmpty(elEmptyBox, "Chyba načtení", msg);
       } finally {
         setControlsEnabled(true);
@@ -328,6 +416,11 @@
     }
 
     async function submitAdd() {
+      if (employeeLimitReached) {
+        goToBillingForUpgrade();
+        return;
+      }
+
       const v = validateAddForm();
       if (!v.ok) {
         elAddMsg.textContent = v.message;
@@ -380,6 +473,7 @@
     elBtnAdd.addEventListener("click", () => showAddBox(true));
     elBtnAddClose.addEventListener("click", () => showAddBox(false));
     elBtnAddSubmit.addEventListener("click", submitAdd);
+    elBtnUpgradePlan.addEventListener("click", goToBillingForUpgrade);
 
     // init
     load();
