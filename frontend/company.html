@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Firma</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="wa-nav"></div>
+
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Údaje firmy</h1>
+        <div class="small" style="opacity:.85; margin-top:6px;">
+          Zde můžete upravit základní profil firmy. Změny se ukládají do firemního profilu a zapisují se do audit logu.
+        </div>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <form id="companyForm" style="display:grid; gap:12px;">
+          <div>
+            <label for="name" class="small" style="display:block; margin-bottom:6px;">Název firmy</label>
+            <input id="name" name="name" type="text" autocomplete="organization" style="width:100%;" />
+          </div>
+
+          <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+            <div>
+              <label for="ico" class="small" style="display:block; margin-bottom:6px;">IČO</label>
+              <input id="ico" name="ico" type="text" inputmode="numeric" style="width:100%;" />
+            </div>
+
+            <div>
+              <label for="dic" class="small" style="display:block; margin-bottom:6px;">DIČ</label>
+              <input id="dic" name="dic" type="text" style="width:100%;" />
+            </div>
+          </div>
+
+          <div>
+            <label for="address" class="small" style="display:block; margin-bottom:6px;">Adresa</label>
+            <input id="address" name="address" type="text" autocomplete="street-address" style="width:100%;" />
+          </div>
+
+          <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+            <div>
+              <label for="city" class="small" style="display:block; margin-bottom:6px;">Město</label>
+              <input id="city" name="city" type="text" autocomplete="address-level2" style="width:100%;" />
+            </div>
+
+            <div>
+              <label for="zip" class="small" style="display:block; margin-bottom:6px;">PSČ</label>
+              <input id="zip" name="zip" type="text" autocomplete="postal-code" style="width:100%;" />
+            </div>
+
+            <div>
+              <label for="country" class="small" style="display:block; margin-bottom:6px;">Země</label>
+              <input id="country" name="country" type="text" autocomplete="country-name" style="width:100%;" />
+            </div>
+          </div>
+
+          <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+            <div>
+              <label for="email" class="small" style="display:block; margin-bottom:6px;">Kontaktní e-mail</label>
+              <input id="email" name="email" type="email" autocomplete="email" style="width:100%;" />
+            </div>
+
+            <div>
+              <label for="phone" class="small" style="display:block; margin-bottom:6px;">Telefon</label>
+              <input id="phone" name="phone" type="text" autocomplete="tel" style="width:100%;" />
+            </div>
+          </div>
+
+          <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <button type="submit" class="waBtn--primary" id="btnSave">Uložit změny</button>
+            <button type="button" id="btnReload">Načíst znovu</button>
+          </div>
+        </form>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Technický stav</div>
+        <div id="statusLine" class="small" style="opacity:.8;">Připraveno</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js?v=103"></script>
+
+  <script>
+    WA_NAV.renderNav("company");
+
+    const form = document.getElementById("companyForm");
+    const btnSave = document.getElementById("btnSave");
+    const btnReload = document.getElementById("btnReload");
+    const statusLine = document.getElementById("statusLine");
+
+    const fields = {
+      name: document.getElementById("name"),
+      ico: document.getElementById("ico"),
+      dic: document.getElementById("dic"),
+      address: document.getElementById("address"),
+      city: document.getElementById("city"),
+      zip: document.getElementById("zip"),
+      country: document.getElementById("country"),
+      email: document.getElementById("email"),
+      phone: document.getElementById("phone"),
+    };
+
+    function safeString(v) {
+      return (v ?? "").toString().trim();
+    }
+
+    function setStatus(text, isError = false) {
+      statusLine.textContent = text || "";
+      statusLine.style.color = isError ? "#b42318" : "";
+    }
+
+    function fillForm(data = {}) {
+      fields.name.value = safeString(data.name);
+      fields.ico.value = safeString(data.ico);
+      fields.dic.value = safeString(data.dic);
+      fields.address.value = safeString(data.address);
+      fields.city.value = safeString(data.city);
+      fields.zip.value = safeString(data.zip);
+      fields.country.value = safeString(data.country) || "CZ";
+      fields.email.value = safeString(data.email);
+      fields.phone.value = safeString(data.phone);
+    }
+
+    function readForm() {
+      return {
+        name: safeString(fields.name.value),
+        ico: safeString(fields.ico.value),
+        dic: safeString(fields.dic.value),
+        address: safeString(fields.address.value),
+        city: safeString(fields.city.value),
+        zip: safeString(fields.zip.value),
+        country: safeString(fields.country.value) || "CZ",
+        email: safeString(fields.email.value),
+        phone: safeString(fields.phone.value),
+      };
+    }
+
+    async function loadCompany() {
+      setStatus("Načítám profil firmy...");
+      btnSave.disabled = true;
+      btnReload.disabled = true;
+
+      try {
+        const data = await WA_API.getCompany();
+        fillForm(data || {});
+        setStatus("Profil firmy načten.");
+      } catch (e) {
+        setStatus(`Nepodařilo se načíst profil firmy: ${e?.message || e}`, true);
+      } finally {
+        btnSave.disabled = false;
+        btnReload.disabled = false;
+      }
+    }
+
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+
+      setStatus("Ukládám změny...");
+      btnSave.disabled = true;
+      btnReload.disabled = true;
+
+      try {
+        const payload = readForm();
+        const updated = await WA_API.updateCompany(payload);
+        fillForm(updated || payload);
+        setStatus("Změny byly uloženy.");
+      } catch (e) {
+        setStatus(`Uložení se nepodařilo: ${e?.message || e}`, true);
+      } finally {
+        btnSave.disabled = false;
+        btnReload.disabled = false;
+      }
+    });
+
+    btnReload.addEventListener("click", loadCompany);
+
+    loadCompany();
+  </script>
+</body>
+</html>

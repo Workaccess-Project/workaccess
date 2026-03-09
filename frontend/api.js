@@ -22,6 +22,9 @@
 //
 // BOX #101:
 // - Public company registration helper: POST /public/register-company
+//
+// BOX #103:
+// - Company profile helpers: GET /company, PUT /company
 
 (() => {
   function apiBase() {
@@ -452,6 +455,16 @@
   // --- CORE DATA ---
   const getMe = () => apiFetch("/me");
 
+  // --- COMPANY ---
+  const getCompany = () => apiFetch("/company");
+
+  const updateCompany = (payload = {}) =>
+    apiFetch("/company", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+
   // --- EMPLOYEES ---
   const getEmployees = () => apiFetch("/employees");
   const getEmployee = (id) => apiFetch(`/employees/${encodeURIComponent(id)}`);
@@ -543,6 +556,8 @@
 
     // data
     getMe,
+    getCompany,
+    updateCompany,
 
     // employees
     getEmployees,
