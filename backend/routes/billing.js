@@ -43,6 +43,11 @@
 // BOX #91:
 // - Billing limits logic unified into shared helper
 // - Uses src/billing/billingLimits.js as source of truth
+//
+// BOX #107:
+// - Billing status endpoint now exposes top-level trial/subscription compatibility shape
+// - Canonical source of truth remains company.billing
+// - Fixes dashboard fallback "Stav tarifu není dostupný" after registration
 
 import express from "express";
 import Stripe from "stripe";
@@ -144,40 +149,57 @@ function publicAppBaseUrl() {
  * READ: for all roles (tenant scoped)
  *
  * Returns v36 billing as primary.
- * Also includes legacy trial/subscription fields for backward compatibility.
+ * Also includes compatibility trial/subscription fields for dashboard and older UIs.
  */
 router.get("/status", async (req, res) => {
   const companyId = req.auth.companyId;
   const profile = await getCompanyProfile(companyId);
 
   const billing = profile?.billing ?? null;
-
   const locked = computeLockedFromBilling(billing);
+
+  const billingPlan = safeString(billing?.plan).toLowerCase();
+  const billingStatus = safeString(billing?.billingStatus).toLowerCase();
+  const trialEndsAt = parseIsoOrEmpty(billing?.trialEndsAt);
+
+  const trial = {
+    start: parseIsoOrEmpty(profile?.trialStart ?? ""),
+    end: trialEndsAt || parseIsoOrEmpty(profile?.trialEnd ?? ""),
+    expired:
+      billingPlan === BILLING_PLANS.TRIAL
+        ? isExpiredIso(trialEndsAt || profile?.trialEnd || "")
+        : false,
+  };
+
+  const subscription = {
+    status: profile?.subscriptionStatus ?? "none",
+    plan: billingPlan || profile?.plan || "free",
+    paymentProvider: profile?.paymentProvider ?? "",
+    start: parseIsoOrEmpty(profile?.subscriptionStart ?? ""),
+    end: parseIsoOrEmpty(profile?.subscriptionEnd ?? ""),
+    active:
+      billingStatus === BILLING_STATUS.ACTIVE &&
+      billingPlan !== BILLING_PLANS.TRIAL,
+    expired:
+      billingStatus === BILLING_STATUS.ACTIVE &&
+      billingPlan !== BILLING_PLANS.TRIAL
+        ? isExpiredIso(profile?.subscriptionEnd ?? "")
+        : false,
+  };
 
   res.json({
     companyId,
     billing, // v36 canonical
     isLocked: locked,
 
+    // compatibility snapshot for dashboard / older UIs
+    trial,
+    subscription,
+
     // legacy snapshot (kept for older UIs / diagnostics)
     legacy: {
-      trial: {
-        start: profile?.trialStart ?? "",
-        end: profile?.trialEnd ?? "",
-        expired: isExpiredIso(profile?.trialEnd ?? ""),
-      },
-      subscription: {
-        status: profile?.subscriptionStatus ?? "none",
-        plan: profile?.plan ?? "free",
-        paymentProvider: profile?.paymentProvider ?? "",
-        start: profile?.subscriptionStart ?? "",
-        end: profile?.subscriptionEnd ?? "",
-        active:
-          safeString(profile?.subscriptionStatus).toLowerCase() === "active" &&
-          !!safeString(profile?.subscriptionEnd) &&
-          !isExpiredIso(profile?.subscriptionEnd),
-        expired: isExpiredIso(profile?.subscriptionEnd ?? ""),
-      },
+      trial,
+      subscription,
     },
   });
 });
