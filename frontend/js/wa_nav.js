@@ -5,6 +5,9 @@
 // BOX #82:
 // - Přidáno tlačítko "Odhlásit" (jen když existuje JWT token)
 // - Odhlášení smaže wa_auth_token + wa_company_id (+ demo role) a přesměruje na index.html
+//
+// BOX #104:
+// - Přidán odkaz "Firma" do hlavní navigace
 
 (() => {
   function safeString(v) {
@@ -124,6 +127,7 @@
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
           <span class="pill" style="font-weight:700;">WORKACCESS</span>
           ${link("Dashboard", "./dashboard.html", "dashboard", activeKey)}
+          ${link("Firma", "./company.html", "company", activeKey)}
           ${link("Zaměstnanci", "./employees.html", "employees", activeKey)}
           ${link("TODO", "./index.html", "todo", activeKey)}
           ${link("Compliance", "./compliance.html", "compliance", activeKey)}
