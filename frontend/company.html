@@ -19,7 +19,7 @@
       </div>
 
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
-        <form id="companyForm" style="display:grid; gap:12px;">
+        <form id="companyForm" style="display:grid; gap:12px;" novalidate>
           <div>
             <label for="name" class="small" style="display:block; margin-bottom:6px;">Název firmy</label>
             <input id="name" name="name" type="text" autocomplete="organization" style="width:100%;" />
@@ -28,7 +28,7 @@
           <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
             <div>
               <label for="ico" class="small" style="display:block; margin-bottom:6px;">IČO</label>
-              <input id="ico" name="ico" type="text" inputmode="numeric" style="width:100%;" />
+              <input id="ico" name="ico" type="text" inputmode="numeric" maxlength="8" style="width:100%;" />
             </div>
 
             <div>
@@ -87,7 +87,7 @@
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=103"></script>
+  <script src="./api.js?v=105"></script>
 
   <script>
     WA_NAV.renderNav("company");
@@ -130,10 +130,45 @@
       fields.phone.value = safeString(data.phone);
     }
 
+    function normalizeIco(value) {
+      return safeString(value).replace(/\s+/g, "");
+    }
+
+    function isValidEmail(value) {
+      const s = safeString(value);
+      if (!s) return true;
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+    }
+
+    function isValidIco(value) {
+      const s = normalizeIco(value);
+      if (!s) return true;
+      return /^\d{8}$/.test(s);
+    }
+
+    function validateForm() {
+      const email = safeString(fields.email.value);
+      const ico = normalizeIco(fields.ico.value);
+
+      if (!isValidEmail(email)) {
+        setStatus("Kontaktní e-mail není ve správném formátu.", true);
+        fields.email.focus();
+        return false;
+      }
+
+      if (!isValidIco(ico)) {
+        setStatus("IČO musí mít 8 číslic.", true);
+        fields.ico.focus();
+        return false;
+      }
+
+      return true;
+    }
+
     function readForm() {
       return {
         name: safeString(fields.name.value),
-        ico: safeString(fields.ico.value),
+        ico: normalizeIco(fields.ico.value),
         dic: safeString(fields.dic.value),
         address: safeString(fields.address.value),
         city: safeString(fields.city.value),
@@ -163,6 +198,8 @@
 
     form.addEventListener("submit", async (ev) => {
       ev.preventDefault();
+
+      if (!validateForm()) return;
 
       setStatus("Ukládám změny...");
       btnSave.disabled = true;
