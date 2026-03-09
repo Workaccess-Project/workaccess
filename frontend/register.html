@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Workaccess – Registrace firmy</title>
+  <title>Workaccess &ndash; Registrace firmy</title>
   <script src="api.js"></script>
   <style>
     body {
@@ -59,25 +59,25 @@
 <div class="card">
   <h2>Registrace firmy</h2>
 
-  <label>Název firmy</label>
+  <label>N&aacute;zev firmy</label>
   <input id="name" autocomplete="organization" />
 
   <label>Company ID</label>
   <input id="companyId" autocomplete="off" />
 
-  <label>Jméno administrátora</label>
+  <label>Jm&eacute;no administr&aacute;tora</label>
   <input id="adminName" autocomplete="name" />
 
-  <label>Email administrátora</label>
+  <label>Email administr&aacute;tora</label>
   <input id="adminEmail" type="email" autocomplete="email" />
 
   <label>Heslo</label>
   <input id="adminPassword" type="password" autocomplete="new-password" />
 
-  <button id="btnRegister">Vytvořit firmu</button>
+  <button id="btnRegister">Vytvo&#345;it firmu</button>
 
   <div class="small">
-    Po registraci se automaticky vytvoří firma, první manager účet a spustí se trial tarif.
+    Po registraci se automaticky vytvo&#345;&iacute; firma, prvn&iacute; manager &uacute;&#269;et a spust&iacute; se trial tarif.
   </div>
 
   <div id="registerMsg" class="msg"></div>
@@ -112,7 +112,7 @@
     };
 
     if (!payload.name) {
-      return { ok: false, message: "Zadej název firmy." };
+      return { ok: false, message: "Zadej n\u00e1zev firmy." };
     }
 
     if (!payload.companyId) {
@@ -120,15 +120,15 @@
     }
 
     if (!payload.adminName) {
-      return { ok: false, message: "Zadej jméno administrátora." };
+      return { ok: false, message: "Zadej jm\u00e9no administr\u00e1tora." };
     }
 
     if (!payload.adminEmail) {
-      return { ok: false, message: "Zadej email administrátora." };
+      return { ok: false, message: "Zadej email administr\u00e1tora." };
     }
 
     if (!payload.adminPassword) {
-      return { ok: false, message: "Zadej heslo administrátora." };
+      return { ok: false, message: "Zadej heslo administr\u00e1tora." };
     }
 
     return { ok: true, payload };
@@ -144,18 +144,18 @@
     }
 
     setBusy(true);
-    el.registerMsg.textContent = "Zakládám firmu…";
+    el.registerMsg.textContent = "Zakl\u00e1d\u00e1m firmu\u2026";
     el.registerMsg.className = "msg";
 
     try {
       await WA_API.registerCompany(v.payload);
 
-      el.registerMsg.textContent = "Registrace úspěšná → přechod na dashboard";
+      el.registerMsg.textContent = "Registrace \u00fasp\u011b\u0161n\u00e1 \u2192 p\u0159echod na dashboard";
       el.registerMsg.className = "msg ok";
 
       setTimeout(goDashboard, 600);
     } catch (err) {
-      el.registerMsg.textContent = err.message || "Registrace se nezdařila.";
+      el.registerMsg.textContent = err.message || "Registrace se nezda\u0159ila.";
       el.registerMsg.className = "msg error";
     } finally {
       setBusy(false);

@@ -14,6 +14,11 @@ const __dirname = path.dirname(__filename);
 
 const TENANTS_DIR = path.join(__dirname, "..", "data", "tenants");
 
+const COMPANY_ID_MIN = 3;
+const COMPANY_ID_MAX = 50;
+const COMPANY_NAME_MAX = 120;
+const PASSWORD_MIN = 8;
+
 function safeString(v) {
   return (v ?? "").toString().trim();
 }
@@ -28,6 +33,22 @@ function slugifyCompanyId(v) {
 
 function normalizeEmail(v) {
   return safeString(v).toLowerCase();
+}
+
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizeEmail(v));
+}
+
+function isValidCompanySlug(v) {
+  return /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v);
+}
+
+function makeAppError(message, status, code, details = null) {
+  const err = new Error(message);
+  err.status = status;
+  err.code = code;
+  if (details) err.details = details;
+  return err;
 }
 
 function trialDates() {
@@ -51,6 +72,71 @@ async function tenantExists(companyId) {
   }
 }
 
+function validateRegistrationInput({
+  name,
+  rawCompanyId,
+  companyId,
+  adminEmail,
+  adminPassword,
+}) {
+  if (!name) {
+    throw makeAppError("Missing field: name", 400, "MISSING_NAME");
+  }
+
+  if (name.length > COMPANY_NAME_MAX) {
+    throw makeAppError("Invalid name", 400, "INVALID_NAME", {
+      maxLength: COMPANY_NAME_MAX,
+    });
+  }
+
+  if (!rawCompanyId) {
+    throw makeAppError("Missing field: companyId", 400, "MISSING_COMPANY_ID");
+  }
+
+  if (!companyId) {
+    throw makeAppError("Invalid companyId", 400, "INVALID_COMPANY_ID");
+  }
+
+  if (
+    companyId.length < COMPANY_ID_MIN ||
+    companyId.length > COMPANY_ID_MAX ||
+    !isValidCompanySlug(companyId)
+  ) {
+    throw makeAppError("Invalid companyId", 400, "INVALID_COMPANY_ID", {
+      minLength: COMPANY_ID_MIN,
+      maxLength: COMPANY_ID_MAX,
+      format: "lowercase letters, numbers, hyphen",
+    });
+  }
+
+  if (!adminEmail) {
+    throw makeAppError("Missing field: adminEmail", 400, "MISSING_ADMIN_EMAIL");
+  }
+
+  if (!isValidEmail(adminEmail)) {
+    throw makeAppError("Invalid adminEmail", 400, "INVALID_ADMIN_EMAIL");
+  }
+
+  if (!adminPassword) {
+    throw makeAppError(
+      "Missing field: adminPassword",
+      400,
+      "MISSING_ADMIN_PASSWORD"
+    );
+  }
+
+  if (adminPassword.length < PASSWORD_MIN) {
+    throw makeAppError(
+      "Invalid adminPassword",
+      400,
+      "INVALID_ADMIN_PASSWORD",
+      {
+        minLength: PASSWORD_MIN,
+      }
+    );
+  }
+}
+
 export async function registerCompanyService(body = {}) {
   const name = safeString(body.name);
   const rawCompanyId = safeString(body.companyId);
@@ -59,81 +145,72 @@ export async function registerCompanyService(body = {}) {
   const adminPassword = safeString(body.adminPassword);
   const adminName = safeString(body.adminName);
 
-  if (!name) {
-    const err = new Error("Missing field: name");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!rawCompanyId) {
-    const err = new Error("Missing field: companyId");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!adminEmail) {
-    const err = new Error("Missing field: adminEmail");
-    err.status = 400;
-    throw err;
-  }
-
-  if (!adminPassword) {
-    const err = new Error("Missing field: adminPassword");
-    err.status = 400;
-    throw err;
-  }
-
   const companyId = slugifyCompanyId(rawCompanyId);
 
-  if (!companyId) {
-    const err = new Error("Invalid companyId");
-    err.status = 400;
-    throw err;
-  }
+  validateRegistrationInput({
+    name,
+    rawCompanyId,
+    companyId,
+    adminEmail,
+    adminPassword,
+  });
 
-  // 1) existence check -> 409
   const exists = await tenantExists(companyId);
   if (exists) {
-    const err = new Error("Company already exists");
-    err.status = 409;
-    throw err;
+    throw makeAppError("Company already exists", 409, "COMPANY_EXISTS", {
+      companyId,
+    });
   }
 
-  // 2) create tenant directory
   const tenantPath = path.join(TENANTS_DIR, companyId);
-  await fs.mkdir(tenantPath, { recursive: true });
+  let tenantCreated = false;
 
-  // 3) initialize default company profile via tenant-store
-  await getCompanyProfile(companyId);
+  try {
+    await fs.mkdir(tenantPath, { recursive: false });
+    tenantCreated = true;
 
-  const trial = trialDates();
+    await getCompanyProfile(companyId);
 
-  await updateCompanyProfile(companyId, {
-    name,
-    trialStart: trial.trialStart,
-    trialEnd: trial.trialEnd,
-  });
+    const trial = trialDates();
 
-  // 3b) seed default templates (new companies should not be empty)
-  await seedDefaultCompanyDocumentTemplates(companyId);
+    await updateCompanyProfile(companyId, {
+      name,
+      trialStart: trial.trialStart,
+      trialEnd: trial.trialEnd,
+    });
 
-  // 4) create first admin user (manager)
-  const createdUser = await createUser(companyId, {
-    email: adminEmail,
-    password: adminPassword,
-    name: adminName,
-    role: "manager",
-  });
+    await seedDefaultCompanyDocumentTemplates(companyId);
 
-  // 5) return token (auto-login)
-  const token = signAccessToken(createdUser);
+    const createdUser = await createUser(companyId, {
+      email: adminEmail,
+      password: adminPassword,
+      name: adminName,
+      role: "manager",
+    });
 
-  return {
-    ok: true,
-    companyId,
-    trialStart: trial.trialStart,
-    trialEnd: trial.trialEnd,
-    token,
-    user: createdUser,
-  };
+    const token = signAccessToken(createdUser);
+
+    return {
+      ok: true,
+      companyId,
+      trialStart: trial.trialStart,
+      trialEnd: trial.trialEnd,
+      token,
+      user: createdUser,
+    };
+  } catch (err) {
+    if (tenantCreated) {
+      try {
+        await fs.rm(tenantPath, { recursive: true, force: true });
+      } catch {}
+    }
+
+    if (err && err.code === "EEXIST") {
+      throw makeAppError("Company already exists", 409, "COMPANY_EXISTS", {
+        companyId,
+      });
+    }
+
+    throw err;
+  }
 }
