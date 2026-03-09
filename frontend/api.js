@@ -19,6 +19,9 @@
 //
 // BOX #92:
 // - Billing limits helper: GET /billing/limits
+//
+// BOX #101:
+// - Public company registration helper: POST /public/register-company
 
 (() => {
   function apiBase() {
@@ -394,6 +397,24 @@
     return r;
   };
 
+  const registerCompany = async (payload = {}) => {
+    const r = await apiFetch("/public/register-company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {}),
+    });
+
+    const cid = safeString(r?.user?.companyId || r?.companyId);
+    if (cid) localStorage.setItem("wa_company_id", cid);
+
+    const tok = safeString(r?.token);
+    if (tok) localStorage.setItem("wa_auth_token", tok);
+
+    setGateCache({ ts: Date.now(), locked: false, reason: null });
+
+    return r;
+  };
+
   const getAuthMe = () => apiFetch("/auth/me");
 
   const logout = () => {
@@ -505,6 +526,7 @@
   window.WA_API = {
     // auth
     login,
+    registerCompany,
     getAuthMe,
     logout,
 
