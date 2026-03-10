@@ -119,15 +119,27 @@
       }
     }
 
+    function getVersionLabel(system = {}) {
+      const buildSha = safeString(system?.version?.buildSha);
+      const buildTime = safeString(system?.version?.buildTime);
+
+      if (buildSha && buildTime) return `${buildSha} • ${buildTime}`;
+      if (buildSha) return buildSha;
+      if (buildTime) return buildTime;
+      return "";
+    }
+
     function fillInfo(data = {}) {
-      setValue(infoVersion, data.version);
-      setValue(infoEnv, data.environment || data.env);
-      setValue(infoNode, data.node || data.nodeVersion);
-      setValue(infoTime, data.serverTime || data.time || data.timestamp);
+      const system = data?.system && typeof data.system === "object" ? data.system : {};
+
+      setValue(infoVersion, getVersionLabel(system));
+      setValue(infoEnv, system.environment || data.environment || data.env);
+      setValue(infoNode, system.node || data.node || data.nodeVersion);
+      setValue(infoTime, system.serverTime || data.serverTime || data.time || data.timestamp);
       setValue(infoTenant, data.companyId || data.tenant || data.tenantId);
       setValue(infoPlan, data.plan || data.billing?.plan);
       setValue(infoBillingStatus, data.billingStatus || data.billing?.billingStatus);
-      setValue(infoStripe, data.stripeMode || data.stripe?.mode);
+      setValue(infoStripe, system.stripeMode || data.stripeMode || data.stripe?.mode);
 
       rawJson.textContent = formatJson(data);
     }
