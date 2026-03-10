@@ -126,7 +126,7 @@
       if (buildSha && buildTime) return `${buildSha} • ${buildTime}`;
       if (buildSha) return buildSha;
       if (buildTime) return buildTime;
-      return "";
+      return "Lokální build / metadata nejsou k dispozici";
     }
 
     function fillInfo(data = {}) {
