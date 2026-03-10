@@ -25,6 +25,9 @@
 //
 // BOX #103:
 // - Company profile helpers: GET /company, PUT /company
+//
+// BOX #111:
+// - System diagnostics helper: GET /system/info
 
 (() => {
   function apiBase() {
@@ -536,6 +539,9 @@
       body: JSON.stringify({ templateId, ...extra }),
     });
 
+  // --- SYSTEM ---
+  const getSystemInfo = () => apiFetch("/system/info");
+
   window.WA_API = {
     // auth
     login,
@@ -582,5 +588,8 @@
     getCompanyComplianceDocuments,
     getCompanyDocumentTemplates,
     createComplianceFromTemplate,
+
+    // system
+    getSystemInfo,
   };
 })();

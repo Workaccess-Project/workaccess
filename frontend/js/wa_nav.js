@@ -8,6 +8,9 @@
 //
 // BOX #104:
 // - Přidán odkaz "Firma" do hlavní navigace
+//
+// BOX #111:
+// - Přidán odkaz "Systém" do hlavní navigace
 
 (() => {
   function safeString(v) {
@@ -28,7 +31,6 @@
     try {
       localStorage.removeItem("wa_auth_token");
       localStorage.removeItem("wa_company_id");
-      // DEMO role key – prevent confusion after logout
       localStorage.removeItem("wa_role_key");
     } catch {
       // ignore
@@ -69,7 +71,6 @@
     return next;
   }
 
-  // Produkční role: z JWT, jinak fallback DEMO
   function getRole() {
     const tok = getToken();
     if (tok) {
@@ -133,6 +134,7 @@
           ${link("Compliance", "./compliance.html", "compliance", activeKey)}
           ${link("Audit", "./audit.html", "audit", activeKey)}
           ${link("Billing", "./billing.html", "billing", activeKey)}
+          ${link("Systém", "./system.html", "system", activeKey)}
         </div>
 
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
@@ -148,17 +150,14 @@
       </div>
     `;
 
-    // Logout jen když je token
     const logoutBtn = document.getElementById("waLogoutBtn");
     if (logoutBtn) {
       logoutBtn.addEventListener("click", () => {
         clearAuthStorage();
-        // redirect to a guaranteed existing page; unauth flow should kick in there
         window.location.href = "./index.html";
       });
     }
 
-    // Role switch jen když není token (DEMO/dev)
     const btn = document.getElementById("waRoleBtn");
     if (btn) {
       btn.addEventListener("click", () => {
@@ -171,7 +170,6 @@
   window.WA_NAV = {
     renderNav,
     getRole,
-    // setRole ponecháme pro zpětnou kompatibilitu, ale mění jen DEMO roli
     setRole: setDemoRole,
     getCompanyId,
     setCompanyId,

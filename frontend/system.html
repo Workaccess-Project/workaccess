@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Workaccess – Systémové informace</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <div id="wa-nav"></div>
+
+      <div class="section">
+        <h1 style="font-size:18px; margin:0;">Systémové informace</h1>
+        <div class="small" style="opacity:.85; margin-top:6px;">
+          Diagnostický přehled runtime stavu aplikace pro interní ověření a beta support.
+        </div>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));">
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Verze</div>
+            <div id="infoVersion">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Prostředí</div>
+            <div id="infoEnv">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Node.js</div>
+            <div id="infoNode">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Čas serveru</div>
+            <div id="infoTime">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Tenant</div>
+            <div id="infoTenant">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Plan</div>
+            <div id="infoPlan">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Billing status</div>
+            <div id="infoBillingStatus">—</div>
+          </div>
+
+          <div>
+            <div class="small" style="opacity:.75; margin-bottom:4px;">Stripe</div>
+            <div id="infoStripe">—</div>
+          </div>
+        </div>
+
+        <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button type="button" id="btnReload">Načíst znovu</button>
+        </div>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Raw JSON</div>
+        <pre id="rawJson" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
+      </div>
+
+      <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Technický stav</div>
+        <div id="statusLine" class="small" style="opacity:.8;">Připraveno</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./js/wa_config.js"></script>
+  <script src="./js/wa_nav.js"></script>
+  <script src="./api.js?v=111"></script>
+
+  <script>
+    WA_NAV.renderNav("system");
+
+    const btnReload = document.getElementById("btnReload");
+    const statusLine = document.getElementById("statusLine");
+    const rawJson = document.getElementById("rawJson");
+
+    const infoVersion = document.getElementById("infoVersion");
+    const infoEnv = document.getElementById("infoEnv");
+    const infoNode = document.getElementById("infoNode");
+    const infoTime = document.getElementById("infoTime");
+    const infoTenant = document.getElementById("infoTenant");
+    const infoPlan = document.getElementById("infoPlan");
+    const infoBillingStatus = document.getElementById("infoBillingStatus");
+    const infoStripe = document.getElementById("infoStripe");
+
+    function safeString(v) {
+      return (v ?? "").toString().trim();
+    }
+
+    function setStatus(text, isError = false) {
+      statusLine.textContent = text || "";
+      statusLine.style.color = isError ? "#b42318" : "";
+    }
+
+    function setValue(el, value) {
+      el.textContent = safeString(value) || "—";
+    }
+
+    function formatJson(data) {
+      try {
+        return JSON.stringify(data ?? {}, null, 2);
+      } catch {
+        return "{}";
+      }
+    }
+
+    function fillInfo(data = {}) {
+      setValue(infoVersion, data.version);
+      setValue(infoEnv, data.environment || data.env);
+      setValue(infoNode, data.node || data.nodeVersion);
+      setValue(infoTime, data.serverTime || data.time || data.timestamp);
+      setValue(infoTenant, data.companyId || data.tenant || data.tenantId);
+      setValue(infoPlan, data.plan || data.billing?.plan);
+      setValue(infoBillingStatus, data.billingStatus || data.billing?.billingStatus);
+      setValue(infoStripe, data.stripeMode || data.stripe?.mode);
+
+      rawJson.textContent = formatJson(data);
+    }
+
+    async function loadSystemInfo() {
+      setStatus("Načítám systémové informace...");
+      btnReload.disabled = true;
+
+      try {
+        const data = await WA_API.getSystemInfo();
+        fillInfo(data || {});
+        setStatus("Systémové informace načteny.");
+      } catch (e) {
+        rawJson.textContent = "—";
+        setStatus(`Nepodařilo se načíst systémové informace: ${e?.message || e}`, true);
+      } finally {
+        btnReload.disabled = false;
+      }
+    }
+
+    btnReload.addEventListener("click", loadSystemInfo);
+
+    loadSystemInfo();
+  </script>
+</body>
+</html>
