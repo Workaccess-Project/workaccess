@@ -1,6 +1,8 @@
 // backend/routes/system.js
 import express from "express";
+import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
+import { buildTenantBackupSnapshot } from "../services/tenant-backup.js";
 
 const router = express.Router();
 
@@ -46,8 +48,8 @@ router.get("/info", async (req, res, next) => {
         serverTime: new Date().toISOString(),
         stripeMode: detectStripeMode(),
         version: {
-          buildSha: (process.env.BUILD_SHA ?? null),
-          buildTime: (process.env.BUILD_TIME ?? null),
+          buildSha: process.env.BUILD_SHA ?? null,
+          buildTime: process.env.BUILD_TIME ?? null,
         },
       },
 
@@ -65,6 +67,27 @@ router.get("/info", async (req, res, next) => {
         updatedAt: billing?.updatedAt ?? null,
       },
     });
+  } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * GET /api/system/tenant-backup
+ * Admin-only tenant snapshot export.
+ */
+router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+    const snapshot = await buildTenantBackupSnapshot(companyId);
+
+    const datePart = new Date().toISOString().slice(0, 10);
+    const fileName = `${companyId}-backup-${datePart}.json`;
+
+    res.setHeader("Content-Type", "application/json; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename=${fileName}`);
+
+    return res.json(snapshot);
   } catch (err) {
     return next(err);
   }
