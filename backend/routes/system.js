@@ -5,6 +5,16 @@ import { getCompanyProfile } from "../data-company.js";
 const router = express.Router();
 
 /**
+ * Detect Stripe mode (test / live)
+ */
+function detectStripeMode() {
+  const key = (process.env.STRIPE_SECRET_KEY ?? "").toString().trim();
+  if (key.startsWith("sk_live")) return "live";
+  if (key.startsWith("sk_test")) return "test";
+  return "unknown";
+}
+
+/**
  * GET /api/system/info
  * Safe tenant-scoped system info for UI/debug.
  */
@@ -21,17 +31,33 @@ router.get("/info", async (req, res, next) => {
     }
 
     const company = await getCompanyProfile(companyId);
-    const billing = company?.billing && typeof company.billing === "object"
-      ? company.billing
-      : null;
+
+    const billing =
+      company?.billing && typeof company.billing === "object"
+        ? company.billing
+        : null;
 
     return res.json({
       ok: true,
+
+      system: {
+        environment: (process.env.NODE_ENV ?? "development").toString(),
+        node: process.version,
+        serverTime: new Date().toISOString(),
+        stripeMode: detectStripeMode(),
+        version: {
+          buildSha: (process.env.BUILD_SHA ?? null),
+          buildTime: (process.env.BUILD_TIME ?? null),
+        },
+      },
+
       companyId,
       role,
+
       company: {
         name: (company?.name ?? "").toString(),
       },
+
       billing: {
         plan: billing?.plan ?? null,
         billingStatus: billing?.billingStatus ?? null,
