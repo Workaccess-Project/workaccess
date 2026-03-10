@@ -3,6 +3,7 @@ import express from "express";
 import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
 import { buildTenantBackupSnapshot } from "../services/tenant-backup.js";
+import { restoreTenantBackupSnapshot } from "../services/tenant-restore.js";
 
 const router = express.Router();
 
@@ -89,6 +90,54 @@ router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
 
     return res.json(snapshot);
   } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * POST /api/system/tenant-restore
+ * Admin-only tenant snapshot restore.
+ */
+router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+
+    if (!companyId) {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    const result = await restoreTenantBackupSnapshot(companyId, req.body);
+
+    return res.json(result);
+  } catch (err) {
+    if (err?.message === "MissingCompanyId") {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    if (err?.message === "InvalidCompanyId") {
+      return res.status(400).json({
+        error: "InvalidCompanyId",
+        message: "Invalid authenticated companyId.",
+      });
+    }
+
+    if (
+      err?.message === "InvalidBackupPayload" ||
+      err?.message === "InvalidBackupPath" ||
+      String(err?.message ?? "").startsWith("InvalidBackupPathAtIndex:")
+    ) {
+      return res.status(400).json({
+        error: "InvalidBackupPayload",
+        message: "Backup payload must contain safe relative file paths and file content.",
+      });
+    }
+
     return next(err);
   }
 });
