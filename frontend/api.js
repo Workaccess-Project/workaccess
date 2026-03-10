@@ -28,6 +28,9 @@
 //
 // BOX #111:
 // - System diagnostics helper: GET /system/info
+//
+// BOX #119:
+// - Tenant backup download helper: GET /system/tenant-backup with auth headers
 
 (() => {
   function apiBase() {
@@ -542,6 +545,33 @@
   // --- SYSTEM ---
   const getSystemInfo = () => apiFetch("/system/info");
 
+  async function fetchTenantBackupBlob() {
+    const res = await fetch(apiBase() + "/system/tenant-backup", {
+      method: "GET",
+      headers: buildHeaders(),
+    });
+
+    if (!res.ok) {
+      let body = null;
+      try {
+        body = await readJsonIfAny(res);
+      } catch {
+        body = null;
+      }
+
+      const err = buildHttpError(res, body);
+      handleAuthAndGateSideEffects(err);
+      throw err;
+    }
+
+    const blob = await res.blob();
+    const header = safeString(res.headers.get("content-disposition"));
+    const match = header.match(/filename="?([^"]+)"?/i);
+    const fileName = safeString(match?.[1]) || `${safeString(getCompanyId()) || "tenant"}-backup.json`;
+
+    return { blob, fileName };
+  }
+
   window.WA_API = {
     // auth
     login,
@@ -591,5 +621,6 @@
 
     // system
     getSystemInfo,
+    fetchTenantBackupBlob,
   };
 })();

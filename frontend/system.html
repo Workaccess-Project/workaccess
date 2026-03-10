@@ -20,6 +20,7 @@
 
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));">
+
           <div>
             <div class="small" style="opacity:.75; margin-bottom:4px;">Verze</div>
             <div id="infoVersion">—</div>
@@ -59,10 +60,12 @@
             <div class="small" style="opacity:.75; margin-bottom:4px;">Stripe</div>
             <div id="infoStripe">—</div>
           </div>
+
         </div>
 
         <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
           <button type="button" id="btnReload">Načíst znovu</button>
+          <button type="button" id="btnTenantBackup">Stáhnout tenant backup</button>
         </div>
       </div>
 
@@ -86,6 +89,7 @@
     WA_NAV.renderNav("system");
 
     const btnReload = document.getElementById("btnReload");
+    const btnTenantBackup = document.getElementById("btnTenantBackup");
     const statusLine = document.getElementById("statusLine");
     const rawJson = document.getElementById("rawJson");
 
@@ -100,6 +104,18 @@
 
     function safeString(v) {
       return (v ?? "").toString().trim();
+    }
+
+    function currentRole() {
+      try {
+        return safeString(WA_NAV?.getRole?.()) || "external";
+      } catch {
+        return "external";
+      }
+    }
+
+    function isAdminRole() {
+      return currentRole() === "admin";
     }
 
     function setStatus(text, isError = false) {
@@ -129,6 +145,15 @@
       return "Lokální build / metadata nejsou k dispozici";
     }
 
+    function syncBackupButtonAccess() {
+      const allowed = isAdminRole();
+
+      btnTenantBackup.disabled = !allowed;
+      btnTenantBackup.title = allowed
+        ? "Stáhnout kompletní tenant backup"
+        : "Tenant backup je dostupný pouze pro admin roli";
+    }
+
     function fillInfo(data = {}) {
       const system = data?.system && typeof data.system === "object" ? data.system : {};
 
@@ -147,21 +172,68 @@
     async function loadSystemInfo() {
       setStatus("Načítám systémové informace...");
       btnReload.disabled = true;
+      btnTenantBackup.disabled = true;
 
       try {
         const data = await WA_API.getSystemInfo();
         fillInfo(data || {});
-        setStatus("Systémové informace načteny.");
+        syncBackupButtonAccess();
+
+        if (isAdminRole()) {
+          setStatus("Systémové informace načteny.");
+        } else {
+          setStatus("Systémové informace načteny. Tenant backup je dostupný pouze pro admin roli.");
+        }
       } catch (e) {
         rawJson.textContent = "—";
+        syncBackupButtonAccess();
         setStatus(`Nepodařilo se načíst systémové informace: ${e?.message || e}`, true);
       } finally {
         btnReload.disabled = false;
+        if (isAdminRole()) {
+          btnTenantBackup.disabled = false;
+        }
+      }
+    }
+
+    async function downloadTenantBackup() {
+      if (!isAdminRole()) {
+        syncBackupButtonAccess();
+        setStatus("Tenant backup je dostupný pouze pro admin roli.", true);
+        return;
+      }
+
+      btnTenantBackup.disabled = true;
+      setStatus("Stahuji tenant backup...");
+
+      try {
+        const result = await WA_API.fetchTenantBackupBlob();
+        const blob = result?.blob;
+        const fileName = safeString(result?.fileName) || "tenant-backup.json";
+
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = blobUrl;
+        a.download = fileName;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(blobUrl);
+
+        setStatus("Tenant backup byl úspěšně stažen.");
+      } catch (e) {
+        setStatus(`Nepodařilo se stáhnout tenant backup: ${e?.message || e}`, true);
+      } finally {
+        if (isAdminRole()) {
+          btnTenantBackup.disabled = false;
+        }
       }
     }
 
     btnReload.addEventListener("click", loadSystemInfo);
+    btnTenantBackup.addEventListener("click", downloadTenantBackup);
 
+    syncBackupButtonAccess();
     loadSystemInfo();
   </script>
 </body>
