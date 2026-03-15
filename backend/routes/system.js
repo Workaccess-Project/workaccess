@@ -88,9 +88,9 @@ router.get("/info", async (req, res, next) => {
 
 /**
  * GET /api/system/tenant-backup
- * Admin-only tenant snapshot export.
+ * Admin/manager tenant snapshot export.
  */
-router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
+router.get("/tenant-backup", requireRole(["admin", "manager"]), async (req, res, next) => {
   try {
     const companyId = (req.auth?.companyId ?? "").toString().trim();
     const snapshot = await buildTenantBackupSnapshot(companyId);
@@ -109,9 +109,9 @@ router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
 
 /**
  * POST /api/system/tenant-restore
- * Admin-only tenant snapshot restore.
+ * Admin/manager tenant snapshot restore.
  */
-router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) => {
+router.post("/tenant-restore", requireRole(["admin", "manager"]), async (req, res, next) => {
   const companyId = (req.auth?.companyId ?? "").toString().trim();
   const actorRole = (req.auth?.role ?? "unknown").toString().trim() || "unknown";
   const confirmation = (req.body?.confirmation ?? "").toString().trim();
