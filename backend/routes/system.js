@@ -41,6 +41,10 @@ function getTenantAuditFilePath(companyId) {
   return path.join(process.cwd(), "backend", "data", "tenants", companyId, "audit.json");
 }
 
+function getTenantDirectoryPath(companyId) {
+  return path.join(process.cwd(), "backend", "data", "tenants", companyId);
+}
+
 async function readTenantAuditEntries(companyId) {
   const auditFilePath = getTenantAuditFilePath(companyId);
   const raw = await fs.readFile(auditFilePath, "utf8");
@@ -94,6 +98,66 @@ function normalizeRestoreHistoryEntry(entry, index) {
           ? meta.safetySnapshotFileCount
           : null,
       createdAt: meta?.safetySnapshotCreatedAt ?? null,
+    },
+  };
+}
+
+function countJsonEntities(parsed) {
+  if (Array.isArray(parsed)) {
+    return parsed.length;
+  }
+
+  if (parsed && typeof parsed === "object") {
+    return Object.keys(parsed).length;
+  }
+
+  if (parsed === null || typeof parsed === "undefined") {
+    return 0;
+  }
+
+  return 1;
+}
+
+async function buildTenantDataMetrics(companyId) {
+  const tenantDirectoryPath = getTenantDirectoryPath(companyId);
+  const directoryEntries = await fs.readdir(tenantDirectoryPath, { withFileTypes: true });
+
+  const fileMetrics = [];
+  let totalFiles = 0;
+  let totalEntities = 0;
+
+  for (const entry of directoryEntries) {
+    if (!entry.isFile()) {
+      continue;
+    }
+
+    if (!entry.name.toLowerCase().endsWith(".json")) {
+      continue;
+    }
+
+    const filePath = path.join(tenantDirectoryPath, entry.name);
+    const raw = await fs.readFile(filePath, "utf8");
+    const parsed = JSON.parse(raw);
+    const entityCount = countJsonEntities(parsed);
+
+    fileMetrics.push({
+      fileName: entry.name,
+      entityCount,
+    });
+
+    totalFiles += 1;
+    totalEntities += entityCount;
+  }
+
+  fileMetrics.sort((a, b) => a.fileName.localeCompare(b.fileName));
+
+  return {
+    ok: true,
+    companyId,
+    files: fileMetrics,
+    totals: {
+      files: totalFiles,
+      entities: totalEntities,
     },
   };
 }
@@ -175,6 +239,42 @@ router.get("/storage-diagnostics", requireRole(["admin", "manager"]), async (req
       return res.status(404).json({
         error: "TenantNotFound",
         message: "Tenant storage directory was not found.",
+      });
+    }
+
+    return next(err);
+  }
+});
+
+/**
+ * GET /api/system/tenant-data-metrics
+ * Admin/manager tenant entity counts per JSON file.
+ */
+router.get("/tenant-data-metrics", requireRole(["admin", "manager"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+
+    if (!companyId) {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    const metrics = await buildTenantDataMetrics(companyId);
+    return res.json(metrics);
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return res.status(404).json({
+        error: "TenantNotFound",
+        message: "Tenant storage directory was not found.",
+      });
+    }
+
+    if (err instanceof SyntaxError) {
+      return res.status(500).json({
+        error: "InvalidTenantDataFile",
+        message: "One or more tenant JSON files are invalid.",
       });
     }
 
