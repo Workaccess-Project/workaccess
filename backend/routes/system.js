@@ -1,5 +1,7 @@
 ﻿// backend/routes/system.js
 import express from "express";
+import fs from "node:fs/promises";
+import path from "node:path";
 import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
 import { auditLog } from "../data-audit.js";
@@ -8,6 +10,10 @@ import { restoreTenantBackupSnapshot } from "../services/tenant-restore.js";
 import { getTenantStorageDiagnostics } from "../services/tenant-storage-diagnostics.js";
 
 const router = express.Router();
+const AUDIT_RESTORE_ACTIONS = new Set([
+  "tenant.restore.success",
+  "tenant.restore.failed",
+]);
 
 /**
  * Detect Stripe mode (test / live)
@@ -29,6 +35,67 @@ function getRequestedFileCount(body) {
   }
 
   return 0;
+}
+
+function getTenantAuditFilePath(companyId) {
+  return path.join(process.cwd(), "backend", "data", "tenants", companyId, "audit.json");
+}
+
+async function readTenantAuditEntries(companyId) {
+  const auditFilePath = getTenantAuditFilePath(companyId);
+  const raw = await fs.readFile(auditFilePath, "utf8");
+  const parsed = JSON.parse(raw);
+
+  if (!Array.isArray(parsed)) {
+    throw new Error("InvalidAuditLog");
+  }
+
+  return parsed;
+}
+
+function normalizeRestoreHistoryEntry(entry, index) {
+  const meta =
+    entry?.meta && typeof entry.meta === "object"
+      ? entry.meta
+      : {};
+
+  const action = (entry?.action ?? "").toString().trim();
+  const status = action === "tenant.restore.success" ? "success" : "failed";
+
+  return {
+    id:
+      (entry?.id ?? "").toString().trim() ||
+      `${status}-${index}`,
+    timestamp:
+      entry?.createdAt ??
+      entry?.timestamp ??
+      meta?.restoredAt ??
+      meta?.safetySnapshotCreatedAt ??
+      null,
+    action,
+    status,
+    actorRole: (entry?.actorRole ?? "unknown").toString().trim() || "unknown",
+    entityType: (entry?.entityType ?? "").toString().trim() || "system",
+    entityId: (entry?.entityId ?? "").toString().trim() || null,
+    requestedFileCount:
+      typeof meta?.requestedFileCount === "number"
+        ? meta.requestedFileCount
+        : null,
+    restoredFileCount:
+      typeof meta?.restoredFileCount === "number"
+        ? meta.restoredFileCount
+        : null,
+    restoredAt: meta?.restoredAt ?? null,
+    error: meta?.error ?? null,
+    safetySnapshot: {
+      fileName: meta?.safetySnapshotFileName ?? null,
+      fileCount:
+        typeof meta?.safetySnapshotFileCount === "number"
+          ? meta.safetySnapshotFileCount
+          : null,
+      createdAt: meta?.safetySnapshotCreatedAt ?? null,
+    },
+  };
 }
 
 /**
@@ -108,6 +175,64 @@ router.get("/storage-diagnostics", requireRole(["admin", "manager"]), async (req
       return res.status(404).json({
         error: "TenantNotFound",
         message: "Tenant storage directory was not found.",
+      });
+    }
+
+    return next(err);
+  }
+});
+
+/**
+ * GET /api/system/restore-history
+ * Admin/manager restore history diagnostics from tenant audit log.
+ */
+router.get("/restore-history", requireRole(["admin", "manager"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+
+    if (!companyId) {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    const limitRaw = Number.parseInt((req.query?.limit ?? "20").toString(), 10);
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(limitRaw, 1), 100)
+      : 20;
+
+    const auditEntries = await readTenantAuditEntries(companyId);
+
+    const history = auditEntries
+      .filter((entry) => AUDIT_RESTORE_ACTIONS.has((entry?.action ?? "").toString().trim()))
+      .map((entry, index) => normalizeRestoreHistoryEntry(entry, index))
+      .sort((a, b) => {
+        const timeA = a.timestamp ? Date.parse(a.timestamp) : 0;
+        const timeB = b.timestamp ? Date.parse(b.timestamp) : 0;
+        return timeB - timeA;
+      })
+      .slice(0, limit);
+
+    return res.json({
+      ok: true,
+      companyId,
+      count: history.length,
+      limit,
+      items: history,
+    });
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return res.status(404).json({
+        error: "AuditLogNotFound",
+        message: "Tenant audit log was not found.",
+      });
+    }
+
+    if (err?.message === "InvalidAuditLog" || err instanceof SyntaxError) {
+      return res.status(500).json({
+        error: "InvalidAuditLog",
+        message: "Tenant audit log is missing or invalid.",
       });
     }
 
