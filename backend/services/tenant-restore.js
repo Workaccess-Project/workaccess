@@ -4,6 +4,7 @@ import path from "path";
 
 const TENANTS_ROOT = path.resolve("backend/data/tenants");
 const RESTORE_SAFETY_ROOT = path.resolve("backend/data/restore-safety");
+const MAX_RESTORE_SAFETY_SNAPSHOTS_PER_TENANT = 5;
 
 function assertSafeCompanyId(companyId) {
   const value = (companyId ?? "").toString().trim();
@@ -79,6 +80,48 @@ async function removeDirectoryContents(dirPath) {
   }
 }
 
+async function cleanupOldRestoreSafetySnapshots(companySafetyDir) {
+  const dirExists = await pathExists(companySafetyDir);
+
+  if (!dirExists) {
+    return;
+  }
+
+  const entries = await fs.readdir(companySafetyDir, { withFileTypes: true });
+  const snapshotEntries = [];
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".json")) {
+      continue;
+    }
+
+    const fullPath = path.join(companySafetyDir, entry.name);
+    const stats = await fs.stat(fullPath);
+
+    snapshotEntries.push({
+      name: entry.name,
+      fullPath,
+      modifiedTimeMs: stats.mtimeMs,
+    });
+  }
+
+  snapshotEntries.sort((a, b) => {
+    if (b.modifiedTimeMs !== a.modifiedTimeMs) {
+      return b.modifiedTimeMs - a.modifiedTimeMs;
+    }
+
+    return b.name.localeCompare(a.name);
+  });
+
+  const entriesToDelete = snapshotEntries.slice(
+    MAX_RESTORE_SAFETY_SNAPSHOTS_PER_TENANT
+  );
+
+  for (const entry of entriesToDelete) {
+    await fs.rm(entry.fullPath, { force: true });
+  }
+}
+
 async function buildPreRestoreSafetySnapshot(safeCompanyId, resolvedTenantDir) {
   const tenantExists = await pathExists(resolvedTenantDir);
   const files = {};
@@ -118,6 +161,7 @@ async function buildPreRestoreSafetySnapshot(safeCompanyId, resolvedTenantDir) {
 
   await fs.mkdir(companySafetyDir, { recursive: true });
   await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8");
+  await cleanupOldRestoreSafetySnapshots(companySafetyDir);
 
   return {
     createdAt: exportedAt,

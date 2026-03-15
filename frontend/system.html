@@ -191,8 +191,9 @@
     }
 
     function isAdminRole() {
-      return currentRole() === "admin";
-    }
+  const role = currentRole();
+  return role === "admin" || role === "manager";
+}
 
     function setStatus(text, isError = false) {
       statusLine.textContent = text || "";
