@@ -2,6 +2,7 @@
 import express from "express";
 import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
+import { auditLog } from "../data-audit.js";
 import { buildTenantBackupSnapshot } from "../services/tenant-backup.js";
 import { restoreTenantBackupSnapshot } from "../services/tenant-restore.js";
 
@@ -15,6 +16,10 @@ function detectStripeMode() {
   if (key.startsWith("sk_live")) return "live";
   if (key.startsWith("sk_test")) return "test";
   return "unknown";
+}
+
+function getRequestedFileCount(body) {
+  return Array.isArray(body?.files) ? body.files.length : 0;
 }
 
 /**
@@ -99,10 +104,12 @@ router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
  * Admin-only tenant snapshot restore.
  */
 router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) => {
-  try {
-    const companyId = (req.auth?.companyId ?? "").toString().trim();
-    const confirmation = (req.body?.confirmation ?? "").toString().trim();
+  const companyId = (req.auth?.companyId ?? "").toString().trim();
+  const actorRole = (req.auth?.role ?? "unknown").toString().trim() || "unknown";
+  const confirmation = (req.body?.confirmation ?? "").toString().trim();
+  const requestedFileCount = getRequestedFileCount(req.body);
 
+  try {
     if (!companyId) {
       return res.status(400).json({
         error: "MissingCompanyId",
@@ -119,8 +126,39 @@ router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) =>
 
     const result = await restoreTenantBackupSnapshot(companyId, req.body);
 
+    await auditLog({
+      companyId,
+      actorRole,
+      action: "tenant.restore.success",
+      entityType: "system",
+      entityId: companyId,
+      meta: {
+        requestedFileCount,
+        restoredFileCount: result?.fileCount ?? requestedFileCount,
+        restoredAt: result?.restoredAt ?? null,
+      },
+    });
+
     return res.json(result);
   } catch (err) {
+    if (companyId) {
+      try {
+        await auditLog({
+          companyId,
+          actorRole,
+          action: "tenant.restore.failed",
+          entityType: "system",
+          entityId: companyId,
+          meta: {
+            requestedFileCount,
+            error: (err?.message ?? "UnknownError").toString(),
+          },
+        });
+      } catch (auditErr) {
+        console.error("tenant restore audit log failed", auditErr);
+      }
+    }
+
     if (err?.message === "MissingCompanyId") {
       return res.status(400).json({
         error: "MissingCompanyId",
