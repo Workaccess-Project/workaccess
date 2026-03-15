@@ -31,6 +31,9 @@
 //
 // BOX #119:
 // - Tenant backup download helper: GET /system/tenant-backup with auth headers
+//
+// BOX #122:
+// - Tenant restore helper: POST /system/tenant-restore
 
 (() => {
   function apiBase() {
@@ -572,6 +575,17 @@
     return { blob, fileName };
   }
 
+  async function restoreTenantBackup(files = [], confirmation = "") {
+    return apiFetch("/system/tenant-restore", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        confirmation: safeString(confirmation),
+        files: Array.isArray(files) ? files : [],
+      }),
+    });
+  }
+
   window.WA_API = {
     // auth
     login,
@@ -622,5 +636,6 @@
     // system
     getSystemInfo,
     fetchTenantBackupBlob,
+    restoreTenantBackup,
   };
 })();
