@@ -5,6 +5,7 @@ import { getCompanyProfile } from "../data-company.js";
 import { auditLog } from "../data-audit.js";
 import { buildTenantBackupSnapshot } from "../services/tenant-backup.js";
 import { restoreTenantBackupSnapshot } from "../services/tenant-restore.js";
+import { getTenantStorageDiagnostics } from "../services/tenant-storage-diagnostics.js";
 
 const router = express.Router();
 
@@ -82,6 +83,34 @@ router.get("/info", async (req, res, next) => {
       },
     });
   } catch (err) {
+    return next(err);
+  }
+});
+
+/**
+ * GET /api/system/storage-diagnostics
+ * Admin/manager tenant storage diagnostics.
+ */
+router.get("/storage-diagnostics", requireRole(["admin", "manager"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+    const diagnostics = await getTenantStorageDiagnostics(companyId);
+    return res.json(diagnostics);
+  } catch (err) {
+    if (err?.message === "MissingCompanyId") {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    if (err?.message === "TenantNotFound") {
+      return res.status(404).json({
+        error: "TenantNotFound",
+        message: "Tenant storage directory was not found.",
+      });
+    }
+
     return next(err);
   }
 });
