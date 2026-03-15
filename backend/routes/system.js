@@ -1,4 +1,4 @@
-// backend/routes/system.js
+﻿// backend/routes/system.js
 import express from "express";
 import { requireRole } from "../auth.js";
 import { getCompanyProfile } from "../data-company.js";
@@ -101,11 +101,19 @@ router.get("/tenant-backup", requireRole(["admin"]), async (req, res, next) => {
 router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) => {
   try {
     const companyId = (req.auth?.companyId ?? "").toString().trim();
+    const confirmation = (req.body?.confirmation ?? "").toString().trim();
 
     if (!companyId) {
       return res.status(400).json({
         error: "MissingCompanyId",
         message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    if (confirmation !== "RESTORE") {
+      return res.status(400).json({
+        error: "RestoreConfirmationRequired",
+        message: 'Restore requires explicit confirmation value "RESTORE".',
       });
     }
 
