@@ -118,6 +118,72 @@ function countJsonEntities(parsed) {
   return 1;
 }
 
+function parseAuditTimestamp(value) {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function buildTenantAuditMetrics(companyId, auditEntries) {
+  const now = Date.now();
+  const last24hThreshold = now - (24 * 60 * 60 * 1000);
+  const last7dThreshold = now - (7 * 24 * 60 * 60 * 1000);
+
+  let eventsLast24h = 0;
+  let eventsLast7d = 0;
+
+  const actorKeys = new Set();
+  const eventTypes = new Set();
+
+  for (const entry of auditEntries) {
+    const action = (entry?.action ?? "").toString().trim();
+    if (action) {
+      eventTypes.add(action);
+    }
+
+    const actorId = (entry?.actorId ?? "").toString().trim();
+    const actorEmail = (entry?.actorEmail ?? "").toString().trim();
+    const actorRole = (entry?.actorRole ?? "").toString().trim();
+
+    const actorKey =
+      actorId ||
+      actorEmail ||
+      (actorRole ? `role:${actorRole}` : "");
+
+    if (actorKey) {
+      actorKeys.add(actorKey);
+    }
+
+    const timestamp =
+      parseAuditTimestamp(entry?.createdAt) ??
+      parseAuditTimestamp(entry?.timestamp) ??
+      parseAuditTimestamp(entry?.meta?.createdAt);
+
+    if (timestamp !== null) {
+      if (timestamp >= last24hThreshold) {
+        eventsLast24h += 1;
+      }
+
+      if (timestamp >= last7dThreshold) {
+        eventsLast7d += 1;
+      }
+    }
+  }
+
+  return {
+    ok: true,
+    companyId,
+    totalEvents: auditEntries.length,
+    eventsLast24h,
+    eventsLast7d,
+    uniqueActors: actorKeys.size,
+    uniqueEventTypes: eventTypes.size,
+  };
+}
+
 async function buildTenantDataMetrics(companyId) {
   const tenantDirectoryPath = getTenantDirectoryPath(companyId);
   const directoryEntries = await fs.readdir(tenantDirectoryPath, { withFileTypes: true });
@@ -275,6 +341,44 @@ router.get("/tenant-data-metrics", requireRole(["admin", "manager"]), async (req
       return res.status(500).json({
         error: "InvalidTenantDataFile",
         message: "One or more tenant JSON files are invalid.",
+      });
+    }
+
+    return next(err);
+  }
+});
+
+/**
+ * GET /api/system/audit-metrics
+ * Admin/manager tenant audit metrics summary.
+ */
+router.get("/audit-metrics", requireRole(["admin", "manager"]), async (req, res, next) => {
+  try {
+    const companyId = (req.auth?.companyId ?? "").toString().trim();
+
+    if (!companyId) {
+      return res.status(400).json({
+        error: "MissingCompanyId",
+        message: "Missing companyId in authenticated context.",
+      });
+    }
+
+    const auditEntries = await readTenantAuditEntries(companyId);
+    const metrics = buildTenantAuditMetrics(companyId, auditEntries);
+
+    return res.json(metrics);
+  } catch (err) {
+    if (err?.code === "ENOENT") {
+      return res.status(404).json({
+        error: "AuditLogNotFound",
+        message: "Tenant audit log was not found.",
+      });
+    }
+
+    if (err?.message === "InvalidAuditLog" || err instanceof SyntaxError) {
+      return res.status(500).json({
+        error: "InvalidAuditLog",
+        message: "Tenant audit log is missing or invalid.",
       });
     }
 
