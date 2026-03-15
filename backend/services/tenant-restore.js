@@ -3,6 +3,7 @@ import fs from "fs/promises";
 import path from "path";
 
 const TENANTS_ROOT = path.resolve("backend/data/tenants");
+const RESTORE_SAFETY_ROOT = path.resolve("backend/data/restore-safety");
 
 function assertSafeCompanyId(companyId) {
   const value = (companyId ?? "").toString().trim();
@@ -44,6 +45,30 @@ function normalizeRelativeFilePath(filePath) {
   return normalized;
 }
 
+async function pathExists(targetPath) {
+  try {
+    await fs.access(targetPath);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function getPayloadFiles(payload) {
+  if (Array.isArray(payload?.files)) {
+    return payload.files;
+  }
+
+  if (payload?.files && typeof payload.files === "object") {
+    return Object.entries(payload.files).map(([filePath, content]) => ({
+      path: filePath,
+      content,
+    }));
+  }
+
+  return null;
+}
+
 async function removeDirectoryContents(dirPath) {
   await fs.mkdir(dirPath, { recursive: true });
   const entries = await fs.readdir(dirPath, { withFileTypes: true });
@@ -54,14 +79,70 @@ async function removeDirectoryContents(dirPath) {
   }
 }
 
+async function buildPreRestoreSafetySnapshot(safeCompanyId, resolvedTenantDir) {
+  const tenantExists = await pathExists(resolvedTenantDir);
+  const files = {};
+
+  if (tenantExists) {
+    const entries = await fs.readdir(resolvedTenantDir, { withFileTypes: true });
+    const jsonFiles = entries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json"))
+      .map((entry) => entry.name)
+      .sort((a, b) => a.localeCompare(b));
+
+    for (const fileName of jsonFiles) {
+      const filePath = path.join(resolvedTenantDir, fileName);
+      const raw = await fs.readFile(filePath, "utf8");
+
+      try {
+        files[fileName] = JSON.parse(raw);
+      } catch {
+        files[fileName] = raw;
+      }
+    }
+  }
+
+  const exportedAt = new Date().toISOString();
+  const snapshot = {
+    ok: true,
+    companyId: safeCompanyId,
+    exportedAt,
+    fileCount: Object.keys(files).length,
+    files,
+  };
+
+  const companySafetyDir = path.join(RESTORE_SAFETY_ROOT, safeCompanyId);
+  const timestamp = exportedAt.replace(/[:.]/g, "-");
+  const fileName = `${safeCompanyId}-pre-restore-${timestamp}.json`;
+  const snapshotPath = path.join(companySafetyDir, fileName);
+
+  await fs.mkdir(companySafetyDir, { recursive: true });
+  await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8");
+
+  return {
+    createdAt: exportedAt,
+    fileCount: snapshot.fileCount,
+    fileName,
+    relativePath: path.relative(process.cwd(), snapshotPath).replace(/\\/g, "/"),
+  };
+}
+
 /**
  * Restore current tenant storage from snapshot payload.
  *
- * Expected payload:
+ * Supported payload formats:
  * {
  *   files: [
  *     { path: "company.json", content: "{...}" }
  *   ]
+ * }
+ *
+ * or:
+ *
+ * {
+ *   files: {
+ *     "company.json": { ... }
+ *   }
  * }
  */
 export async function restoreTenantBackupSnapshot(companyId, payload) {
@@ -76,7 +157,7 @@ export async function restoreTenantBackupSnapshot(companyId, payload) {
     throw new Error("InvalidTenantDirectory");
   }
 
-  const files = Array.isArray(payload?.files) ? payload.files : null;
+  const files = getPayloadFiles(payload);
 
   if (!files || files.length === 0) {
     throw new Error("InvalidBackupPayload");
@@ -106,17 +187,28 @@ export async function restoreTenantBackupSnapshot(companyId, payload) {
     };
   });
 
-  await removeDirectoryContents(resolvedTenantDir);
+  const safetySnapshot = await buildPreRestoreSafetySnapshot(
+    safeCompanyId,
+    resolvedTenantDir
+  );
 
-  for (const file of preparedFiles) {
-    await fs.mkdir(path.dirname(file.destination), { recursive: true });
-    await fs.writeFile(file.destination, file.content, "utf8");
+  try {
+    await removeDirectoryContents(resolvedTenantDir);
+
+    for (const file of preparedFiles) {
+      await fs.mkdir(path.dirname(file.destination), { recursive: true });
+      await fs.writeFile(file.destination, file.content, "utf8");
+    }
+
+    return {
+      ok: true,
+      companyId: safeCompanyId,
+      restoredAt: new Date().toISOString(),
+      fileCount: preparedFiles.length,
+      safetySnapshot,
+    };
+  } catch (err) {
+    err.safetySnapshot = safetySnapshot;
+    throw err;
   }
-
-  return {
-    ok: true,
-    companyId: safeCompanyId,
-    restoredAt: new Date().toISOString(),
-    fileCount: preparedFiles.length,
-  };
 }

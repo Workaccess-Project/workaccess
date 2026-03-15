@@ -19,7 +19,15 @@ function detectStripeMode() {
 }
 
 function getRequestedFileCount(body) {
-  return Array.isArray(body?.files) ? body.files.length : 0;
+  if (Array.isArray(body?.files)) {
+    return body.files.length;
+  }
+
+  if (body?.files && typeof body.files === "object") {
+    return Object.keys(body.files).length;
+  }
+
+  return 0;
 }
 
 /**
@@ -136,6 +144,9 @@ router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) =>
         requestedFileCount,
         restoredFileCount: result?.fileCount ?? requestedFileCount,
         restoredAt: result?.restoredAt ?? null,
+        safetySnapshotFileName: result?.safetySnapshot?.fileName ?? null,
+        safetySnapshotFileCount: result?.safetySnapshot?.fileCount ?? null,
+        safetySnapshotCreatedAt: result?.safetySnapshot?.createdAt ?? null,
       },
     });
 
@@ -152,6 +163,9 @@ router.post("/tenant-restore", requireRole(["admin"]), async (req, res, next) =>
           meta: {
             requestedFileCount,
             error: (err?.message ?? "UnknownError").toString(),
+            safetySnapshotFileName: err?.safetySnapshot?.fileName ?? null,
+            safetySnapshotFileCount: err?.safetySnapshot?.fileCount ?? null,
+            safetySnapshotCreatedAt: err?.safetySnapshot?.createdAt ?? null,
           },
         });
       } catch (auditErr) {
