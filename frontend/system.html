@@ -121,6 +121,50 @@
         </div>
       </div>
 
+      <div id="tenantDataMetricsSection" class="section" style="border-top:1px solid var(--border); padding-top:12px; display:none;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Tenant data metrics</div>
+        <div id="tenantDataMetricsStatus" class="small" style="opacity:.8; margin-bottom:10px;">—</div>
+
+        <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(220px, 1fr));">
+          <div style="padding:10px; border:1px solid var(--border); border-radius:10px;">
+            <div class="small" style="opacity:.75; margin-bottom:8px;">Souhrn</div>
+
+            <div style="display:grid; gap:8px;">
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Celkem souborů</div>
+                <div id="tenantDataMetricsTotalFiles">—</div>
+              </div>
+
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Celkem entit</div>
+                <div id="tenantDataMetricsTotalEntities">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:10px; border:1px solid var(--border); border-radius:10px;">
+            <div class="small" style="opacity:.75; margin-bottom:8px;">Tenant</div>
+
+            <div style="display:grid; gap:8px;">
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">companyId</div>
+                <div id="tenantDataMetricsCompanyId">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="small" style="opacity:.8; margin-bottom:6px;">Přehled souborů</div>
+          <pre id="tenantDataMetricsSummary" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="small" style="opacity:.8; margin-bottom:6px;">Raw tenant data metrics JSON</div>
+          <pre id="tenantDataMetricsJson" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
+        </div>
+      </div>
+
       <div id="tenantRestoreSection" class="section" style="border-top:1px solid var(--border); padding-top:12px; display:none;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Tenant restore</div>
 
@@ -203,7 +247,7 @@
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=133"></script>
+  <script src="./api.js?v=135"></script>
 
   <script>
     WA_NAV.renderNav("system");
@@ -222,6 +266,14 @@
     const restoreSafetyFileCount = document.getElementById("restoreSafetyFileCount");
     const restoreSafetySize = document.getElementById("restoreSafetySize");
     const restoreSafetyPath = document.getElementById("restoreSafetyPath");
+
+    const tenantDataMetricsSection = document.getElementById("tenantDataMetricsSection");
+    const tenantDataMetricsStatus = document.getElementById("tenantDataMetricsStatus");
+    const tenantDataMetricsTotalFiles = document.getElementById("tenantDataMetricsTotalFiles");
+    const tenantDataMetricsTotalEntities = document.getElementById("tenantDataMetricsTotalEntities");
+    const tenantDataMetricsCompanyId = document.getElementById("tenantDataMetricsCompanyId");
+    const tenantDataMetricsSummary = document.getElementById("tenantDataMetricsSummary");
+    const tenantDataMetricsJson = document.getElementById("tenantDataMetricsJson");
 
     const restoreHistorySection = document.getElementById("restoreHistorySection");
     const restoreHistoryStatus = document.getElementById("restoreHistoryStatus");
@@ -301,6 +353,33 @@
       return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
     }
 
+    function formatCount(value) {
+      const count = Number(value);
+      if (!Number.isFinite(count) || count < 0) return "—";
+      return count.toLocaleString("cs-CZ");
+    }
+
+    function buildTenantDataMetricsSummary(data = {}) {
+      const files = Array.isArray(data?.files) ? data.files : [];
+
+      if (!files.length) {
+        return "Žádná tenant data metrics nejsou k dispozici.";
+      }
+
+      const lines = files.map((item) => {
+        const fileName = safeString(item?.fileName) || "(unknown)";
+        const entityCount = Number(item?.entityCount);
+        const countLabel = Number.isFinite(entityCount) ? entityCount.toLocaleString("cs-CZ") : "—";
+        return `${fileName.padEnd(32, " ")} ${countLabel}`;
+      });
+
+      lines.push("");
+      lines.push(`TOTAL FILES`.padEnd(32, " ") + formatCount(data?.totals?.files));
+      lines.push(`TOTAL ENTITIES`.padEnd(32, " ") + formatCount(data?.totals?.entities));
+
+      return lines.join("\n");
+    }
+
     async function loadRestoreHistory() {
       if (!isAdminRole()) {
         restoreHistorySection.style.display = "none";
@@ -362,6 +441,34 @@
 
         storageDiagnosticsStatus.textContent = "Nepodařilo se načíst storage diagnostiku.";
         storageDiagnosticsJson.textContent = formatJson(e?.body || { error: e?.message || e });
+      }
+    }
+
+    async function loadTenantDataMetrics() {
+      if (!isAdminRole()) {
+        tenantDataMetricsSection.style.display = "none";
+        return;
+      }
+
+      tenantDataMetricsSection.style.display = "";
+
+      try {
+        tenantDataMetricsStatus.textContent = "Načítám tenant data metrics...";
+        const data = await WA_API.getTenantDataMetrics();
+
+        setValue(tenantDataMetricsCompanyId, data?.companyId || "");
+        setValue(tenantDataMetricsTotalFiles, formatCount(data?.totals?.files ?? 0));
+        setValue(tenantDataMetricsTotalEntities, formatCount(data?.totals?.entities ?? 0));
+        tenantDataMetricsSummary.textContent = buildTenantDataMetricsSummary(data);
+        tenantDataMetricsJson.textContent = formatJson(data);
+        tenantDataMetricsStatus.textContent = "Tenant data metrics načteny.";
+      } catch (e) {
+        setValue(tenantDataMetricsCompanyId, "");
+        setValue(tenantDataMetricsTotalFiles, "");
+        setValue(tenantDataMetricsTotalEntities, "");
+        tenantDataMetricsSummary.textContent = "—";
+        tenantDataMetricsJson.textContent = formatJson(e?.body || { error: e?.message || e });
+        tenantDataMetricsStatus.textContent = "Nepodařilo se načíst tenant data metrics.";
       }
     }
 
@@ -586,6 +693,7 @@
         setStatus("Tenant restore byl úspěšně dokončen.");
         loadRestoreHistory();
         loadStorageDiagnostics();
+        loadTenantDataMetrics();
       } catch (e) {
         tenantRestoreResult.textContent = formatJson(e?.body || {
           error: e?.message || "Tenant restore failed",
@@ -606,6 +714,7 @@
     btnReload.addEventListener("click", () => {
       loadSystemInfo();
       loadStorageDiagnostics();
+      loadTenantDataMetrics();
       loadRestoreHistory();
     });
 
@@ -622,6 +731,7 @@
     clearRestorePreview();
     loadSystemInfo();
     loadStorageDiagnostics();
+    loadTenantDataMetrics();
     loadRestoreHistory();
   </script>
 </body>

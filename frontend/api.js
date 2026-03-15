@@ -40,6 +40,9 @@
 //
 // BOX #133:
 // - Storage diagnostics helper: GET /system/storage-diagnostics
+//
+// BOX #135:
+// - Tenant data metrics helper: GET /system/tenant-data-metrics
 
 (() => {
   function apiBase() {
@@ -554,6 +557,7 @@
   // --- SYSTEM ---
   const getSystemInfo = () => apiFetch("/system/info");
   const getStorageDiagnostics = () => apiFetch("/system/storage-diagnostics");
+  const getTenantDataMetrics = () => apiFetch("/system/tenant-data-metrics");
   const getRestoreHistory = (limit = 20) => apiFetch(`/system/restore-history${buildQuery({ limit })}`);
 
   async function fetchTenantBackupBlob() {
@@ -644,6 +648,7 @@
     // system
     getSystemInfo,
     getStorageDiagnostics,
+    getTenantDataMetrics,
     getRestoreHistory,
     fetchTenantBackupBlob,
     restoreTenantBackup,
