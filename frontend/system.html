@@ -67,6 +67,60 @@
         </div>
       </div>
 
+      <div id="storageDiagnosticsSection" class="section" style="border-top:1px solid var(--border); padding-top:12px; display:none;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Storage diagnostika</div>
+        <div id="storageDiagnosticsStatus" class="small" style="opacity:.8; margin-bottom:10px;">—</div>
+
+        <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));">
+          <div style="padding:10px; border:1px solid var(--border); border-radius:10px;">
+            <div class="small" style="opacity:.75; margin-bottom:8px;">Tenant storage</div>
+
+            <div style="display:grid; gap:8px;">
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Počet souborů</div>
+                <div id="tenantStorageFileCount">—</div>
+              </div>
+
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Velikost dat</div>
+                <div id="tenantStorageSize">—</div>
+              </div>
+
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Cesta</div>
+                <div id="tenantStoragePath" style="word-break:break-word;">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div style="padding:10px; border:1px solid var(--border); border-radius:10px;">
+            <div class="small" style="opacity:.75; margin-bottom:8px;">Restore safety storage</div>
+
+            <div style="display:grid; gap:8px;">
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Počet souborů</div>
+                <div id="restoreSafetyFileCount">—</div>
+              </div>
+
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Velikost dat</div>
+                <div id="restoreSafetySize">—</div>
+              </div>
+
+              <div>
+                <div class="small" style="opacity:.7; margin-bottom:2px;">Cesta</div>
+                <div id="restoreSafetyPath" style="word-break:break-word;">—</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="margin-top:12px;">
+          <div class="small" style="opacity:.8; margin-bottom:6px;">Raw storage JSON</div>
+          <pre id="storageDiagnosticsJson" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
+        </div>
+      </div>
+
       <div id="tenantRestoreSection" class="section" style="border-top:1px solid var(--border); padding-top:12px; display:none;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Tenant restore</div>
 
@@ -149,7 +203,7 @@
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=131"></script>
+  <script src="./api.js?v=133"></script>
 
   <script>
     WA_NAV.renderNav("system");
@@ -158,6 +212,16 @@
     const btnTenantBackup = document.getElementById("btnTenantBackup");
     const statusLine = document.getElementById("statusLine");
     const rawJson = document.getElementById("rawJson");
+
+    const storageDiagnosticsSection = document.getElementById("storageDiagnosticsSection");
+    const storageDiagnosticsStatus = document.getElementById("storageDiagnosticsStatus");
+    const storageDiagnosticsJson = document.getElementById("storageDiagnosticsJson");
+    const tenantStorageFileCount = document.getElementById("tenantStorageFileCount");
+    const tenantStorageSize = document.getElementById("tenantStorageSize");
+    const tenantStoragePath = document.getElementById("tenantStoragePath");
+    const restoreSafetyFileCount = document.getElementById("restoreSafetyFileCount");
+    const restoreSafetySize = document.getElementById("restoreSafetySize");
+    const restoreSafetyPath = document.getElementById("restoreSafetyPath");
 
     const restoreHistorySection = document.getElementById("restoreHistorySection");
     const restoreHistoryStatus = document.getElementById("restoreHistoryStatus");
@@ -220,6 +284,23 @@
       }
     }
 
+    function formatBytes(value) {
+      const bytes = Number(value);
+      if (!Number.isFinite(bytes) || bytes < 0) return "—";
+      if (bytes < 1024) return `${bytes} B`;
+
+      const units = ["KB", "MB", "GB", "TB"];
+      let size = bytes / 1024;
+      let unitIndex = 0;
+
+      while (size >= 1024 && unitIndex < units.length - 1) {
+        size /= 1024;
+        unitIndex += 1;
+      }
+
+      return `${size.toFixed(size >= 10 ? 1 : 2)} ${units[unitIndex]}`;
+    }
+
     async function loadRestoreHistory() {
       if (!isAdminRole()) {
         restoreHistorySection.style.display = "none";
@@ -236,6 +317,51 @@
       } catch (e) {
         restoreHistoryStatus.textContent = "Nepodařilo se načíst restore historii.";
         restoreHistoryJson.textContent = formatJson(e?.body || { error: e?.message || e });
+      }
+    }
+
+    async function loadStorageDiagnostics() {
+      if (!isAdminRole()) {
+        storageDiagnosticsSection.style.display = "none";
+        return;
+      }
+
+      storageDiagnosticsSection.style.display = "";
+
+      try {
+        storageDiagnosticsStatus.textContent = "Načítám storage diagnostiku...";
+        const data = await WA_API.getStorageDiagnostics();
+
+        const tenantStorage =
+          data?.tenantStorage && typeof data.tenantStorage === "object"
+            ? data.tenantStorage
+            : {};
+
+        const restoreSafetyStorage =
+          data?.restoreSafetyStorage && typeof data.restoreSafetyStorage === "object"
+            ? data.restoreSafetyStorage
+            : {};
+
+        setValue(tenantStorageFileCount, tenantStorage.fileCount ?? 0);
+        setValue(tenantStorageSize, formatBytes(tenantStorage.totalSizeBytes ?? 0));
+        setValue(tenantStoragePath, tenantStorage.path || "");
+
+        setValue(restoreSafetyFileCount, restoreSafetyStorage.fileCount ?? 0);
+        setValue(restoreSafetySize, formatBytes(restoreSafetyStorage.totalSizeBytes ?? 0));
+        setValue(restoreSafetyPath, restoreSafetyStorage.path || "");
+
+        storageDiagnosticsJson.textContent = formatJson(data);
+        storageDiagnosticsStatus.textContent = "Storage diagnostika načtena.";
+      } catch (e) {
+        setValue(tenantStorageFileCount, "");
+        setValue(tenantStorageSize, "");
+        setValue(tenantStoragePath, "");
+        setValue(restoreSafetyFileCount, "");
+        setValue(restoreSafetySize, "");
+        setValue(restoreSafetyPath, "");
+
+        storageDiagnosticsStatus.textContent = "Nepodařilo se načíst storage diagnostiku.";
+        storageDiagnosticsJson.textContent = formatJson(e?.body || { error: e?.message || e });
       }
     }
 
@@ -459,6 +585,7 @@
         tenantRestoreResult.textContent = formatJson(result || {});
         setStatus("Tenant restore byl úspěšně dokončen.");
         loadRestoreHistory();
+        loadStorageDiagnostics();
       } catch (e) {
         tenantRestoreResult.textContent = formatJson(e?.body || {
           error: e?.message || "Tenant restore failed",
@@ -478,6 +605,7 @@
 
     btnReload.addEventListener("click", () => {
       loadSystemInfo();
+      loadStorageDiagnostics();
       loadRestoreHistory();
     });
 
@@ -493,6 +621,7 @@
     syncRestoreAccess();
     clearRestorePreview();
     loadSystemInfo();
+    loadStorageDiagnostics();
     loadRestoreHistory();
   </script>
 </body>

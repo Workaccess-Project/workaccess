@@ -37,6 +37,9 @@
 //
 // BOX #131:
 // - Restore history helper: GET /system/restore-history
+//
+// BOX #133:
+// - Storage diagnostics helper: GET /system/storage-diagnostics
 
 (() => {
   function apiBase() {
@@ -550,6 +553,7 @@
 
   // --- SYSTEM ---
   const getSystemInfo = () => apiFetch("/system/info");
+  const getStorageDiagnostics = () => apiFetch("/system/storage-diagnostics");
   const getRestoreHistory = (limit = 20) => apiFetch(`/system/restore-history${buildQuery({ limit })}`);
 
   async function fetchTenantBackupBlob() {
@@ -639,6 +643,7 @@
 
     // system
     getSystemInfo,
+    getStorageDiagnostics,
     getRestoreHistory,
     fetchTenantBackupBlob,
     restoreTenantBackup,
