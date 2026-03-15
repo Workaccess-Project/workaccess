@@ -34,6 +34,9 @@
 //
 // BOX #122:
 // - Tenant restore helper: POST /system/tenant-restore
+//
+// BOX #131:
+// - Restore history helper: GET /system/restore-history
 
 (() => {
   function apiBase() {
@@ -547,6 +550,7 @@
 
   // --- SYSTEM ---
   const getSystemInfo = () => apiFetch("/system/info");
+  const getRestoreHistory = (limit = 20) => apiFetch(`/system/restore-history${buildQuery({ limit })}`);
 
   async function fetchTenantBackupBlob() {
     const res = await fetch(apiBase() + "/system/tenant-backup", {
@@ -635,6 +639,7 @@
 
     // system
     getSystemInfo,
+    getRestoreHistory,
     fetchTenantBackupBlob,
     restoreTenantBackup,
   };

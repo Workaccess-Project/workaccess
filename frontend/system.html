@@ -129,6 +129,12 @@
         </div>
       </div>
 
+      <div id="restoreHistorySection" class="section" style="border-top:1px solid var(--border); padding-top:12px; display:none;">
+        <div class="small" style="opacity:.85; margin-bottom:8px;">Restore historie</div>
+        <div id="restoreHistoryStatus" class="small" style="opacity:.8; margin-bottom:6px;">—</div>
+        <pre id="restoreHistoryJson" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
+      </div>
+
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
         <div class="small" style="opacity:.85; margin-bottom:8px;">Raw JSON</div>
         <pre id="rawJson" style="margin:0; white-space:pre-wrap; word-break:break-word; font-size:12px; line-height:1.5;">—</pre>
@@ -143,7 +149,7 @@
 
   <script src="./js/wa_config.js"></script>
   <script src="./js/wa_nav.js"></script>
-  <script src="./api.js?v=122"></script>
+  <script src="./api.js?v=131"></script>
 
   <script>
     WA_NAV.renderNav("system");
@@ -152,6 +158,10 @@
     const btnTenantBackup = document.getElementById("btnTenantBackup");
     const statusLine = document.getElementById("statusLine");
     const rawJson = document.getElementById("rawJson");
+
+    const restoreHistorySection = document.getElementById("restoreHistorySection");
+    const restoreHistoryStatus = document.getElementById("restoreHistoryStatus");
+    const restoreHistoryJson = document.getElementById("restoreHistoryJson");
 
     const infoVersion = document.getElementById("infoVersion");
     const infoEnv = document.getElementById("infoEnv");
@@ -207,6 +217,25 @@
         return JSON.stringify(data ?? {}, null, 2);
       } catch {
         return "{}";
+      }
+    }
+
+    async function loadRestoreHistory() {
+      if (!isAdminRole()) {
+        restoreHistorySection.style.display = "none";
+        return;
+      }
+
+      restoreHistorySection.style.display = "";
+
+      try {
+        restoreHistoryStatus.textContent = "Načítám restore historii...";
+        const data = await WA_API.getRestoreHistory(20);
+        restoreHistoryStatus.textContent = "Restore historie načtena.";
+        restoreHistoryJson.textContent = formatJson(data);
+      } catch (e) {
+        restoreHistoryStatus.textContent = "Nepodařilo se načíst restore historii.";
+        restoreHistoryJson.textContent = formatJson(e?.body || { error: e?.message || e });
       }
     }
 
@@ -282,19 +311,6 @@
       setValue(infoStripe, system.stripeMode || data.stripeMode || data.stripe?.mode);
 
       rawJson.textContent = formatJson(data);
-    }
-
-    function fillRestorePreview(sourceFileName, data = {}) {
-      const fileName = safeString(sourceFileName);
-      const companyId = safeString(data?.companyId);
-      const exportedAt = safeString(data?.exportedAt);
-      const normalizedFiles = normalizeRestoreFiles(data?.files) || [];
-      const fileCount = data?.fileCount ?? normalizedFiles.length;
-
-      setValue(restorePreviewFileName, fileName);
-      setValue(restorePreviewCompanyId, companyId);
-      setValue(restorePreviewExportedAt, exportedAt);
-      setValue(restorePreviewFileCount, fileCount);
     }
 
     async function loadSystemInfo() {
@@ -401,6 +417,19 @@
       }
     }
 
+    function fillRestorePreview(sourceFileName, data = {}) {
+      const fileName = safeString(sourceFileName);
+      const companyId = safeString(data?.companyId);
+      const exportedAt = safeString(data?.exportedAt);
+      const normalizedFiles = normalizeRestoreFiles(data?.files) || [];
+      const fileCount = data?.fileCount ?? normalizedFiles.length;
+
+      setValue(restorePreviewFileName, fileName);
+      setValue(restorePreviewCompanyId, companyId);
+      setValue(restorePreviewExportedAt, exportedAt);
+      setValue(restorePreviewFileCount, fileCount);
+    }
+
     async function runTenantRestore() {
       if (!isAdminRole()) {
         syncRestoreAccess();
@@ -429,6 +458,7 @@
         const result = await WA_API.restoreTenantBackup(restorePayload.files, confirmation);
         tenantRestoreResult.textContent = formatJson(result || {});
         setStatus("Tenant restore byl úspěšně dokončen.");
+        loadRestoreHistory();
       } catch (e) {
         tenantRestoreResult.textContent = formatJson(e?.body || {
           error: e?.message || "Tenant restore failed",
@@ -446,7 +476,11 @@
       }
     }
 
-    btnReload.addEventListener("click", loadSystemInfo);
+    btnReload.addEventListener("click", () => {
+      loadSystemInfo();
+      loadRestoreHistory();
+    });
+
     btnTenantBackup.addEventListener("click", downloadTenantBackup);
     tenantRestoreFile.addEventListener("change", onRestoreFileSelected);
     btnTenantRestore.addEventListener("click", runTenantRestore);
@@ -459,6 +493,7 @@
     syncRestoreAccess();
     clearRestorePreview();
     loadSystemInfo();
+    loadRestoreHistory();
   </script>
 </body>
 </html>
