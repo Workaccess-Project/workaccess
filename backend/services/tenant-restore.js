@@ -80,11 +80,11 @@ async function removeDirectoryContents(dirPath) {
   }
 }
 
-async function cleanupOldRestoreSafetySnapshots(companySafetyDir) {
+async function listRestoreSafetySnapshotEntries(companySafetyDir) {
   const dirExists = await pathExists(companySafetyDir);
 
   if (!dirExists) {
-    return;
+    return [];
   }
 
   const entries = await fs.readdir(companySafetyDir, { withFileTypes: true });
@@ -113,13 +113,33 @@ async function cleanupOldRestoreSafetySnapshots(companySafetyDir) {
     return b.name.localeCompare(a.name);
   });
 
+  return snapshotEntries;
+}
+
+async function cleanupOldRestoreSafetySnapshots(companySafetyDir) {
+  const snapshotEntries = await listRestoreSafetySnapshotEntries(companySafetyDir);
+  const snapshotCountBeforeCleanup = snapshotEntries.length;
+
   const entriesToDelete = snapshotEntries.slice(
     MAX_RESTORE_SAFETY_SNAPSHOTS_PER_TENANT
   );
 
+  const deletedSnapshotFileNames = [];
+
   for (const entry of entriesToDelete) {
     await fs.rm(entry.fullPath, { force: true });
+    deletedSnapshotFileNames.push(entry.name);
   }
+
+  const snapshotCountAfterCleanup =
+    snapshotCountBeforeCleanup - deletedSnapshotFileNames.length;
+
+  return {
+    retentionLimit: MAX_RESTORE_SAFETY_SNAPSHOTS_PER_TENANT,
+    snapshotCountBeforeCleanup,
+    snapshotCountAfterCleanup,
+    deletedSnapshotFileNames,
+  };
 }
 
 async function buildPreRestoreSafetySnapshot(safeCompanyId, resolvedTenantDir) {
@@ -161,13 +181,18 @@ async function buildPreRestoreSafetySnapshot(safeCompanyId, resolvedTenantDir) {
 
   await fs.mkdir(companySafetyDir, { recursive: true });
   await fs.writeFile(snapshotPath, JSON.stringify(snapshot, null, 2), "utf8");
-  await cleanupOldRestoreSafetySnapshots(companySafetyDir);
+
+  const cleanupSummary = await cleanupOldRestoreSafetySnapshots(companySafetyDir);
 
   return {
     createdAt: exportedAt,
     fileCount: snapshot.fileCount,
     fileName,
     relativePath: path.relative(process.cwd(), snapshotPath).replace(/\\/g, "/"),
+    retentionLimit: cleanupSummary.retentionLimit,
+    snapshotCountBeforeCleanup: cleanupSummary.snapshotCountBeforeCleanup,
+    snapshotCountAfterCleanup: cleanupSummary.snapshotCountAfterCleanup,
+    deletedSnapshotFileNames: cleanupSummary.deletedSnapshotFileNames,
   };
 }
 
