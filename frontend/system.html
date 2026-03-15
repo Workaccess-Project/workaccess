@@ -20,7 +20,6 @@
 
       <div class="section" style="border-top:1px solid var(--border); padding-top:12px;">
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));">
-
           <div>
             <div class="small" style="opacity:.75; margin-bottom:4px;">Verze</div>
             <div id="infoVersion">—</div>
@@ -60,7 +59,6 @@
             <div class="small" style="opacity:.75; margin-bottom:4px;">Stripe</div>
             <div id="infoStripe">—</div>
           </div>
-
         </div>
 
         <div style="margin-top:14px; display:flex; gap:10px; flex-wrap:wrap;">
@@ -73,7 +71,7 @@
         <div class="small" style="opacity:.85; margin-bottom:8px;">Tenant restore</div>
 
         <div class="small" style="opacity:.8; margin-bottom:10px;">
-          Obnoví kompletní tenant snapshot. Tato operace přepíše aktuální tenant storage a je dostupná pouze pro admin roli.
+          Obnoví kompletní tenant snapshot. Tato operace přepíše aktuální tenant storage a je dostupná pouze pro admin nebo manager roli.
         </div>
 
         <div style="display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(260px, 1fr)); align-items:start;">
@@ -87,7 +85,7 @@
             <input
               type="text"
               id="tenantRestoreConfirmation"
-              placeholder="Pro potvrzení napiš RESTORE"
+              placeholder='Pro potvrzení napiš RESTORE'
               autocomplete="off"
               style="width:100%;"
             />
@@ -191,9 +189,9 @@
     }
 
     function isAdminRole() {
-  const role = currentRole();
-  return role === "admin" || role === "manager";
-}
+      const role = currentRole();
+      return role === "admin" || role === "manager";
+    }
 
     function setStatus(text, isError = false) {
       statusLine.textContent = text || "";
@@ -222,6 +220,21 @@
       return "Lokální build / metadata nejsou k dispozici";
     }
 
+    function normalizeRestoreFiles(filesValue) {
+      if (Array.isArray(filesValue)) {
+        return filesValue;
+      }
+
+      if (filesValue && typeof filesValue === "object") {
+        return Object.entries(filesValue).map(([filePath, content]) => ({
+          path: filePath,
+          content,
+        }));
+      }
+
+      return null;
+    }
+
     function clearRestorePreview() {
       setValue(restorePreviewFileName, "");
       setValue(restorePreviewCompanyId, "");
@@ -243,7 +256,7 @@
       btnTenantBackup.disabled = !allowed;
       btnTenantBackup.title = allowed
         ? "Stáhnout kompletní tenant backup"
-        : "Tenant backup je dostupný pouze pro admin roli";
+        : "Tenant backup je dostupný pouze pro admin nebo manager roli";
     }
 
     function syncRestoreAccess() {
@@ -275,8 +288,8 @@
       const fileName = safeString(sourceFileName);
       const companyId = safeString(data?.companyId);
       const exportedAt = safeString(data?.exportedAt);
-      const files = Array.isArray(data?.files) ? data.files : [];
-      const fileCount = data?.fileCount ?? files.length;
+      const normalizedFiles = normalizeRestoreFiles(data?.files) || [];
+      const fileCount = data?.fileCount ?? normalizedFiles.length;
 
       setValue(restorePreviewFileName, fileName);
       setValue(restorePreviewCompanyId, companyId);
@@ -295,12 +308,7 @@
         fillInfo(data || {});
         syncBackupButtonAccess();
         syncRestoreAccess();
-
-        if (isAdminRole()) {
-          setStatus("Systémové informace načteny.");
-        } else {
-          setStatus("Systémové informace načteny. Tenant backup a tenant restore jsou dostupné pouze pro admin roli.");
-        }
+        setStatus("Systémové informace načteny.");
       } catch (e) {
         rawJson.textContent = "—";
         syncBackupButtonAccess();
@@ -319,7 +327,7 @@
     async function downloadTenantBackup() {
       if (!isAdminRole()) {
         syncBackupButtonAccess();
-        setStatus("Tenant backup je dostupný pouze pro admin roli.", true);
+        setStatus("Tenant backup je dostupný pouze pro admin nebo manager roli.", true);
         return;
       }
 
@@ -366,17 +374,22 @@
       try {
         const text = await file.text();
         const parsed = JSON.parse(text);
+        const normalizedFiles = normalizeRestoreFiles(parsed?.files);
 
-        if (!parsed || typeof parsed !== "object" || !Array.isArray(parsed.files)) {
+        if (!parsed || typeof parsed !== "object" || !normalizedFiles || normalizedFiles.length === 0) {
           throw new Error("Neplatný backup formát.");
         }
 
-        restorePayload = parsed;
-        fillRestorePreview(file.name, parsed);
+        restorePayload = {
+          ...parsed,
+          files: normalizedFiles,
+        };
+
+        fillRestorePreview(file.name, restorePayload);
         tenantRestoreResult.textContent = formatJson({
-          companyId: parsed.companyId || null,
-          exportedAt: parsed.exportedAt || null,
-          fileCount: parsed.fileCount ?? (Array.isArray(parsed.files) ? parsed.files.length : 0),
+          companyId: restorePayload.companyId || null,
+          exportedAt: restorePayload.exportedAt || null,
+          fileCount: restorePayload.fileCount ?? restorePayload.files.length,
         });
 
         setStatus("Restore backup soubor byl načten.");
@@ -391,7 +404,7 @@
     async function runTenantRestore() {
       if (!isAdminRole()) {
         syncRestoreAccess();
-        setStatus("Tenant restore je dostupný pouze pro admin roli.", true);
+        setStatus("Tenant restore je dostupný pouze pro admin nebo manager roli.", true);
         return;
       }
 
